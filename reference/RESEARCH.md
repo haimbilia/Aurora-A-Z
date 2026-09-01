@@ -23,7 +23,13 @@ The patch only changes the HUD label and icon from Freestyle to Aurora.
 - It does **not** expose the Aurora dashboard’s game list or coverflow, so it
   cannot implement an A–Z selector by itself.
 
-The correct initial target remains the Aurora skin's `Aurora_Main` scene plus
-Aurora Lua filters. We will only investigate a binary patch after a skin/Lua
-implementation proves insufficient for jump-to-letter behavior.
+Hardware testing established that the Aurora skin plus content-filter Lua is
+not sufficient for the complete interaction. The skin can draw the row and Lua
+can define predicates, but the stock `ScnApplication` native class owns
+coverflow input. Changing the hidden `QuickViewRB` control's `PressKey` did not
+intercept D-pad Down, and the native RB path opens the separate QuickView menu.
 
+The next implementation must provide an input/filter bridge that owns selector
+state without replacing the normal RB QuickView behavior. Candidate paths are
+a dedicated native-backed XUI scene or a narrowly scoped Aurora executable or
+module patch. A static row or a restyled QuickView menu is not sufficient.

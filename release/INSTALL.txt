@@ -1,14 +1,17 @@
-Aurora A-Z functional test r3
+Aurora A-Z functional test r3 (deprecated research build)
 ================================
+
+This package is not a functional implementation of the documented selector.
+Its alphabet row is visual only. D-pad Down remains controlled by the
+coverflow, and RB opens Aurora's separate QuickView menu.
 
 1. Copy the contents of this Aurora-A-Z folder into Hdd1:\Aurora\ and merge
    the Skins and User folders. Do not overwrite Default.xzp.
 2. In Aurora, open Back/System -> Scripts -> Utility and run
    "Aurora A-Z Installer".
 3. Select "Install / Update", then allow Aurora to restart.
-4. Select the skin "Aurora A-Z Functional Test r3".
-5. On the coverflow, press D-pad Down. Move with Left/Right and press A to
-   apply the highlighted initial-character QuickView.
+4. Select the skin "Aurora A-Z Functional Test r3" only for visual or backend
+   research. There is currently no supported controller-selection test.
 
 Rollback
 --------

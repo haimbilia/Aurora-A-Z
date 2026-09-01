@@ -4,21 +4,30 @@ Aurora A-Z is an on-coverflow alphabetical selector for the Aurora dashboard on
 Xbox 360. The target UI is a persistent `# A B ... Z` row above the game title,
 with controller navigation and selection directly from the main coverflow.
 
+## Required interaction
+
+The normative controller and filtering behavior is defined in
+[`REQUIREMENTS.md`](REQUIREMENTS.md). In short: R3 enters the on-coverflow
+selector at `#`; D-pad Left/Right and left-stick Left/Right move the highlight;
+A filters the coverflow by the highlighted initial and returns control to the
+coverflow. RB must retain Aurora's normal QuickView menu.
+
 ## Current status
 
-Functional test r3 connects the coverflow row to Aurora's native QuickView
-engine. It remaps D-pad Down on the main scene to the QuickView picker, installs
-`#` through `Z` as ordered QuickViews, and uses Aurora's own list-refresh path
-when A applies the selected letter.
+There is no compliant functional release yet. The current source proves two
+pieces independently: the skin can draw the centered alphabet row, and the Lua
+backend can expose initial-character filters as QuickViews. It does not yet
+provide focus, in-row navigation, highlighting, or direct A-to-filter behavior.
 
-The next hardware test must confirm that Aurora 0.7b.2 enters at `#`, accepts
-Left/Right, applies with A, and presents its native selected-view indicator in a
-way that can be converted into an in-row letter highlight.
+Functional test r3 is retained only as a hardware research build. Its attempted
+D-pad Down remap does not work: the coverflow consumes Down, while RB opens
+Aurora's separate QuickView menu. That menu is not the requested selector.
 
-The earlier filter-only v0.1.0 prerelease is deprecated because Aurora already
-contains a stock name filter and it does not implement the project mockup.
+The earlier filter-only v0.1.0 prerelease is also deprecated because Aurora
+already contains a stock name filter and it does not implement the project
+interaction.
 
-## Test functional build r3
+## Rebuild legacy functional test r3
 
 Build the skin:
 
@@ -26,7 +35,7 @@ Build the skin:
 .\scripts\build-functional-test.ps1
 ```
 
-Upload the generated file:
+The generated research package is:
 
 ```text
 build\Aurora-A-Z-functional-test-r3.zip
@@ -38,13 +47,14 @@ Extract it and merge the contents of its `Aurora-A-Z` folder into:
 Hdd1:\Aurora\
 ```
 
-Then:
+For backend or skin research only:
 
 1. Open **Back/System → Scripts → Utility → Aurora A-Z Installer**.
 2. Choose **Install / Update** and restart Aurora.
 3. Open **B → View Settings → Skin** and select
    **Aurora A-Z Functional Test r3**.
-4. From the coverflow, press Down, move with Left/Right, and press A.
+4. Do not treat the Down-to-select behavior as implemented; it is a known
+   failed experiment documented above.
 
 Do not overwrite or rename `Default.xzp`.
 

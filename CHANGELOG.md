@@ -14,6 +14,8 @@
   QuickView order and default.
 - Deprecate the filter-only v0.1.0 experiment because it duplicates Aurora's
   stock name filter.
+- Define the selector's normative controller and filtering contract and mark
+  functional test r3 as a non-compliant research build.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

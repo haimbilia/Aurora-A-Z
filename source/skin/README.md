@@ -6,3 +6,6 @@ the Aurora A-Z skin without redistributing unmodified Aurora source assets.
 
 `patches/add-alphabet-row.ps1` currently inserts the visual selector immediately
 after `CoverflowWrapper` in `Aurora_Main`, at Y=532 above the stock title panel.
+The inserted row is display-only. Controller focus, highlighting, and filter
+application require a separate input/filter bridge and must not be represented
+as implemented by this skin patch.
