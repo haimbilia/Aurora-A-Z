@@ -1,4 +1,4 @@
-# Skin source
+# Legacy skin research source
 
 The stock Aurora 0.7b.2 skin is kept under ignored `original/` and `stock/`
 folders. Source-controlled PowerShell patches transform the recovered XUI into
@@ -9,3 +9,7 @@ after `CoverflowWrapper` in `Aurora_Main`, at Y=532 above the stock title panel.
 The inserted row is display-only. Controller focus, highlighting, and filter
 application require a separate input/filter bridge and must not be represented
 as implemented by this skin patch.
+
+Skin modification is no longer an allowed production architecture. These files
+are retained only to preserve the visual prototype and XUI reverse-engineering
+work. A compliant release must work without creating or modifying an `.xzp`.

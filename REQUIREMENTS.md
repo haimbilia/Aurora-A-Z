@@ -4,6 +4,21 @@ This document is the normative behavior contract for Aurora A-Z. A build is not
 functional unless it satisfies every acceptance criterion below on Aurora
 0.7b.2 Rev1655 hardware.
 
+## Skin independence
+
+- Aurora A-Z must work with the stock Default skin and third-party Aurora
+  skins without producing a separate patched version of either skin.
+- Installation, updating, and removal must not create, replace, rename, or
+  modify any `.xzp` file or anything under Aurora's `Skins` directory.
+- The selector must not depend on controls, element IDs, timelines, fonts, or
+  other resources supplied by the currently selected skin.
+- The selector row and highlight must be provided at runtime by the extension's
+  own overlay or injected scene.
+- Changing the active Aurora skin must not disable the selector or require the
+  extension to be reinstalled.
+- Version-specific native integration may target Aurora 0.7b.2 Rev1655, but
+  skin-specific integration is not permitted.
+
 ## User-visible behavior
 
 - The coverflow displays one centered row containing `# A B ... Z` above the
@@ -56,6 +71,10 @@ specified yet. They must not be assumed by an implementation until documented.
 6. Highlight a known letter and press A. Only matching titles remain visible,
    the selector relinquishes input, and normal coverflow navigation resumes.
 7. Press RB from the coverflow. Aurora's normal QuickView menu opens unchanged.
+8. Repeat tests 1 through 7 with Aurora's Default skin and at least one
+   third-party skin. The controls and filtering behavior remain identical.
+9. Compare the selected skins before and after installation and removal. No
+   `.xzp` file or file under `Skins` has changed.
 
 ## Explicitly non-compliant implementations
 
@@ -65,3 +84,6 @@ specified yet. They must not be assumed by an implementation until documented.
 - Reusing Aurora's stock name-filter screen.
 - Moving the coverflow cursor to a title without filtering the visible list.
 - Supporting only D-pad navigation or only left-stick navigation.
+- Requiring a specially patched skin, modifying `Default.xzp`, or distributing
+  a replacement `.xzp`.
+- Relying on skin-owned elements to receive input or draw the selector.

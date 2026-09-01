@@ -16,6 +16,9 @@
   stock name filter.
 - Define the selector's normative controller and filtering contract and mark
   functional test r3 as a non-compliant research build.
+- Require the production selector to be skin agnostic: no `.xzp` or `Skins`
+  changes, no dependency on skin-owned controls, and identical behavior across
+  Default and third-party skins.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

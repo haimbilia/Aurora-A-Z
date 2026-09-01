@@ -1,8 +1,10 @@
 # Aurora A-Z
 
-Aurora A-Z is an on-coverflow alphabetical selector for the Aurora dashboard on
-Xbox 360. The target UI is a persistent `# A B ... Z` row above the game title,
-with controller navigation and selection directly from the main coverflow.
+Aurora A-Z is a skin-agnostic, on-coverflow alphabetical selector for the
+Aurora dashboard on Xbox 360. The target UI is a persistent `# A B ... Z` row
+above the game title, with controller navigation and selection directly from
+the main coverflow. It must work without modifying or replacing the selected
+Aurora skin.
 
 ## Required interaction
 
@@ -12,16 +14,21 @@ selector at `#`; D-pad Left/Right and left-stick Left/Right move the highlight;
 A filters the coverflow by the highlighted initial and returns control to the
 coverflow. RB must retain Aurora's normal QuickView menu.
 
+The architectural constraints that follow from these requirements are recorded
+in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ## Current status
 
 There is no compliant functional release yet. The current source proves two
-pieces independently: the skin can draw the centered alphabet row, and the Lua
-backend can expose initial-character filters as QuickViews. It does not yet
-provide focus, in-row navigation, highlighting, or direct A-to-filter behavior.
+pieces independently: a legacy skin prototype can draw the centered alphabet
+row, and the Lua backend can expose initial-character filters as QuickViews. It
+does not yet provide a skin-independent overlay, focus, in-row navigation,
+highlighting, or direct A-to-filter behavior.
 
-Functional test r3 is retained only as a hardware research build. Its attempted
-D-pad Down remap does not work: the coverflow consumes Down, while RB opens
-Aurora's separate QuickView menu. That menu is not the requested selector.
+Functional test r3 is retained only as a hardware research build. It requires a
+custom skin and its attempted D-pad Down remap does not work: the coverflow
+consumes Down, while RB opens Aurora's separate QuickView menu. That build is
+not the requested selector and is not part of the target architecture.
 
 The earlier filter-only v0.1.0 prerelease is also deprecated because Aurora
 already contains a stock name filter and it does not implement the project
@@ -62,7 +69,14 @@ To roll back, run the installer again and choose **Uninstall**, then select the
 Default skin. The uninstall transaction removes only Aurora A-Z QuickViews and
 restores the previous QuickView order and default.
 
-## Development workflow
+## Target development workflow
+
+The production implementation must be a version-gated runtime extension for
+Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
+its own selector overlay above the active skin, and bridge A-button selection
+to Aurora's coverflow filtering. It must not write to `Skins`.
+
+## Legacy skin research workflow
 
 The local build uses:
 
@@ -92,8 +106,8 @@ build/                   Generated test skins
 
 ## Safety
 
-All development builds use a distinct skin name. The stock skin, Aurora
-executable, and content database are not modified. The installer updates only
-the QuickViews and two project-specific values in `settings.db`, inside a
-transaction, and includes an uninstall path. Keep FTP access available during
+Production builds must not modify skin packages or the on-disk `Aurora.xex`.
+Any native integration must verify the exact Aurora revision before applying
+in-memory hooks and must fail closed on unsupported builds. Database changes
+must remain transactional and reversible. Keep FTP access available during
 early hardware tests.

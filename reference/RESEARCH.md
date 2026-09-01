@@ -29,7 +29,10 @@ can define predicates, but the stock `ScnApplication` native class owns
 coverflow input. Changing the hidden `QuickViewRB` control's `PressKey` did not
 intercept D-pad Down, and the native RB path opens the separate QuickView menu.
 
-The next implementation must provide an input/filter bridge that owns selector
-state without replacing the normal RB QuickView behavior. Candidate paths are
-a dedicated native-backed XUI scene or a narrowly scoped Aurora executable or
-module patch. A static row or a restyled QuickView menu is not sufficient.
+The production implementation is required to be skin agnostic. It must provide
+an input/filter bridge that owns selector state without replacing the normal RB
+QuickView behavior or modifying any `.xzp` package. The selected direction is a
+version-gated runtime module that injects its own top-level XUI scene or renders
+an overlay, plus narrowly scoped in-memory hooks for controller input and
+filter application. A static skin row, a patched skin, or a restyled QuickView
+menu is not sufficient.
