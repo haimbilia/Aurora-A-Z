@@ -1,0 +1,17 @@
+Aurora A-Z functional test r3
+================================
+
+1. Copy the contents of this Aurora-A-Z folder into Hdd1:\Aurora\ and merge
+   the Skins and User folders. Do not overwrite Default.xzp.
+2. In Aurora, open Back/System -> Scripts -> Utility and run
+   "Aurora A-Z Installer".
+3. Select "Install / Update", then allow Aurora to restart.
+4. Select the skin "Aurora A-Z Functional Test r3".
+5. On the coverflow, press D-pad Down. Move with Left/Right and press A to
+   apply the highlighted initial-character QuickView.
+
+Rollback
+--------
+
+Run "Aurora A-Z Installer" again and choose "Uninstall". Then select the
+Default skin. The installer restores the previous QuickView order and default.

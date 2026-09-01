@@ -28,6 +28,18 @@ if ($null -eq $coverflowWrapper) {
     throw 'CoverflowWrapper was not found in Aurora_Main.xui.'
 }
 
+$quickViewDownKey = $applicationLayer.SelectSingleNode(
+    "XuiButton[Properties/Id='QuickViewRB']/Properties/PressKey"
+)
+
+if ($null -eq $quickViewDownKey) {
+    throw 'QuickViewRB input control was not found in Aurora_Main.xui.'
+}
+
+# VK_PAD_DPAD_DOWN (0x5811). ScnApplication already handles QuickViewRB and
+# opens Aurora's native picker, which provides Left/Right and A-to-select.
+$quickViewDownKey.InnerText = '22545'
+
 if ($null -ne $applicationLayer.SelectSingleNode("XuiText[Properties/Id='AlphabetSelector']")) {
     throw 'AlphabetSelector already exists in Aurora_Main.xui.'
 }

@@ -1,5 +1,8 @@
 # Aurora/Xbox toolchain files (provided locally; do not commit)
 original/*.xzp
+original/*.xex
+original/*.exe
+original/console/
 original/Skins/
 original/extracted/
 source/skin/stock/
@@ -11,6 +14,7 @@ tools/
 
 # Build and deployment artifacts
 build/
+auto_*.obj
 deploy/
 
 # VS Code workspace state
