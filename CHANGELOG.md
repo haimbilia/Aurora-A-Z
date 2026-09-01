@@ -1,14 +1,14 @@
 # Changelog
 
-## 0.1.0 - 2026-09-01
+## Unreleased
 
-- Add an Aurora-native `A-Z` filter category.
-- Add filters for `#`, `A` through `Z`, grouped into readable ranges.
-- Treat empty names and titles beginning with a non-ASCII letter, number, or
-  symbol as `#`.
-- Add a repeatable PowerShell release build.
-- Document installation, use, upgrade, and rollback.
+- Redirect development to the requested on-coverflow selector.
+- Add lossless stock XUR/XUI conversion using XUIHelper and Aurora extensions.
+- Add an open PowerShell XZP builder/extractor with verified 418-file round trip.
+- Add a visual-test skin with `# A ... Z` in `Aurora_Main`.
+- Deprecate the filter-only v0.1.0 experiment because it duplicates Aurora's
+  stock name filter.
 
-This first release provides functional letter filtering through Aurora's View
-Settings. The persistent selector row shown in the project mockup is planned
-for a later skin release and is not included yet.
+## 0.1.0 - 2026-09-01 (deprecated)
+
+- Initial filter-only experiment. This did not implement the project mockup.

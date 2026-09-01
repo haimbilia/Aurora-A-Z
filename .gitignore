@@ -1,6 +1,8 @@
 # Aurora/Xbox toolchain files (provided locally; do not commit)
 original/*.xzp
 original/Skins/
+original/extracted/
+source/skin/stock/
 reference/AuroraElements.xml
 tools/
 
