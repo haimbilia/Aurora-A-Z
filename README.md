@@ -29,17 +29,17 @@ Build the skin:
 Upload the generated file:
 
 ```text
-build\Aurora-A-Z-visual-test.xzp
+build\Aurora-A-Z-visual-test-r2.xzp
 ```
 
 to the Xbox at:
 
 ```text
-Hdd1:\Aurora\Skins\Aurora-A-Z-visual-test.xzp
+Hdd1:\Aurora\Skins\Aurora-A-Z-visual-test-r2.xzp
 ```
 
 In Aurora, open **B → View Settings → Skin**, select
-**Aurora A-Z Visual Test**, and restart Aurora if prompted. Do not overwrite or
+**Aurora A-Z Visual Test r2**, and restart Aurora if prompted. Do not overwrite or
 rename `Default.xzp`.
 
 This build only verifies the row's position, size, font, and readability. The

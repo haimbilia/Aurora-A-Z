@@ -42,10 +42,10 @@ $selectorXml = @'
     <Scale>0.500000,0.500000,1.000000</Scale>
     <Text>#  A B C D E F G H I J K L M N O P Q R S T U V W X Y Z</Text>
     <TextColor>0xffffffff</TextColor>
-    <DropShadowColor>0xc0000000</DropShadowColor>
+    <DropShadowColor>0xe0000000</DropShadowColor>
     <PointSize>46.000000</PointSize>
     <Font>Segoe UI Regular</Font>
-    <TextStyle>16</TextStyle>
+    <TextStyle>1044</TextStyle>
   </Properties>
 </XuiText>
 '@

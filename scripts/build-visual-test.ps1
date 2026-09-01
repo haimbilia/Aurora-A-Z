@@ -12,7 +12,7 @@ $xuiHelper = Join-Path $projectRoot 'tools\XUIHelper\XUIHelper.CLI\bin\Release\n
 $buildRoot = Join-Path $projectRoot 'build\visual-test'
 $stageRoot = Join-Path $buildRoot 'skin'
 $modifiedMainXui = Join-Path $buildRoot 'Aurora_Main.xui'
-$outputSkin = Join-Path $projectRoot 'build\Aurora-A-Z-visual-test.xzp'
+$outputSkin = Join-Path $projectRoot 'build\Aurora-A-Z-visual-test-r2.xzp'
 $compileLog = Join-Path $buildRoot 'xuihelper-compile.log'
 
 foreach ($requiredPath in @($stockSkin, $stockMainXui, $patchScript, $xzpScript, $xuiHelper)) {
@@ -45,10 +45,10 @@ if ($LASTEXITCODE -ne 0) {
 
 $metadataPath = Join-Path $stageRoot 'skin.meta'
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-$metadata.skinname = 'Aurora A-Z Visual Test'
+$metadata.skinname = 'Aurora A-Z Visual Test r2'
 $metadata.author = 'haimbilia'
-$metadata.revision = 1
-$metadata.description = 'Aurora A-Z on-coverflow selector visual smoke test.'
+$metadata.revision = 2
+$metadata.description = 'Centered Aurora A-Z coverflow selector with drop shadow.'
 $metadata.creationdate = '2026-09-01'
 $metadata.updateid = ''
 $metadata | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding utf8NoBOM

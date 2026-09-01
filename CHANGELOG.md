@@ -6,6 +6,7 @@
 - Add lossless stock XUR/XUI conversion using XUIHelper and Aurora extensions.
 - Add an open PowerShell XZP builder/extractor with verified 418-file round trip.
 - Add a visual-test skin with `# A ... Z` in `Aurora_Main`.
+- Center the selector and enable a high-contrast drop shadow in visual test r2.
 - Deprecate the filter-only v0.1.0 experiment because it duplicates Aurora's
   stock name filter.
 
