@@ -6,6 +6,10 @@ Aurora A-Z will be implemented as a runtime extension for Aurora 0.7b.2
 Rev1655, not as an Aurora skin. Users keep their existing stock or third-party
 skin unchanged.
 
+Implementation must proceed through the safety and feasibility gates in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). In particular, rendering
+and filter work do not begin until a reversible native loader is proven.
+
 ## Required components
 
 1. **Compatibility gate** verifies the running Aurora revision before enabling

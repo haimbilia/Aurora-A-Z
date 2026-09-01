@@ -15,7 +15,8 @@ A filters the coverflow by the highlighted initial and returns control to the
 coverflow. RB must retain Aurora's normal QuickView menu.
 
 The architectural constraints that follow from these requirements are recorded
-in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 
 ## Current status
 
