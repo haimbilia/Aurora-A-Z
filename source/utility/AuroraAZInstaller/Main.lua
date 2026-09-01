@@ -9,6 +9,14 @@ local versionSetting = "AuroraAZInstalledVersion"
 local previousDefaultSetting = "AuroraAZPreviousDefaultQuickView"
 local selectorCount = 27
 
+local function requestRefreshOnExit()
+    -- SetRefreshListOnExit is not exposed by Aurora 0.7b Rev1655.
+    -- A restart still refreshes the list, so use this only when available.
+    if type(Script.SetRefreshListOnExit) == "function" then
+        Script.SetRefreshListOnExit(true)
+    end
+end
+
 local function execute(query)
     if Sql.Execute(query) ~= true then
         print("Aurora A-Z SQL failed: " .. query)
@@ -78,7 +86,7 @@ local function install()
 
     if ok then
         execute("COMMIT")
-        Script.SetRefreshListOnExit(true)
+        requestRefreshOnExit()
         return true
     end
 
@@ -115,7 +123,7 @@ local function uninstall()
 
     if ok then
         execute("COMMIT")
-        Script.SetRefreshListOnExit(true)
+        requestRefreshOnExit()
         return true
     end
 
@@ -131,7 +139,15 @@ local function offerRestart(message)
         "Restart"
     )
     if result.Button == 2 then
-        Aurora.Restart()
+        if type(Aurora.Restart) == "function" then
+            Aurora.Restart()
+        else
+            Script.ShowMessageBox(
+                "Aurora A-Z",
+                "Automatic restart is unavailable in this Aurora build. Restart Aurora manually.",
+                "OK"
+            )
+        end
     end
 end
 
