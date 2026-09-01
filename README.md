@@ -1,54 +1,124 @@
-# Aurora Alphabet Selector
+# Aurora A-Z
 
-An Aurora skin and Lua extension that adds a controller-friendly `# A ... Z`
-selector to the main coverflow screen.
+Aurora A-Z adds alphabetical title filtering to the Aurora dashboard on Xbox
+360. Version 0.1 provides a functional `#`/A–Z selector inside Aurora's existing
+**View Settings → Filters & Sort** screen.
 
-## Current milestone: visual skin proof
+> [!IMPORTANT]
+> Version 0.1 does not yet draw the persistent alphabet row from the mockup over
+> the coverflow. That requires a compiled Aurora skin and Xbox XUI tooling. This
+> release establishes and tests the filtering behavior first.
 
-The first build only adds the selector to a copy of the Aurora Default skin.
-It must load successfully before we connect input or filtering.
+## Compatibility
 
-## Repository layout
+- Target: Aurora 0.7b.2 r1655
+- Console: RGH/JTAG Xbox 360 running Aurora
+- Installation: FTP, USB, or Aurora File Manager
+- No database, executable, or stock skin files are replaced
+
+Other Aurora versions with the Lua content-filter API may work, but 0.7b.2 is
+the release package used for development.
+
+## Install
+
+1. Download `Aurora-A-Z-v0.1.0.zip` from the GitHub Releases page.
+2. Extract the ZIP on your computer or USB drive.
+3. Open the extracted `Aurora-A-Z-v0.1.0` folder.
+4. Copy its `User` folder into the root of your Aurora installation and allow
+   the folders to merge.
+
+The resulting files on the Xbox must be:
 
 ```text
-source/
-  lua/                  Lua behavior (safe to edit in VS Code)
-  skin/                 Editable XUI source and notes
-reference/              Aurora-specific XUI definitions (local-only)
-original/               Your unmodified Default.xzp (local-only)
-build/                  Generated XZP packages (local-only)
-tools/                  XuiTool/XZP utilities (local-only)
+Aurora\User\Scripts\Content\Filters\AuroraAZ.ini
+Aurora\User\Scripts\Content\Filters\AuroraAZ.lua
 ```
 
-## Required local inputs
+5. Restart Aurora. A full Aurora restart is required after adding or updating
+   filter scripts.
 
-1. Copy `Aurora/Skins/Default.xzp` from the Xbox to `original/Default.xzp`.
-2. Provide the exact Aurora version and screen resolution in use.
-3. Install the Xbox 360 XDK UI Authoring Tool (`XuiTool.exe`), AuroraElements,
-   and an XZP extract/repack utility.
+### Installing with Aurora File Manager
 
-## Workflow
+1. Extract the release ZIP to a USB drive on the PC.
+2. Connect the USB drive to the Xbox 360.
+3. In Aurora, press **Back** and open **File Manager**.
+4. In one pane, open the extracted release folder on the USB drive.
+5. In the other pane, open the folder containing `Aurora.xex`.
+6. Copy the release's `User` folder to the Aurora folder and merge it.
+7. Restart Aurora.
 
-1. Extract `original/Default.xzp` to a temporary working skin directory.
-2. Convert `Aurora_Main.xur` to editable `.xui` with XuiTool.
-3. Copy the resulting source into `source/skin/` and edit it in VS Code.
-4. Export it back to `.xur`, package the skin as `build/Alphabet.xzp`, and
-   install it on the Xbox via Aurora FTP.
+### Installing with FTP
 
-Do not edit the only copy of `Default.xzp`; the build should always start from
-an untouched copy.
+Connect to Aurora's FTP server and upload both release files to:
 
-## Behavior plan
+```text
+/User/Scripts/Content/Filters/
+```
 
-`source/lua/Alphabet.lua` currently provides the alphabet normalization and
-matching logic. Once the actual skin is available, it will be connected to the
-Aurora scene and its documented filter API. The desired jump-to-first-title
-behavior depends on whether the installed Aurora coverflow exposes a selectable
-index/message; filtering remains the reliable fallback.
+The path above is relative to the folder containing `Aurora.xex`. Restart
+Aurora after the transfer finishes.
 
-## Research boundary
+## Use
 
-The RealModScene “Aurora plugin patches” example is a patch for the separate
-Freestyle HUD plugin, not an Aurora dashboard extension API. Its relevance and
-limits are documented in `reference/RESEARCH.md`; do not use it as the basis
-for modifying the main game list.
+1. From Aurora's coverflow, press **B** to open **View Settings**.
+2. Open **Filters & Sort**.
+3. Select **A-Z**.
+4. Select a range and then a letter. Use **#** for titles whose names begin
+   with a number, symbol, empty value, or non-ASCII character.
+5. Return to the coverflow. Aurora displays only matching titles.
+
+Use **Clear All** in **Filters & Sort** to restore the complete game list.
+
+## Uninstall or roll back
+
+Delete only these two files from the Xbox:
+
+```text
+Aurora\User\Scripts\Content\Filters\AuroraAZ.ini
+Aurora\User\Scripts\Content\Filters\AuroraAZ.lua
+```
+
+Restart Aurora and use **Clear All** if the old filter selection remains active.
+The release does not modify `content.db`, `Aurora.xex`, or `Default.xzp`.
+
+## Known limitations
+
+- Selection happens in View Settings, not in an on-coverflow alphabet row.
+- Choosing a letter filters the list; it does not keep the full list and jump
+  the coverflow to the first matching title.
+- Matching uses the first byte of `Content.Name`. ASCII A–Z is supported;
+  accented and non-Latin initials currently appear under `#`.
+- Hardware testing is still required. Keep FTP or USB recovery access available
+  when testing early releases.
+
+## Development
+
+VS Code is the primary editor. Build a distributable ZIP from PowerShell:
+
+```powershell
+.\scripts\build-release.ps1
+```
+
+The generated archive is written to `build/Aurora-A-Z-v<VERSION>.zip` and is
+excluded from Git. The script prints its SHA-256 checksum.
+
+Project layout:
+
+```text
+source/filter/       Aurora-loadable filter and metadata
+source/lua/          Shared matching helpers for future UI work
+source/skin/         Future Aurora XUI skin sources
+scripts/             Release tooling
+reference/           Research notes and local tooling guidance
+original/            Local stock Default.xzp; never committed
+build/               Generated releases; never committed
+```
+
+The future visual selector requires `XuiTool.exe`, `AuroraElements.xml`, and an
+XZP packer. It will be developed against Aurora 0.7b.2's stock `Default.xzp`.
+
+## Acknowledgements
+
+The filter integration follows the public
+[XboxUnity AuroraScripts](https://github.com/XboxUnity/AuroraScripts) format.
+Aurora and its scripting API are maintained by XboxUnity/Phoenix.
