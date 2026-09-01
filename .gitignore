@@ -1,0 +1,15 @@
+# Aurora/Xbox toolchain files (provided locally; do not commit)
+original/*.xzp
+original/Skins/
+reference/AuroraElements.xml
+tools/
+
+# Downloaded release/source archives
+*.rar
+
+# Build and deployment artifacts
+build/
+deploy/
+
+# VS Code workspace state
+.vscode/*.log
