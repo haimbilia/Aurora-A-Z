@@ -21,6 +21,7 @@ m2a_sources=(
     "${repo_root}/native/src/input.c"
     "${repo_root}/native/src/input_detour.c"
     "${repo_root}/native/src/input_detour_shim.S"
+    "${repo_root}/native/src/m2a_input_telemetry.c"
     "${repo_root}/native/src/rev1655_runtime.c"
 )
 

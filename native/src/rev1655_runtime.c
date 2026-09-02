@@ -5,12 +5,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <xecore/xam.h>
 #include <xecore/xboxkrnl.h>
 
 #include <auroraaz/compatibility.h>
 #include <auroraaz/hook_runtime.h>
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
+#include <auroraaz/m2a_input_telemetry.h>
 #include <auroraaz/rev1655_hook_gate.h>
 #include <auroraaz/rev1655_runtime.h>
 
@@ -22,6 +24,7 @@
 #define AZ_M2A_INPUT_TARGET_ADDRESS 0x82801D90u
 #define AZ_INPUT_SIGNATURE_SIZE 20u
 #define AZ_OBSERVATION_DRAIN_BUDGET 8u
+#define AZ_TELEMETRY_FLUSH_TICKS 5u
 #define AZ_WORKER_INTERVAL_100NS (-500000LL)
 #define AZ_CONTROL_WAIT_100NS (-10000LL)
 
@@ -36,9 +39,15 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t state;
     volatile uint32_t stage;
     volatile uint32_t observations_logged;
+    AzM2aInputTelemetry telemetry;
+    uint32_t telemetry_flush_ticks;
 } AzRev1655Runtime;
 
 static AzRev1655Runtime g_runtime;
+static char g_input_telemetry_slot_a_path[] =
+    AZ_M2A_INPUT_TELEMETRY_SLOT_A_PATH;
+static char g_input_telemetry_slot_b_path[] =
+    AZ_M2A_INPUT_TELEMETRY_SLOT_B_PATH;
 
 static uint32_t load_u32(const volatile uint32_t *value)
 {
@@ -63,6 +72,228 @@ static void wait_for_input(void)
 
     (void)KeDelayExecutionThread(0u, 0u, &interval);
 }
+
+static uint8_t write_complete_file(
+    char *path,
+    const uint8_t *bytes,
+    uint32_t size)
+{
+    HANDLE file;
+    uint32_t bytes_written = 0u;
+    int write_succeeded;
+    int close_succeeded;
+
+    if (path == NULL || bytes == NULL || size == 0u) {
+        return 0u;
+    }
+
+    file = CreateFileA(
+        path,
+        GENERIC_WRITE,
+        FILE_SHARE_READ,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (file == NULL || file == INVALID_HANDLE_VALUE) {
+        return 0u;
+    }
+
+    write_succeeded = WriteFile(
+        file,
+        (void *)bytes,
+        size,
+        &bytes_written,
+        NULL);
+    close_succeeded = CloseHandle(file);
+    return write_succeeded != 0 &&
+        bytes_written == size &&
+        close_succeeded != 0 ? 1u : 0u;
+}
+
+#if defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+uint8_t az_rev1655_runtime_test_write_complete_file(
+    char *path,
+    const uint8_t *bytes,
+    uint32_t size)
+{
+    return write_complete_file(path, bytes, size);
+}
+#endif
+
+static uint8_t read_complete_file(
+    char *path,
+    uint8_t *bytes,
+    uint32_t size)
+{
+    HANDLE file;
+    uint32_t bytes_read = 0u;
+    int read_succeeded;
+    int close_succeeded;
+
+    if (path == NULL || bytes == NULL || size == 0u) {
+        return 0u;
+    }
+
+    file = CreateFileA(
+        path,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (file == NULL || file == INVALID_HANDLE_VALUE) {
+        return 0u;
+    }
+
+    read_succeeded = ReadFile(
+        file,
+        bytes,
+        size,
+        &bytes_read,
+        NULL);
+    close_succeeded = CloseHandle(file);
+    return read_succeeded != 0 &&
+        bytes_read == size &&
+        close_succeeded != 0 ? 1u : 0u;
+}
+
+/* Continue the serial space left by an earlier title session. Without this,
+ * a valid stale slot with a larger generation could outrank the new run. */
+static void seed_input_telemetry_generation(void)
+{
+    uint8_t slot_a[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
+    uint8_t slot_b[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
+    uint8_t selected_slot = AZ_M2A_INPUT_TELEMETRY_SLOT_A;
+    uint32_t generation = 0u;
+    const uint8_t *valid_a = NULL;
+    const uint8_t *valid_b = NULL;
+
+    if (read_complete_file(
+            g_input_telemetry_slot_a_path,
+            slot_a,
+            (uint32_t)sizeof(slot_a)) != 0u) {
+        valid_a = slot_a;
+    }
+    if (read_complete_file(
+            g_input_telemetry_slot_b_path,
+            slot_b,
+            (uint32_t)sizeof(slot_b)) != 0u) {
+        valid_b = slot_b;
+    }
+
+    if (az_m2a_input_telemetry_select_newest_be(
+            valid_a,
+            valid_a != NULL ? sizeof(slot_a) : 0u,
+            valid_b,
+            valid_b != NULL ? sizeof(slot_b) : 0u,
+            &selected_slot,
+            &generation) == AZ_M2A_INPUT_TELEMETRY_OK) {
+        (void)selected_slot;
+        (void)az_m2a_input_telemetry_seed_generation(
+            &g_runtime.telemetry,
+            generation);
+    }
+}
+
+/* Worker-only durable evidence. A failed or torn slot never acknowledges the
+ * in-memory revision; the same CRC-protected generation is retried later. */
+static void flush_input_telemetry(uint8_t force)
+{
+    AzInputDetourStatus status;
+    uint8_t record[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
+    uint32_t revision_token = 0u;
+    uint32_t generation = 0u;
+    char *path;
+
+    az_rev1655_input_detour_snapshot_status(&status);
+    (void)az_m2a_input_telemetry_update_runtime(
+        &g_runtime.telemetry,
+        1u,
+        (AzRev1655RuntimeState)load_u32(&g_runtime.state),
+        status.observation_drops);
+
+    if (az_m2a_input_telemetry_is_dirty(&g_runtime.telemetry) == 0u) {
+        g_runtime.telemetry_flush_ticks = 0u;
+        return;
+    }
+
+    if (force == 0u) {
+        if (g_runtime.telemetry_flush_ticks < AZ_TELEMETRY_FLUSH_TICKS) {
+            ++g_runtime.telemetry_flush_ticks;
+        }
+        if (g_runtime.telemetry_flush_ticks < AZ_TELEMETRY_FLUSH_TICKS) {
+            return;
+        }
+    }
+    g_runtime.telemetry_flush_ticks = 0u;
+
+    if (az_m2a_input_telemetry_snapshot_be(
+            &g_runtime.telemetry,
+            record,
+            sizeof(record),
+            &revision_token) != AZ_M2A_INPUT_TELEMETRY_OK ||
+        az_m2a_input_telemetry_validate_record_be(
+            record,
+            sizeof(record),
+            &generation) != AZ_M2A_INPUT_TELEMETRY_OK) {
+        return;
+    }
+
+    path = (generation & 1u) != 0u ?
+        g_input_telemetry_slot_a_path :
+        g_input_telemetry_slot_b_path;
+    if (write_complete_file(
+            path,
+            record,
+            (uint32_t)sizeof(record)) != 0u) {
+        (void)az_m2a_input_telemetry_acknowledge(
+            &g_runtime.telemetry,
+            revision_token);
+    }
+}
+
+#if defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+void az_rev1655_runtime_test_telemetry_init(uint32_t generation)
+{
+    az_m2a_input_telemetry_init(&g_runtime.telemetry);
+    if (generation != 0u) {
+        (void)az_m2a_input_telemetry_seed_generation(
+            &g_runtime.telemetry,
+            generation);
+    }
+    g_runtime.telemetry_flush_ticks = 0u;
+    store_u32(
+        &g_runtime.state,
+        (uint32_t)AZ_REV1655_RUNTIME_RUNNING);
+}
+
+AzM2aInputTelemetryResult az_rev1655_runtime_test_telemetry_record(
+    const AzInputDetourObservation *observation)
+{
+    return az_m2a_input_telemetry_record(
+        &g_runtime.telemetry,
+        observation);
+}
+
+void az_rev1655_runtime_test_telemetry_flush(uint8_t force)
+{
+    flush_input_telemetry(force);
+}
+
+uint8_t az_rev1655_runtime_test_telemetry_is_dirty(void)
+{
+    return az_m2a_input_telemetry_is_dirty(&g_runtime.telemetry);
+}
+
+void az_rev1655_runtime_test_telemetry_finish(void)
+{
+    store_u32(
+        &g_runtime.state,
+        (uint32_t)AZ_REV1655_RUNTIME_STOPPED);
+}
+#endif
 
 /* Validate every page that the exact-image gate will actually read. The
  * loaded PE has intentionally unmapped gaps outside its header and .text;
@@ -201,6 +432,9 @@ static uint32_t drain_observation_pass(void)
         }
 
         log_observation(&observation);
+        (void)az_m2a_input_telemetry_record(
+            &g_runtime.telemetry,
+            &observation);
         (void)__atomic_add_fetch(
             &g_runtime.observations_logged,
             1u,
@@ -294,16 +528,23 @@ static uint32_t input_observe_worker(void *context)
         }
     } while (state == (uint32_t)AZ_REV1655_RUNTIME_STARTING);
 
+    if (state == (uint32_t)AZ_REV1655_RUNTIME_RUNNING ||
+        state == (uint32_t)AZ_REV1655_RUNTIME_STOPPING) {
+        seed_input_telemetry_generation();
+    }
+
     if (state == (uint32_t)AZ_REV1655_RUNTIME_RUNNING) {
         DbgPrint(
             "AuroraAZ: M2a input observe active target=%08X "
             "consume=disabled\n",
             (unsigned int)AZ_M2A_INPUT_TARGET_ADDRESS);
+        flush_input_telemetry(1u);
     }
 
     while (load_u32(&g_runtime.state) ==
            (uint32_t)AZ_REV1655_RUNTIME_RUNNING) {
         (void)drain_observation_pass();
+        flush_input_telemetry(0u);
         wait_for_input();
     }
 
@@ -331,6 +572,7 @@ static uint32_t input_observe_worker(void *context)
         store_u32(
             &g_runtime.state,
             (uint32_t)AZ_REV1655_RUNTIME_CLOSED);
+        flush_input_telemetry(1u);
     }
 
     return 0u;
@@ -485,6 +727,8 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     }
 
     store_u32(&g_runtime.observations_logged, 0u);
+    az_m2a_input_telemetry_init(&g_runtime.telemetry);
+    g_runtime.telemetry_flush_ticks = 0u;
     result = start_input_observe();
     if (result != AZ_REV1655_RUNTIME_OK) {
         store_u32(

@@ -223,6 +223,22 @@ void az_m2a_input_telemetry_init(AzM2aInputTelemetry *telemetry)
     telemetry->dirty = 1u;
 }
 
+AzM2aInputTelemetryResult az_m2a_input_telemetry_seed_generation(
+    AzM2aInputTelemetry *telemetry,
+    uint32_t generation)
+{
+    if (telemetry == NULL) {
+        return AZ_M2A_INPUT_TELEMETRY_NULL;
+    }
+    if (telemetry->generation_assigned != 0u ||
+        telemetry->generation != 0u) {
+        return AZ_M2A_INPUT_TELEMETRY_INVALID_ARGUMENT;
+    }
+
+    telemetry->generation = generation;
+    return AZ_M2A_INPUT_TELEMETRY_OK;
+}
+
 AzM2aInputTelemetryResult az_m2a_input_telemetry_record(
     AzM2aInputTelemetry *telemetry,
     const AzInputDetourObservation *observation)

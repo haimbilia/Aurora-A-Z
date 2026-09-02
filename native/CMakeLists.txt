@@ -68,7 +68,8 @@ if(BUILD_TESTING)
 
     add_executable(auroraaz_rev1655_runtime_tests
         tests/rev1655_runtime_tests.c
-        src/rev1655_runtime.c)
+        src/rev1655_runtime.c
+        src/m2a_input_telemetry.c)
     target_link_libraries(auroraaz_rev1655_runtime_tests
         PRIVATE auroraaz_core)
     target_include_directories(auroraaz_rev1655_runtime_tests
@@ -76,7 +77,8 @@ if(BUILD_TESTING)
     target_compile_definitions(auroraaz_rev1655_runtime_tests
         PRIVATE
             AURORAAZ_XBOX360=1
-            AURORAAZ_REV1655_THREAD_TEST=1)
+            AURORAAZ_REV1655_THREAD_TEST=1
+            AURORAAZ_REV1655_RUNTIME_TEST_IO=1)
 
     add_executable(auroraaz_netdbg_bootstrap_tests
         tests/netdbg_bootstrap_tests.c

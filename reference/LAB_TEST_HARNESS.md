@@ -99,7 +99,8 @@ credentials or JWT.
 
 By default the collector looks for:
 
-- `AuroraAZ-M2a-input.bin`
+- `AuroraAZ-M2a-input-A.bin`
+- `AuroraAZ-M2a-input-B.bin`
 - `AuroraAZ-M2a.bin`
 - `AuroraAZ-M1.bin`
 - `AuroraAZ-M1-worker.bin`
@@ -107,6 +108,14 @@ By default the collector looks for:
 
 Override the list with one or more `-EvidenceName` arguments. Only simple
 filenames in `Hdd1:\AuroraAZLab\Data\Logs` are accepted.
+
+Decode the newest valid CRC-protected input record after collection with:
+
+```powershell
+python .\scripts\decode-m2a-input.py `
+  --slot-a .\build\lab-harness\<run>\AuroraAZ-M2a-input-A.bin `
+  --slot-b .\build\lab-harness\<run>\AuroraAZ-M2a-input-B.bin
+```
 
 ## Interactive controller test
 

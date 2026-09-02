@@ -157,6 +157,15 @@ typedef struct AzM2aInputTelemetry {
 void az_m2a_input_telemetry_init(AzM2aInputTelemetry *telemetry);
 
 /*
+ * Worker startup may seed the generation from the newest valid on-disk slot
+ * so a record left by an earlier title session cannot outrank this session.
+ * This is accepted only before the first snapshot generation is assigned.
+ */
+AzM2aInputTelemetryResult az_m2a_input_telemetry_seed_generation(
+    AzM2aInputTelemetry *telemetry,
+    uint32_t generation);
+
+/*
  * Records only the seven declared controls. Unknown controls are ignored and
  * do not make the snapshot dirty. Counters saturate rather than wrap.
  */

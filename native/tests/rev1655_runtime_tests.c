@@ -11,6 +11,7 @@
 #include <auroraaz/hook_runtime.h>
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
+#include <auroraaz/m2a_input_telemetry.h>
 #include <auroraaz/rev1655_hook_gate.h>
 #include <auroraaz/rev1655_runtime.h>
 
@@ -76,6 +77,20 @@ static uint32_t installed_target;
 static uint32_t image_probe_calls;
 static uint32_t sparse_gap_probe_calls;
 static uintptr_t rejected_image_address;
+static uint32_t telemetry_open_calls;
+static uint32_t telemetry_write_calls;
+static uint32_t telemetry_close_calls;
+static uint32_t telemetry_read_open_calls;
+static uint32_t telemetry_read_calls;
+static uint32_t telemetry_read_close_calls;
+static char telemetry_path[64];
+static uint8_t telemetry_record[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
+static uint8_t prior_slot_b[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
+static uint8_t prior_slot_b_valid;
+static uint8_t write_open_succeeds = 1u;
+static uint8_t write_succeeds = 1u;
+static uint8_t write_close_succeeds = 1u;
+static uint32_t write_bytes_override = UINT32_MAX;
 static AzRev1655HookGateResult configured_gate_result =
     AZ_REV1655_HOOK_GATE_BAD_TEXT_SHA256;
 static AzHookRuntimeResult configured_hook_install_result =
@@ -87,6 +102,17 @@ static HANDLE configured_wrapper_handle =
 static uint8_t reject_thread_startup;
 
 typedef uint32_t (*TestWorker)(void *context);
+
+uint8_t az_rev1655_runtime_test_write_complete_file(
+    char *path,
+    const uint8_t *bytes,
+    uint32_t size);
+void az_rev1655_runtime_test_telemetry_init(uint32_t generation);
+AzM2aInputTelemetryResult az_rev1655_runtime_test_telemetry_record(
+    const AzInputDetourObservation *observation);
+void az_rev1655_runtime_test_telemetry_flush(uint8_t force);
+uint8_t az_rev1655_runtime_test_telemetry_is_dirty(void);
+void az_rev1655_runtime_test_telemetry_finish(void);
 
 static TestWorker pending_worker;
 static void *pending_worker_context;
@@ -156,6 +182,97 @@ int DbgPrint(const char *format, ...)
     va_start(arguments, format);
     va_end(arguments);
     return 0;
+}
+
+HANDLE CreateFileA(
+    char *path,
+    uint32_t desired_access,
+    uint32_t share_mode,
+    void *security_attributes,
+    uint32_t creation_disposition,
+    uint32_t flags_and_attributes,
+    HANDLE template_file)
+{
+    CHECK(path != NULL);
+    CHECK(share_mode == FILE_SHARE_READ);
+    CHECK(security_attributes == NULL);
+    CHECK(flags_and_attributes == FILE_ATTRIBUTE_NORMAL);
+    CHECK(template_file == NULL);
+
+    if (desired_access == GENERIC_READ) {
+        CHECK(creation_disposition == OPEN_EXISTING);
+        CHECK(strcmp(path, AZ_M2A_INPUT_TELEMETRY_SLOT_A_PATH) == 0 ||
+            strcmp(path, AZ_M2A_INPUT_TELEMETRY_SLOT_B_PATH) == 0);
+        ++telemetry_read_open_calls;
+        if (prior_slot_b_valid != 0u &&
+            strcmp(path, AZ_M2A_INPUT_TELEMETRY_SLOT_B_PATH) == 0) {
+            return (HANDLE)(uintptr_t)0xABCDu;
+        }
+        return INVALID_HANDLE_VALUE;
+    }
+
+    CHECK(desired_access == GENERIC_WRITE);
+    CHECK(creation_disposition == CREATE_ALWAYS);
+    CHECK(strlen(path) < sizeof(telemetry_path));
+    (void)snprintf(telemetry_path, sizeof(telemetry_path), "%s", path);
+    ++telemetry_open_calls;
+    if (write_open_succeeds == 0u) {
+        return INVALID_HANDLE_VALUE;
+    }
+    return (HANDLE)(uintptr_t)0x9ABCu;
+}
+
+int WriteFile(
+    HANDLE file,
+    void *buffer,
+    uint32_t bytes_to_write,
+    uint32_t *bytes_written,
+    void *overlapped)
+{
+    CHECK(file == (HANDLE)(uintptr_t)0x9ABCu);
+    CHECK(buffer != NULL);
+    CHECK(bytes_written != NULL);
+    CHECK(overlapped == NULL);
+    memset(telemetry_record, 0, sizeof(telemetry_record));
+    memcpy(
+        telemetry_record,
+        buffer,
+        bytes_to_write < sizeof(telemetry_record) ?
+            (size_t)bytes_to_write : sizeof(telemetry_record));
+    *bytes_written = write_bytes_override == UINT32_MAX ?
+        bytes_to_write : write_bytes_override;
+    ++telemetry_write_calls;
+    return write_succeeds != 0u ? 1 : 0;
+}
+
+int ReadFile(
+    HANDLE file,
+    void *buffer,
+    uint32_t bytes_to_read,
+    uint32_t *bytes_read,
+    void *overlapped)
+{
+    CHECK(file == (HANDLE)(uintptr_t)0xABCDu);
+    CHECK(buffer != NULL);
+    CHECK(bytes_to_read == AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE);
+    CHECK(bytes_read != NULL);
+    CHECK(overlapped == NULL);
+    CHECK(prior_slot_b_valid != 0u);
+    memcpy(buffer, prior_slot_b, sizeof(prior_slot_b));
+    *bytes_read = bytes_to_read;
+    ++telemetry_read_calls;
+    return 1;
+}
+
+int CloseHandle(HANDLE handle)
+{
+    if (handle == (HANDLE)(uintptr_t)0xABCDu) {
+        ++telemetry_read_close_calls;
+        return 1;
+    }
+    CHECK(handle == (HANDLE)(uintptr_t)0x9ABCu);
+    ++telemetry_close_calls;
+    return write_close_succeeds != 0u ? 1 : 0;
 }
 
 NTSTATUS KeDelayExecutionThread(
@@ -461,8 +578,119 @@ static void test_gate_failure_precedes_host_mutation(void)
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
 }
 
+static void test_telemetry_file_completion_matrix(void)
+{
+    char path[] = AZ_M2A_INPUT_TELEMETRY_SLOT_A_PATH;
+    const uint8_t bytes[4] = {1u, 2u, 3u, 4u};
+
+    write_open_succeeds = 0u;
+    CHECK(az_rev1655_runtime_test_write_complete_file(
+        path, bytes, sizeof(bytes)) == 0u);
+    CHECK(telemetry_open_calls == 1u);
+    CHECK(telemetry_write_calls == 0u);
+    CHECK(telemetry_close_calls == 0u);
+
+    write_open_succeeds = 1u;
+    write_succeeds = 0u;
+    CHECK(az_rev1655_runtime_test_write_complete_file(
+        path, bytes, sizeof(bytes)) == 0u);
+    CHECK(telemetry_write_calls == 1u);
+    CHECK(telemetry_close_calls == 1u);
+
+    write_succeeds = 1u;
+    write_bytes_override = 3u;
+    CHECK(az_rev1655_runtime_test_write_complete_file(
+        path, bytes, sizeof(bytes)) == 0u);
+
+    write_bytes_override = UINT32_MAX;
+    write_close_succeeds = 0u;
+    CHECK(az_rev1655_runtime_test_write_complete_file(
+        path, bytes, sizeof(bytes)) == 0u);
+
+    write_close_succeeds = 1u;
+    CHECK(az_rev1655_runtime_test_write_complete_file(
+        path, bytes, sizeof(bytes)) == 1u);
+
+    telemetry_open_calls = 0u;
+    telemetry_write_calls = 0u;
+    telemetry_close_calls = 0u;
+    telemetry_path[0] = '\0';
+}
+
+static void test_telemetry_retry_throttle_and_alternation(void)
+{
+    AzInputDetourObservation observation;
+    uint8_t failed_record[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
+    uint32_t generation = 0u;
+    uint32_t tick;
+
+    memset(&observation, 0, sizeof(observation));
+    observation.serial = 1u;
+    observation.input_frame = 2u;
+    observation.caller_return_address =
+        AZ_REV1655_INPUT_MAIN_RETURN_ADDRESS;
+    observation.keystroke.virtual_key = AZ_VK_PAD_RTHUMB_PRESS;
+    observation.keystroke.flags = AZ_KEYSTROKE_KEYDOWN;
+    observation.translation.control = AZ_INPUT_CONTROL_R3;
+    observation.translation.event = AZ_INPUT_EVENT_PRESS;
+    observation.translation.command = AZ_COMMAND_ENTER;
+    observation.requested_stage = AZ_INPUT_DETOUR_OBSERVE;
+    observation.effective_stage = AZ_INPUT_STAGE_OBSERVE_ONLY;
+
+    az_rev1655_runtime_test_telemetry_init(0u);
+    write_succeeds = 0u;
+    az_rev1655_runtime_test_telemetry_flush(1u);
+    CHECK(telemetry_open_calls == 1u);
+    CHECK(telemetry_write_calls == 1u);
+    CHECK(telemetry_close_calls == 1u);
+    CHECK(az_rev1655_runtime_test_telemetry_is_dirty() == 1u);
+    CHECK(strcmp(
+        telemetry_path,
+        AZ_M2A_INPUT_TELEMETRY_SLOT_A_PATH) == 0);
+    memcpy(failed_record, telemetry_record, sizeof(failed_record));
+
+    write_succeeds = 1u;
+    az_rev1655_runtime_test_telemetry_flush(1u);
+    CHECK(telemetry_open_calls == 2u);
+    CHECK(memcmp(
+        failed_record,
+        telemetry_record,
+        sizeof(failed_record)) == 0);
+    CHECK(az_rev1655_runtime_test_telemetry_is_dirty() == 0u);
+    CHECK(az_m2a_input_telemetry_validate_record_be(
+        telemetry_record,
+        sizeof(telemetry_record),
+        &generation) == AZ_M2A_INPUT_TELEMETRY_OK);
+    CHECK(generation == 1u);
+
+    CHECK(az_rev1655_runtime_test_telemetry_record(&observation) ==
+        AZ_M2A_INPUT_TELEMETRY_OK);
+    for (tick = 0u; tick < 4u; ++tick) {
+        az_rev1655_runtime_test_telemetry_flush(0u);
+    }
+    CHECK(telemetry_open_calls == 2u);
+    az_rev1655_runtime_test_telemetry_flush(0u);
+    CHECK(telemetry_open_calls == 3u);
+    CHECK(strcmp(
+        telemetry_path,
+        AZ_M2A_INPUT_TELEMETRY_SLOT_B_PATH) == 0);
+    CHECK(az_m2a_input_telemetry_validate_record_be(
+        telemetry_record,
+        sizeof(telemetry_record),
+        &generation) == AZ_M2A_INPUT_TELEMETRY_OK);
+    CHECK(generation == 2u);
+    CHECK(az_rev1655_runtime_test_telemetry_is_dirty() == 0u);
+
+    az_rev1655_runtime_test_telemetry_finish();
+    telemetry_open_calls = 0u;
+    telemetry_write_calls = 0u;
+    telemetry_close_calls = 0u;
+    telemetry_path[0] = '\0';
+}
+
 static void test_observe_only_lifecycle(void)
 {
+    AzM2aInputTelemetry prior_telemetry;
     uint32_t arena_calls_before;
     uint32_t gate_calls_after_start;
     uint32_t hook_install_calls_before;
@@ -470,6 +698,8 @@ static void test_observe_only_lifecycle(void)
     uint32_t thread_close_calls_before;
     uint32_t thread_wrapper_calls_before;
     uint32_t thread_wait_calls_before;
+    uint32_t telemetry_generation = 0u;
+    uint32_t prior_token = 0u;
 
     configured_gate_result = AZ_REV1655_HOOK_GATE_OK;
 
@@ -531,6 +761,17 @@ static void test_observe_only_lifecycle(void)
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
 
     configured_observe_result = AZ_INPUT_DETOUR_OK;
+    az_m2a_input_telemetry_init(&prior_telemetry);
+    CHECK(az_m2a_input_telemetry_seed_generation(
+        &prior_telemetry,
+        99u) == AZ_M2A_INPUT_TELEMETRY_OK);
+    CHECK(az_m2a_input_telemetry_snapshot_be(
+        &prior_telemetry,
+        prior_slot_b,
+        sizeof(prior_slot_b),
+        &prior_token) == AZ_M2A_INPUT_TELEMETRY_OK);
+    CHECK(prior_token != 0u);
+    prior_slot_b_valid = 1u;
     thread_wrapper_calls_before = thread_wrapper_calls;
     hook_install_calls_before = hook_install_calls;
     hook_remove_calls_before = hook_remove_calls;
@@ -565,6 +806,26 @@ static void test_observe_only_lifecycle(void)
     CHECK(observations_available == 0u);
     CHECK(observation_log_lines == 10u);
     CHECK(az_rev1655_runtime_observations_logged() == 10u);
+    CHECK(telemetry_open_calls == 1u);
+    CHECK(telemetry_write_calls == 1u);
+    CHECK(telemetry_close_calls == 1u);
+    CHECK(telemetry_read_open_calls == 2u);
+    CHECK(telemetry_read_calls == 1u);
+    CHECK(telemetry_read_close_calls == 1u);
+    CHECK(strcmp(
+        telemetry_path,
+        AZ_M2A_INPUT_TELEMETRY_SLOT_A_PATH) == 0);
+    CHECK(az_m2a_input_telemetry_validate_record_be(
+        telemetry_record,
+        sizeof(telemetry_record),
+        &telemetry_generation) == AZ_M2A_INPUT_TELEMETRY_OK);
+    CHECK(telemetry_generation == 101u);
+    CHECK(telemetry_record[
+        AZ_M2A_INPUT_TELEMETRY_OFF_WORKER_ENTERED] == 1u);
+    CHECK(telemetry_record[
+        AZ_M2A_INPUT_TELEMETRY_OFF_LAST_CONSUMED] == 0u);
+    CHECK(telemetry_record[
+        AZ_M2A_INPUT_TELEMETRY_OFF_LAST_FILTER_QUEUED] == 0u);
     CHECK(consume_stage_requests == 0u);
     CHECK(publication_violation == 0u);
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_CLOSED);
@@ -578,6 +839,8 @@ static void test_observe_only_lifecycle(void)
 int main(void)
 {
     test_gate_failure_precedes_host_mutation();
+    test_telemetry_file_completion_matrix();
+    test_telemetry_retry_throttle_and_alternation();
     test_observe_only_lifecycle();
 
     CHECK(strcmp(az_rev1655_runtime_result_name(

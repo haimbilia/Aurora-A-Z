@@ -74,7 +74,8 @@ param(
 
     [ValidateCount(0, 20)]
     [string[]]$EvidenceName = @(
-        'AuroraAZ-M2a-input.bin',
+        'AuroraAZ-M2a-input-A.bin',
+        'AuroraAZ-M2a-input-B.bin',
         'AuroraAZ-M2a.bin',
         'AuroraAZ-M1.bin',
         'AuroraAZ-M1-worker.bin',

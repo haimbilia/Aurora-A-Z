@@ -660,6 +660,10 @@ static void test_argument_guards(void)
 
     az_m2a_input_telemetry_init(&telemetry);
     az_m2a_input_telemetry_init(NULL);
+    CHECK(az_m2a_input_telemetry_seed_generation(NULL, 1u) ==
+        AZ_M2A_INPUT_TELEMETRY_NULL);
+    CHECK(az_m2a_input_telemetry_seed_generation(&telemetry, 41u) ==
+        AZ_M2A_INPUT_TELEMETRY_OK);
     CHECK(az_m2a_input_telemetry_record(NULL, &observation) ==
         AZ_M2A_INPUT_TELEMETRY_NULL);
     CHECK(az_m2a_input_telemetry_record(&telemetry, NULL) ==
@@ -674,7 +678,14 @@ static void test_argument_guards(void)
         record,
         AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE - 1u,
         &token) == AZ_M2A_INPUT_TELEMETRY_BUFFER_TOO_SMALL);
-    CHECK(telemetry.generation == 0u);
+    CHECK(telemetry.generation == 41u);
+    CHECK(az_m2a_input_telemetry_snapshot_be(
+        &telemetry,
+        record,
+        sizeof(record),
+        &token) == AZ_M2A_INPUT_TELEMETRY_OK);
+    CHECK(az_m2a_input_telemetry_seed_generation(&telemetry, 99u) ==
+        AZ_M2A_INPUT_TELEMETRY_INVALID_ARGUMENT);
     CHECK(az_m2a_input_telemetry_snapshot_be(
         NULL,
         record,
