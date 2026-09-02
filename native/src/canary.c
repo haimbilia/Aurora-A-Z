@@ -140,6 +140,24 @@ uint32_t AuroraAZCanaryStartMonitor(void)
     }
 
     g_monitor_thread = monitor_thread;
+
+    /*
+     * ExCreateThread returns the new Xbox kernel thread suspended, including
+     * when EX_CREATE_FLAG_SYSTEM is the only creation flag.  Keep the state at
+     * STARTING while it is resumed so monitor_aurora cannot observe partially
+     * published startup state.  The worker waits out STARTING above.
+     */
+    status = NtResumeThread(monitor_thread, NULL);
+    if (FAILED(status)) {
+        (void)NtClose(monitor_thread);
+        g_monitor_thread = NULL;
+        __atomic_store_n(
+            &g_monitor_state,
+            AZ_MONITOR_STOPPED,
+            __ATOMIC_RELEASE);
+        return (uint32_t)status;
+    }
+
     __atomic_store_n(
         &g_monitor_state,
         AZ_MONITOR_RUNNING,
