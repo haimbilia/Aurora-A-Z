@@ -73,6 +73,9 @@ static uint32_t publication_violation;
 static uint32_t observations_available;
 static uint32_t observation_log_lines;
 static uint32_t installed_target;
+static uint32_t image_probe_calls;
+static uint32_t sparse_gap_probe_calls;
+static uintptr_t rejected_image_address;
 static AzRev1655HookGateResult configured_gate_result =
     AZ_REV1655_HOOK_GATE_BAD_TEXT_SHA256;
 static AzHookRuntimeResult configured_hook_install_result =
@@ -128,8 +131,17 @@ bool MmIsAddressValid(void *address)
      * the runtime test proves preflight touches only the PE header and .text
      * ranges that the exact-image gate hashes. */
     if (candidate >= image_start && candidate < image_end) {
-        return (candidate < header_end) ||
+        const bool in_mapped_range = (candidate < header_end) ||
             (candidate >= text_start && candidate < text_end);
+
+        ++image_probe_calls;
+        if (!in_mapped_range) {
+            ++sparse_gap_probe_calls;
+        }
+        if (candidate == rejected_image_address) {
+            return false;
+        }
+        return in_mapped_range;
     }
     return address != NULL;
 }
@@ -412,11 +424,29 @@ uint32_t az_rev1655_input_detour_entry(
 
 static void test_gate_failure_precedes_host_mutation(void)
 {
+    const uintptr_t rejected_text_page =
+        (uintptr_t)AZ_REV1655_TEXT_BASE + (uintptr_t)0x2000u;
+
     CHECK(az_rev1655_runtime_start(
         AZ_REV1655_RUNTIME_STAGE_DISABLED) ==
         AZ_REV1655_RUNTIME_BAD_STAGE);
     CHECK(gate_calls == 0u);
     CHECK(arena_calls == 0u);
+
+    rejected_image_address = rejected_text_page;
+    CHECK(az_rev1655_runtime_start(
+        AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE) ==
+        AZ_REV1655_RUNTIME_IMAGE_UNMAPPED);
+    CHECK(gate_calls == 0u);
+    CHECK(site_calls == 0u);
+    CHECK(resolve_calls == 0u);
+    CHECK(arena_calls == 0u);
+    CHECK(hook_install_calls == 0u);
+    CHECK(thread_wrapper_calls == 0u);
+    CHECK(image_probe_calls != 0u);
+    CHECK(sparse_gap_probe_calls == 0u);
+    CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
+    rejected_image_address = (uintptr_t)0u;
 
     CHECK(az_rev1655_runtime_start(
         AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE) ==
@@ -427,6 +457,7 @@ static void test_gate_failure_precedes_host_mutation(void)
     CHECK(arena_calls == 0u);
     CHECK(hook_install_calls == 0u);
     CHECK(thread_wrapper_calls == 0u);
+    CHECK(sparse_gap_probe_calls == 0u);
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
 }
 
