@@ -6,12 +6,9 @@
 #include <auroraaz/layout.h>
 #include <auroraaz/overlay_model.h>
 
-#define AZ_COLOR_SHADOW_NEAR 0x58000000u
-#define AZ_COLOR_SHADOW_FAR 0x78000000u
-#define AZ_COLOR_INACTIVE 0xD8F5F5F5u
-#define AZ_COLOR_SELECTED_GLOW 0x88FFFFFFu
+#define AZ_COLOR_SHADOW 0x73000000u
+#define AZ_COLOR_INACTIVE 0xEBE0E0E0u
 #define AZ_COLOR_SELECTED 0xFFFFFFFFu
-#define AZ_SELECTED_GLOW_SCALE 1.08f
 
 static float minimum(float left, float right)
 {
@@ -100,18 +97,6 @@ void az_overlay_model_build(
 
     add_quad(
         model,
-        row_x + (shadow_x * 0.5f),
-        row_y + (shadow_y * 0.5f),
-        row_width,
-        row_height,
-        0.0f,
-        (float)AZ_GLYPH_ATLAS_TEXT_TOP,
-        (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
-        (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
-        AZ_COLOR_SHADOW_NEAR,
-        AZ_OVERLAY_LAYER_SHADOW_NEAR);
-    add_quad(
-        model,
         row_x + shadow_x,
         row_y + shadow_y,
         row_width,
@@ -120,8 +105,8 @@ void az_overlay_model_build(
         (float)AZ_GLYPH_ATLAS_TEXT_TOP,
         (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
         (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
-        AZ_COLOR_SHADOW_FAR,
-        AZ_OVERLAY_LAYER_SHADOW_FAR);
+        AZ_COLOR_SHADOW,
+        AZ_OVERLAY_LAYER_SHADOW);
     add_quad(
         model,
         row_x,
@@ -141,21 +126,6 @@ void az_overlay_model_build(
         const float glyph_x =
             row_x + ((float)glyph->source_x * scale);
         const float glyph_width = (float)glyph->advance * scale;
-        const float glow_width = glyph_width * AZ_SELECTED_GLOW_SCALE;
-        const float glow_height = row_height * AZ_SELECTED_GLOW_SCALE;
-
-        add_quad(
-            model,
-            glyph_x - ((glow_width - glyph_width) * 0.5f),
-            row_y - ((glow_height - row_height) * 0.5f),
-            glow_width,
-            glow_height,
-            (float)glyph->source_x,
-            (float)AZ_GLYPH_ATLAS_TEXT_TOP,
-            (float)glyph->advance,
-            (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
-            AZ_COLOR_SELECTED_GLOW,
-            AZ_OVERLAY_LAYER_SELECTED_GLOW);
 
         add_quad(
             model,

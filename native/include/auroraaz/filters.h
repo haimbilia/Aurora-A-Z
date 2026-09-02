@@ -11,6 +11,7 @@ extern "C" {
 
 char az_glyph_for_index(uint8_t index);
 const char *az_filter_method_for_index(uint8_t index);
+uint8_t az_filter_index_for_method(const char *method);
 
 #ifdef __cplusplus
 }

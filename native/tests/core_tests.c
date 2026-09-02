@@ -239,6 +239,15 @@ static void test_filter_mapping(void)
     CHECK(strcmp(az_filter_method_for_index(26u), "NameFilter.Y - Z.Z") == 0);
     CHECK(az_filter_method_for_index(27u) == NULL);
 
+    CHECK(az_filter_index_for_method("NameFilter.Other") == 0u);
+    CHECK(az_filter_index_for_method("NameFilter.A - F.A") == 1u);
+    CHECK(az_filter_index_for_method("NameFilter.Y - Z.Z") == 26u);
+    CHECK(az_filter_index_for_method("NameFilter.A - F.a") == AZ_NO_GLYPH);
+    CHECK(az_filter_index_for_method("NameFilter.A - F.A.extra") ==
+        AZ_NO_GLYPH);
+    CHECK(az_filter_index_for_method("") == AZ_NO_GLYPH);
+    CHECK(az_filter_index_for_method(NULL) == AZ_NO_GLYPH);
+
     for (index = 0u; index < AZ_GLYPH_COUNT; ++index) {
         CHECK(az_filter_method_for_index(index) != NULL);
         CHECK(strcmp(
