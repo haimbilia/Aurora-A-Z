@@ -122,6 +122,12 @@ if(BUILD_TESTING)
     target_link_libraries(auroraaz_render_detours_tests
         PRIVATE auroraaz_core)
 
+    add_executable(auroraaz_scene_gate_rev1655_tests
+        tests/scene_gate_rev1655_tests.c
+        src/scene_gate_rev1655.c)
+    target_link_libraries(auroraaz_scene_gate_rev1655_tests
+        PRIVATE auroraaz_core)
+
     set(AURORAAZ_TEST_TARGETS
         auroraaz_core_tests
         auroraaz_input_tests
@@ -137,6 +143,7 @@ if(BUILD_TESTING)
         auroraaz_input_detour_xbox_tests
         auroraaz_overlay_renderer_xbox360_tests
         auroraaz_render_detours_tests
+        auroraaz_scene_gate_rev1655_tests
     )
 
     # These tests use assert() as their executable check. Keep assertions
@@ -171,6 +178,8 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_overlay_renderer_xbox360_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_render_detours_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_scene_gate_rev1655_tests
             PRIVATE /W4 /WX)
     else()
         target_compile_options(auroraaz_core_tests PRIVATE
@@ -215,6 +224,9 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_render_detours_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_scene_gate_rev1655_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
     endif()
 
     add_test(NAME auroraaz_core_tests COMMAND auroraaz_core_tests)
@@ -241,4 +253,6 @@ if(BUILD_TESTING)
         COMMAND auroraaz_overlay_renderer_xbox360_tests)
     add_test(NAME auroraaz_render_detours_tests
         COMMAND auroraaz_render_detours_tests)
+    add_test(NAME auroraaz_scene_gate_rev1655_tests
+        COMMAND auroraaz_scene_gate_rev1655_tests)
 endif()
