@@ -68,17 +68,36 @@ hardware gate.
 
 The first image remains an inert canary:
 
-1. Verify the console still runs the exact Aurora build and the target path is
-   absent.
+1. Verify the console still runs the exact Aurora build, normal boot points to
+   the known-good `Hdd1:\Aurora\Aurora.xex`, and the target path is absent in
+   both the production and laboratory plugin directories.
 2. Inspect the built XEX2 header, hash, load base, imports, entry point, and
    exported ordinals offline.
-3. Copy the single verified binary as `Plugins\NetDbgDll.xex`.
-4. Restart Aurora and confirm it returns to the coverflow.
-5. Use NOVA `GET /thread` to prove a live canary monitor starts inside the
+3. Create and boot-test a clean `Hdd1:\AuroraAZLab\` copy before adding the
+   canary. Its `Aurora.xex` must hash to
+   `583BCD442D8017D6FCB2645B93CDA987F4C0A43A688B652D7364CCAEDAEEFA9F`.
+4. Copy the single verified binary only to
+   `Hdd1:\AuroraAZLab\Plugins\NetDbgDll.xex`, then download it to a new local
+   filename and require the round-trip SHA-256 to match.
+5. Launch the lab `Aurora.xex` through NOVA and confirm it returns to the
+   coverflow. Do not change `launch.ini`.
+6. Use NOVA `GET /thread` to prove a live canary monitor starts inside the
    reserved `0x91D00000-0x91DFFFFF` module window.
-6. Confirm Aurora, FTP, NOVA, RB QuickView, and ordinary coverflow navigation
+7. Confirm Aurora, FTP, NOVA, RB QuickView, and ordinary coverflow navigation
    still behave normally.
-7. Remove the canary and restart once to prove rollback before enabling hooks.
+8. Return to the production Aurora copy, rename the lab canary to a
+   SHA-derived `.disabled-<sha12>` filename, restart the lab once more, and
+   prove the module-window thread is absent. A power cycle must always return
+   to production Aurora if the lab crashes.
+
+For a NOVA instance with security enabled, set `AURORAAZ_NOVA_USERNAME` and
+`AURORAAZ_NOVA_PASSWORD` in the current process. The lab verification command
+is:
+
+```powershell
+pwsh -File scripts/verify-nova-canary.ps1 `
+  -ExpectedTitlePathSuffix '\AuroraAZLab\Aurora.xex'
+```
 
 No input hook, renderer, or filter mutation is linked into this first image.
 Failure at any gate stops the native rollout.

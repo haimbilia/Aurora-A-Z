@@ -114,3 +114,9 @@ Any native integration must verify the exact Aurora revision before applying
 in-memory hooks and must fail closed on unsupported builds. Database changes
 must remain transactional and reversible. Keep FTP access available during
 early hardware tests.
+
+Experimental XEX builds are tested only from a separately launchable
+`Hdd1:\AuroraAZLab\` copy. The normal boot path must remain on the known-good
+`Hdd1:\Aurora\Aurora.xex`; no development canary is copied into the production
+plugin directory. See `reference/NETDBG_BOOTSTRAP.md` for the hash, upload,
+NOVA verification, and recoverable rollback gates.
