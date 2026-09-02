@@ -101,6 +101,11 @@ static void test_absolute_branch(void)
     assert(instructions[0] == 0x3D6091D0u);
     assert(instructions[1] == 0x396B1234u);
     assert(instructions[3] == 0x4E800421u);
+
+    assert(az_ppc_emit_absolute_branch(
+        0x91D01235u,
+        0u,
+        instructions) == AZ_PPC_UNALIGNED);
 }
 
 static void test_result_names(void)

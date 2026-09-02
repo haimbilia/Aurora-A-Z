@@ -80,6 +80,13 @@ static void test_fail_closed(void)
         0x82801D90u,
         0x82D48000u,
         0x82D48020u,
+        0x91D01001u,
+        0x7D8802A6u,
+        &plan) == AZ_PPC_UNALIGNED);
+    assert(az_hook_plan_build(
+        0x82801D90u,
+        0x82D48000u,
+        0x82D48020u,
         0x91D01000u,
         0x7D8802A6u,
         NULL) == AZ_PPC_NULL);

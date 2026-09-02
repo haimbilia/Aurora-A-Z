@@ -136,6 +136,9 @@ AzPpcResult az_ppc_emit_absolute_branch(
     if (instructions == NULL) {
         return AZ_PPC_NULL;
     }
+    if (is_aligned(destination_address) == 0u) {
+        return AZ_PPC_UNALIGNED;
+    }
 
     low = destination_address & 0xFFFFu;
     high = (destination_address >> 16) + (low >= 0x8000u ? 1u : 0u);

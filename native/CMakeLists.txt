@@ -13,7 +13,9 @@ add_library(auroraaz_core STATIC
     src/layout.c
     src/overlay_model.c
     src/ppc.c
+    src/rev1655_hook_gate.c
     src/selector.c
+    src/sha256.c
 )
 
 target_include_directories(auroraaz_core PUBLIC include)
@@ -48,6 +50,32 @@ if(BUILD_TESTING)
     add_executable(auroraaz_ppc_tests tests/ppc_tests.c)
     target_link_libraries(auroraaz_ppc_tests PRIVATE auroraaz_core)
 
+    add_executable(auroraaz_rev1655_hook_gate_tests
+        tests/rev1655_hook_gate_tests.c)
+    target_link_libraries(auroraaz_rev1655_hook_gate_tests
+        PRIVATE auroraaz_core)
+    target_include_directories(auroraaz_rev1655_hook_gate_tests PRIVATE src)
+
+    set(AURORAAZ_TEST_TARGETS
+        auroraaz_core_tests
+        auroraaz_input_tests
+        auroraaz_glyph_atlas_tests
+        auroraaz_hook_plan_tests
+        auroraaz_overlay_model_tests
+        auroraaz_ppc_tests
+        auroraaz_rev1655_hook_gate_tests
+    )
+
+    # These tests use assert() as their executable check. Keep assertions
+    # active even when CI selects a Release build.
+    foreach(test_target IN LISTS AURORAAZ_TEST_TARGETS)
+        if(MSVC)
+            target_compile_options(${test_target} PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(${test_target} PRIVATE -UNDEBUG)
+        endif()
+    endforeach()
+
     if(MSVC)
         target_compile_options(auroraaz_core_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_input_tests PRIVATE /W4 /WX)
@@ -55,6 +83,8 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_hook_plan_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_overlay_model_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_ppc_tests PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_rev1655_hook_gate_tests
+            PRIVATE /W4 /WX)
     else()
         target_compile_options(auroraaz_core_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
@@ -74,6 +104,9 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_ppc_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_rev1655_hook_gate_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
     endif()
 
     add_test(NAME auroraaz_core_tests COMMAND auroraaz_core_tests)
@@ -82,4 +115,7 @@ if(BUILD_TESTING)
     add_test(NAME auroraaz_hook_plan_tests COMMAND auroraaz_hook_plan_tests)
     add_test(NAME auroraaz_overlay_model_tests COMMAND auroraaz_overlay_model_tests)
     add_test(NAME auroraaz_ppc_tests COMMAND auroraaz_ppc_tests)
+    add_test(NAME auroraaz_rev1655_hook_gate_tests
+        COMMAND auroraaz_rev1655_hook_gate_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/../original/Aurora.exe")
 endif()
