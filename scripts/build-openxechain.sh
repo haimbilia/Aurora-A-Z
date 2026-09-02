@@ -50,7 +50,7 @@ python3 "${repo_root}/scripts/xex_exports.py" prepare-pe \
     --ordinals 2,3,4,5
 
 "${packager}" \
-    -t sysdll \
+    -t titledll \
     -i "${output_dir}/AuroraAZ.dll" \
     -o "${output_dir}/AuroraAZ.xex"
 

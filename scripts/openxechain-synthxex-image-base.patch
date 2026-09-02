@@ -1,0 +1,37 @@
+diff --git a/src/common/datastorage.h b/src/common/datastorage.h
+index c83d218..ae623b8 100644
+--- a/src/common/datastorage.h
++++ b/src/common/datastorage.h
+@@ -51,6 +51,7 @@ struct peData
+ // Optional header IDs
+ #define XEX_OPT_ID_BASEFILE_FORMAT 0x003FF
+ #define XEX_OPT_ID_ENTRYPOINT      0x10100
++#define XEX_OPT_ID_IMAGE_BASE      0x10201
+ #define XEX_OPT_ID_IMPORT_LIBS     0x103FF
+ #define XEX_OPT_ID_TLS_INFO        0x20104
+ #define XEX_OPT_ID_SYS_FLAGS       0x30000
+diff --git a/src/setdata/optheaders.c b/src/setdata/optheaders.c
+index 931418f..576d024 100644
+--- a/src/setdata/optheaders.c
++++ b/src/setdata/optheaders.c
+@@ -300,7 +300,7 @@ int setOptHeaders(struct secInfoHeader *secInfoHeader, struct peData *peData, str
+ {
+     bool importsPresent = (peData->peImportInfo.totalImportCount > 0) ? true : false;
+ 
+-    optHeaderEntries->count = 4;
++    optHeaderEntries->count = 5;
+ 
+     if(importsPresent)
+     { optHeaderEntries->count++; }
+@@ -324,6 +324,11 @@ int setOptHeaders(struct secInfoHeader *secInfoHeader, struct peData *peData, str
+     optHeaderEntries->optHeaderEntry[currentHeader].dataOrOffset = secInfoHeader->baseAddr + peData->entryPoint;
+     currentHeader++;
+ 
++    // Image base address (0x10201)
++    optHeaderEntries->optHeaderEntry[currentHeader].id = XEX_OPT_ID_IMAGE_BASE;
++    optHeaderEntries->optHeaderEntry[currentHeader].dataOrOffset = secInfoHeader->baseAddr;
++    currentHeader++;
++
+     // Import libraries (0x103FF)
+     if(importsPresent)
+     {

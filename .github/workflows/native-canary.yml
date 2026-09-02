@@ -9,6 +9,7 @@ on:
       - native/**
       - scripts/build-openxechain.sh
       - scripts/openxechain-newlib-cpp.patch
+      - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
       - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
@@ -17,6 +18,7 @@ on:
       - native/**
       - scripts/build-openxechain.sh
       - scripts/openxechain-newlib-cpp.patch
+      - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
       - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
@@ -162,6 +164,33 @@ jobs:
         with:
           path: ${{ runner.temp }}/openxechain-prefix
           key: openxechain-linux-x64-v2-${{ env.OPENXECHAIN_BUILDSCRIPT_COMMIT }}
+
+      - name: Build patched SynthXEX
+        env:
+          OPENXECHAIN_ROOT: ${{ runner.temp }}/openxechain-prefix
+          SYNTHXEX_SOURCE_DIR: ${{ runner.temp }}/auroraaz-synthxex-source
+          SYNTHXEX_BUILD_DIR: ${{ runner.temp }}/auroraaz-synthxex-build
+        run: |
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/OpenXeChain/SynthXEX.git \
+            "${SYNTHXEX_SOURCE_DIR}"
+          git -C "${SYNTHXEX_SOURCE_DIR}" checkout --detach \
+            "${OPENXECHAIN_SYNTHXEX_COMMIT}"
+          test "$(git -C "${SYNTHXEX_SOURCE_DIR}" rev-parse HEAD)" = \
+            "${OPENXECHAIN_SYNTHXEX_COMMIT}"
+
+          patch_file="${GITHUB_WORKSPACE}/scripts/openxechain-synthxex-image-base.patch"
+          git -C "${SYNTHXEX_SOURCE_DIR}" apply --check "${patch_file}"
+          git -C "${SYNTHXEX_SOURCE_DIR}" apply "${patch_file}"
+          git -C "${SYNTHXEX_SOURCE_DIR}" diff --check
+
+          cmake -S "${SYNTHXEX_SOURCE_DIR}" -B "${SYNTHXEX_BUILD_DIR}" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${OPENXECHAIN_ROOT}"
+          cmake --build "${SYNTHXEX_BUILD_DIR}" --parallel 2
+          cmake --install "${SYNTHXEX_BUILD_DIR}"
+          "${OPENXECHAIN_ROOT}/bin/synthxex" --version
 
       - name: Cross-build inert Xbox 360 canary
         env:
