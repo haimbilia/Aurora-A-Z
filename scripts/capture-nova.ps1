@@ -124,10 +124,24 @@ $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
 try {
     if ($hasUsername) {
         $authUri = [uri]::new($novaUri, '/authenticate')
-        $form = [System.Net.Http.MultipartFormDataContent]::new()
+        # NOVA's Angular client posts URLSearchParams. Its endpoint rejects
+        # multipart form data on a clean Rev1655 installation.
+        $formValues =
+            [System.Collections.Generic.List[
+                System.Collections.Generic.KeyValuePair[string, string]
+            ]]::new()
+        $formValues.Add(
+            [System.Collections.Generic.KeyValuePair[string, string]]::new(
+                'username', $Username
+            )
+        )
+        $formValues.Add(
+            [System.Collections.Generic.KeyValuePair[string, string]]::new(
+                'password', $Password
+            )
+        )
+        $form = [System.Net.Http.FormUrlEncodedContent]::new($formValues)
         try {
-            $form.Add([System.Net.Http.StringContent]::new($Username), 'username')
-            $form.Add([System.Net.Http.StringContent]::new($Password), 'password')
             $authResponse = $client.PostAsync($authUri, $form).GetAwaiter().GetResult()
             try {
                 $authentication = Read-JsonResponse -Response $authResponse -Operation 'Authentication'
