@@ -8,6 +8,7 @@ on:
     paths:
       - native/**
       - scripts/build-openxechain.sh
+      - scripts/build-image-dump-canary.sh
       - scripts/openxechain-newlib-cpp.patch
       - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
@@ -19,6 +20,7 @@ on:
     paths:
       - native/**
       - scripts/build-openxechain.sh
+      - scripts/build-image-dump-canary.sh
       - scripts/openxechain-newlib-cpp.patch
       - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
@@ -202,6 +204,12 @@ jobs:
           AURORAAZ_OUTPUT_DIR: ${{ github.workspace }}/build/native-xbox360
         run: bash scripts/build-openxechain.sh
 
+      - name: Cross-build read-only image-dump canary
+        env:
+          OPENXECHAIN_ROOT: ${{ runner.temp }}/openxechain-prefix
+          AURORAAZ_IMAGE_DUMP_OUTPUT_DIR: ${{ github.workspace }}/build/native-xbox360-image-dump
+        run: bash scripts/build-image-dump-canary.sh
+
       - name: Validate runtime artifact
         run: |
           output_dir="${GITHUB_WORKSPACE}/build/native-xbox360"
@@ -239,6 +247,17 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Upload read-only image-dump canary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: AuroraAZ-image-dump-${{ github.sha }}
+          path: |
+            build/native-xbox360-image-dump/AuroraAZ-image-dump.xex
+            build/native-xbox360-image-dump/AuroraAZ-image-dump.xex.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
 
       - name: Upload OpenXeChain failure log
         if: failure()
