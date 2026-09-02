@@ -23,6 +23,9 @@ typedef struct AzCanaryResult {
 
 static uint32_t g_monitor_state = AZ_CANARY_MONITOR_STOPPED;
 static HANDLE g_monitor_thread = NULL;
+static AzCanaryStartObserver g_monitor_observer = NULL;
+static void *g_monitor_observer_context = NULL;
+static AzCanaryStartSnapshot g_monitor_snapshot;
 
 static void observe_start(
     AzCanaryStartObserver observer,
@@ -90,7 +93,16 @@ static uint32_t monitor_aurora(void *context)
     } while (state == AZ_CANARY_MONITOR_STARTING);
 
     if (state == AZ_CANARY_MONITOR_RUNNING) {
-        const AzCanaryResult result = validate_running_aurora();
+        AzCanaryStartSnapshot snapshot = g_monitor_snapshot;
+        AzCanaryResult result;
+
+        snapshot.phase = AZ_CANARY_START_WORKER_ENTERED;
+        snapshot.state = AZ_CANARY_MONITOR_RUNNING;
+        observe_start(
+            g_monitor_observer,
+            &snapshot,
+            g_monitor_observer_context);
+        result = validate_running_aurora();
         DbgPrint(
             "AuroraAZ: canary image=%s, compatibility=%s\n",
             az_image_result_name(result.image),
@@ -145,6 +157,8 @@ uint32_t AuroraAZCanaryStartMonitor(
         return 0u;
     }
 
+    g_monitor_observer = observer;
+    g_monitor_observer_context = observer_context;
     observe_start(observer, &snapshot, observer_context);
 
     status = ExCreateThread(
@@ -194,13 +208,14 @@ uint32_t AuroraAZCanaryStartMonitor(
         return (uint32_t)status;
     }
 
+    snapshot.phase = AZ_CANARY_START_COMPLETE;
+    snapshot.state = AZ_CANARY_MONITOR_RUNNING;
+    observe_start(observer, &snapshot, observer_context);
+    g_monitor_snapshot = snapshot;
     __atomic_store_n(
         &g_monitor_state,
         AZ_CANARY_MONITOR_RUNNING,
         __ATOMIC_RELEASE);
-    snapshot.phase = AZ_CANARY_START_COMPLETE;
-    snapshot.state = AZ_CANARY_MONITOR_RUNNING;
-    observe_start(observer, &snapshot, observer_context);
     return 0u;
 }
 

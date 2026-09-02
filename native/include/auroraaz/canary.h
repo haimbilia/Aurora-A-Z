@@ -20,6 +20,7 @@ extern "C" {
 #define AZ_CANARY_START_RESUME_RETURNED 4u
 #define AZ_CANARY_START_COMPLETE 5u
 #define AZ_CANARY_START_ALREADY_ACTIVE 6u
+#define AZ_CANARY_START_WORKER_ENTERED 7u
 
 typedef struct AzCanaryStartSnapshot {
     uint32_t phase;

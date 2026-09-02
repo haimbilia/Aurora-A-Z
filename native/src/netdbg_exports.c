@@ -42,6 +42,7 @@ typedef char AzM1RecordMustBe36Bytes[
 static char g_m1_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M1.bin";
 static uint32_t g_m1_start_claimed = 0u;
+static AzM1Record g_m1_record;
 
 static void write_m1_record(const AzM1Record *record)
 {
@@ -87,7 +88,7 @@ static void update_m1_record(
 static void try_start_m1(uint32_t source_ordinal)
 {
     uint32_t expected = 0u;
-    AzM1Record marker = {
+    const AzM1Record marker = {
         {'A', 'Z', 'M', '1'},
         2u,
         (uint32_t)sizeof(AzM1Record),
@@ -113,9 +114,12 @@ static void try_start_m1(uint32_t source_ordinal)
         return;
     }
 
-    marker.state = AuroraAZCanaryGetMonitorState();
-    write_m1_record(&marker);
-    (void)AuroraAZCanaryStartMonitor(update_m1_record, &marker);
+    g_m1_record = marker;
+    g_m1_record.state = AuroraAZCanaryGetMonitorState();
+    write_m1_record(&g_m1_record);
+    (void)AuroraAZCanaryStartMonitor(
+        update_m1_record,
+        &g_m1_record);
 }
 
 /*
@@ -143,7 +147,8 @@ uint32_t AuroraAZNetDbgConfigure(
 
 uint32_t AuroraAZNetDbgShutdown(void)
 {
-    AuroraAZCanaryStopMonitor();
+    /* Ordinal 3 represents network loss as well as final logger shutdown.
+     * Module detach owns process-lifetime teardown. */
     return 0u;
 }
 
