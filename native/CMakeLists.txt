@@ -11,6 +11,7 @@ add_library(auroraaz_core STATIC
     src/input.c
     src/input_hook.c
     src/layout.c
+    src/overlay_model.c
     src/ppc.c
     src/selector.c
 )
@@ -41,6 +42,9 @@ if(BUILD_TESTING)
     add_executable(auroraaz_hook_plan_tests tests/hook_plan_tests.c)
     target_link_libraries(auroraaz_hook_plan_tests PRIVATE auroraaz_core)
 
+    add_executable(auroraaz_overlay_model_tests tests/overlay_model_tests.c)
+    target_link_libraries(auroraaz_overlay_model_tests PRIVATE auroraaz_core)
+
     add_executable(auroraaz_ppc_tests tests/ppc_tests.c)
     target_link_libraries(auroraaz_ppc_tests PRIVATE auroraaz_core)
 
@@ -49,6 +53,7 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_input_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_glyph_atlas_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_hook_plan_tests PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_overlay_model_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_ppc_tests PRIVATE /W4 /WX)
     else()
         target_compile_options(auroraaz_core_tests PRIVATE
@@ -63,6 +68,9 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_hook_plan_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_overlay_model_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
         target_compile_options(auroraaz_ppc_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
@@ -72,5 +80,6 @@ if(BUILD_TESTING)
     add_test(NAME auroraaz_input_tests COMMAND auroraaz_input_tests)
     add_test(NAME auroraaz_glyph_atlas_tests COMMAND auroraaz_glyph_atlas_tests)
     add_test(NAME auroraaz_hook_plan_tests COMMAND auroraaz_hook_plan_tests)
+    add_test(NAME auroraaz_overlay_model_tests COMMAND auroraaz_overlay_model_tests)
     add_test(NAME auroraaz_ppc_tests COMMAND auroraaz_ppc_tests)
 endif()
