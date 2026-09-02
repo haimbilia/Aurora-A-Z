@@ -13,6 +13,9 @@
 
 #define AZ_DLL_PROCESS_DETACH 0u
 #define AZ_SYSTEM_THREAD_FLAG 2u
+#define AZ_CREATE_SUSPENDED_FLAG 1u
+#define AZ_MONITOR_THREAD_FLAGS \
+    (AZ_SYSTEM_THREAD_FLAG | AZ_CREATE_SUSPENDED_FLAG)
 #define AZ_MONITOR_INTERVAL_100NS (-1000000LL)
 #define AZ_CONTROL_WAIT_100NS (-10000LL)
 
@@ -170,7 +173,7 @@ uint32_t AuroraAZCanaryStartMonitor(
         NULL,
         (void *)(uintptr_t)&monitor_aurora,
         NULL,
-        AZ_SYSTEM_THREAD_FLAG);
+        AZ_MONITOR_THREAD_FLAGS);
     snapshot.ex_create_thread_status = (uint32_t)status;
     if (FAILED(status)) {
         __atomic_store_n(
