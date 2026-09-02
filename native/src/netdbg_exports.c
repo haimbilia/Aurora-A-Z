@@ -42,6 +42,8 @@ typedef char AzM1RecordMustBe36Bytes[
 static char g_m1_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M1.bin";
 static uint32_t g_m1_start_claimed = 0u;
+static uint32_t g_m1_start_complete = 0u;
+static uint32_t g_m1_worker_recorded = 0u;
 static AzM1Record g_m1_record;
 
 static void write_m1_record(const AzM1Record *record)
@@ -85,6 +87,29 @@ static void update_m1_record(
     write_m1_record(record);
 }
 
+static void record_worker_entry_from_logger(void)
+{
+    uint32_t expected = 0u;
+
+    if (__atomic_load_n(
+            &g_m1_start_complete,
+            __ATOMIC_ACQUIRE) == 0u ||
+        AuroraAZCanaryGetWorkerEntered() == 0u ||
+        !__atomic_compare_exchange_n(
+            &g_m1_worker_recorded,
+            &expected,
+            1u,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        return;
+    }
+
+    g_m1_record.phase = AZ_CANARY_START_WORKER_ENTERED;
+    g_m1_record.state = AuroraAZCanaryGetMonitorState();
+    write_m1_record(&g_m1_record);
+}
+
 static void try_start_m1(uint32_t source_ordinal)
 {
     uint32_t expected = 0u;
@@ -111,6 +136,7 @@ static void try_start_m1(uint32_t source_ordinal)
             0,
             __ATOMIC_ACQ_REL,
             __ATOMIC_ACQUIRE)) {
+        record_worker_entry_from_logger();
         return;
     }
 
@@ -120,6 +146,11 @@ static void try_start_m1(uint32_t source_ordinal)
     (void)AuroraAZCanaryStartMonitor(
         update_m1_record,
         &g_m1_record);
+    __atomic_store_n(
+        &g_m1_start_complete,
+        1u,
+        __ATOMIC_RELEASE);
+    record_worker_entry_from_logger();
 }
 
 /*

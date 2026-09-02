@@ -34,6 +34,7 @@ typedef void (*AzCanaryStartObserver)(
     void *context);
 
 uint32_t AuroraAZCanaryGetMonitorState(void);
+uint32_t AuroraAZCanaryGetWorkerEntered(void);
 
 uint32_t AuroraAZCanaryStartMonitor(
     AzCanaryStartObserver observer,
