@@ -2,8 +2,8 @@
 
 Written 2026-09-02. Target: Aurora 0.7b.2 Rev1655 on Xbox 360, library of 2241 titles.
 
-Read this before touching anything. Most of it was expensive to learn and several
-conclusions contradict what the README and CHANGELOG still say.
+Read this before touching anything. Most of it was expensive to learn; the
+native bootstrap status below supersedes the earlier failed-attempt notes.
 
 ---
 
@@ -14,11 +14,13 @@ of the live `settings.db` on 2026-09-02 confirmed the stock 7 QuickViews, zero
 `AURORA_AZ` rows, zero one-character `NameFilter` rows, and no `AuroraAZ*`
 settings. The fixed uninstaller completed the cleanup described in §7.
 
-The console currently runs the production Aurora copy. Nothing we built is
-active there. The inert canary was tested only in `Hdd1:\AuroraAZLab\` and was
-then recoverably disabled. The latest, successfully loaded file is now
-`Plugins\NetDbgDll.xex.disabled-c51e3a322b07`; the active lab target path is
-absent again and the lab was restarted in that state.
+M1 is complete. The passing one-file canary was tested only in
+`Hdd1:\AuroraAZLab\` from commit `39b551c`, GitHub Actions run `33604028771`.
+Its CI and FTP round-trip SHA-256 was
+`87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C`.
+The test did not modify the production Aurora tree or `launch.ini`. Before the
+next lab deployment, enumerate the lab plugin directory rather than relying on
+this document to assert whether a later session left the active target present.
 
 ### Current console state
 
@@ -26,8 +28,10 @@ absent again and the lab was restarted in that state.
 QuickViews                                        stock 7 rows
 User/Scripts/*                                    no Aurora A-Z scripts
 Skins/*                                           no Aurora A-Z test skins
-Production Plugins/NetDbgDll.xex                  absent
-AuroraAZLab Plugins/NetDbgDll.xex                 absent (failed canary disabled)
+Production Plugins/NetDbgDll.xex                  absent at last verified check
+AuroraAZLab Plugins/NetDbgDll.xex                 verify before each experiment
+M1 primary marker                                 ordinal 4 / phase 5 / running
+M1 worker marker                                  ordinal 4 / phase 7 / running
 ```
 
 Original skins were never modified. Untouched local references are in the
@@ -303,14 +307,15 @@ letter highlighted, responding to the D-pad.
 - **The real thing:** needs native code in Aurora's process. Rev1655 creates
   exactly seven hard-coded wrappers and does not discover arbitrary
   `Plugins/*.xex` files. The optional key-7 Network Debugger wrapper is the
-  current bootstrap candidate: it requests the literal
+  hardware-proven bootstrap: it requests the literal
   `Plugins\NetDbgDll.xex` path, resolves ordinals 2-5, and the recovered logger
   calls only 2-4 with ignored returns. The release archive and live console
   contain no stock `NetDbgDll.xex`, so the candidate occupies an unused
   optional path rather than replacing an installed feature. It would keep the
-  product skin agnostic and one-file with no `launch.ini` change. The corrected
-  hardware canary now passes the wrapper load and ordinal-resolution gate, but
-  M1 remains open because its own code-execution signal was not observed. See
+  product skin agnostic and one-file with no `launch.ini` change. M1 now passes
+  wrapper loading, ordinal resolution, automatic ordinal-4 dispatch, and
+  AuroraAZ worker entry. M2a input observation is underway; input consumption,
+  overlay drawing, and filter mutation are not functional. See
   `reference/NETDBG_BOOTSTRAP.md`.
 
 ### First native loader canary: failed safely
@@ -346,7 +351,7 @@ Address header is the strongest difference because every inspected working
 Rev1655 XEX has it. The corrected bundle has now passed that loader test, but
 the combined change does not isolate which field fixed the rejection.
 
-### Corrected loader retry: wrapper gate passed
+### Corrected loader retry: wrapper gate passed (historical)
 
 The corrected 24,576-byte XEX round-tripped through FTP with SHA-256:
 
@@ -362,17 +367,44 @@ IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
 PluginManager: Module Loaded:  dll.aurora.netdbg
 ```
 
-This proves that the corrected XEX enters Aurora's module container and reaches
-the post-resolution loaded notification for the wrapper that requests ordinals
-2-5. It does **not** yet prove that AuroraAZ's initialization path executed:
-the log contains no `AuroraAZ` line and NOVA reported no live thread in
-`0x91D00000-0x91DFFFFF`.
+This earlier result proved that the corrected XEX entered Aurora's module
+container and reached the post-resolution loaded notification for the wrapper
+that requests ordinals 2-5. Its original `DllMain`/NOVA observation did not
+prove AuroraAZ worker entry, so a later canary used durable marker records.
 
-After evidence capture, the file was renamed
+After that earlier evidence capture, the file was renamed
 `NetDbgDll.xex.disabled-c51e3a322b07`, the lab restarted without an active
 target, and production Aurora was restored. Production files and `launch.ini`
-were untouched. The next gate is a minimal, independently observable entry or
-export-call signal; do not link hooks yet.
+were untouched.
+
+### Final M1 canary: code-execution gate passed
+
+The passing artifact was built from commit `39b551c` by GitHub Actions run
+`33604028771`. Its CI and lab round-trip SHA-256 was:
+
+```text
+87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C
+```
+
+Raw `ExCreateThread`/startup combinations were not sufficient under Aurora
+Rev1655.
+The passing implementation validates and calls Aurora's complete Rev1655
+thread wrapper at `0x82361AA8`, after validating the first 32 bytes of
+`XapiThreadStartup` at `0x82804650`. The wrapper supplies that startup routine,
+uses create flags `2`, selects processor `3`, sets priority `15`, and resumes
+the handle once.
+
+The primary 36-byte big-endian `AZM1` v4 record reported `call_count=1`,
+`source_ordinal=4`, `phase=5` (`COMPLETE`), `state=2` (`RUNNING`), and zero
+create/resume statuses. The separate worker record kept the same identity and
+statuses and reported `phase=7` (`WORKER_ENTERED`). The source field proves
+Aurora called ordinal 4 automatically; the separate phase-7 record proves the
+AuroraAZ worker entered. M1 is therefore complete.
+
+The current work is M2a only: a once-gated ordinal-4 bootstrap starts the
+Rev1655 runtime in `INPUT_OBSERVE`. It must remain non-consuming and does not
+render or filter. Do not describe the selector as functional until the later
+input-ownership, overlay, and filter gates pass.
 
 The user rejected the popup-list fallback and does not want a 27-QuickView
 carousel. If the mockup is non-negotiable, the honest next step is reverse

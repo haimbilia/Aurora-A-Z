@@ -26,12 +26,13 @@ in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
 ## Current status
 
 There is no compliant functional release yet. The native C99 selector core is
-now implemented and host-tested: it models the R3/Left/Right/A state machine,
-maps `#` and `A` through `Z` to Aurora's built-in name filters, carries the
-mockup's measured 1280x720 layout, and rejects binaries that do not match the
-exact Rev1655 code probes. The Xbox build is still an inert compatibility
-canary; input hooks, overlay drawing, and filter mutation remain gated hardware
-work.
+implemented and host-tested: it models the R3/Left/Right/A state machine, maps
+`#` and `A` through `Z` to Aurora's built-in name filters, carries the mockup's
+measured 1280x720 layout, and rejects binaries that do not match the exact
+Rev1655 code probes. M1, the one-file native bootstrap and worker-entry gate, is
+complete on hardware. M2a is now underway as an observe-only input runtime. It
+does not consume controller input, draw the alphabet overlay, or mutate the
+coverflow filter.
 
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary
@@ -49,19 +50,23 @@ Failed to load game:\Plugins\NetDbgDll.xex
 Failed to load NetDbgDll
 ```
 
-The corrected `C51E3A...` retry uses title-DLL flags `0x9`, emits
-`0x10201 = 0x91D00000`, and omits the empty TLS header. It passed the hardware
-module-container and ordinal-resolution gate: Aurora logged exactly
-`IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg` and
-`PluginManager: Module Loaded:  dll.aurora.netdbg`, then remained usable at
-1280x720. Its FTP round-trip hash matched. However, NOVA found no thread in
-`0x91D00000-0x91DFFFFF` and the log contained no `AuroraAZ` line, so canary
-code execution is not yet independently observed. The lab file was renamed
-`.disabled-c51e3a322b07`, the lab restarted without an active target, and
-production Aurora was restored untouched. The one-file loader contract is now
-hardware-proven through Aurora's wrapper, but M1 remains open at the plugin
-code-execution observation gate. See `reference/NETDBG_BOOTSTRAP.md` and
-`reference/NATIVE_LOADER.md`.
+The corrected `C51E3A...` retry then established the module-container and
+ordinal-resolution path, but its original entry-point observation was
+inconclusive. That result is retained as historical evidence, not the current
+gate status.
+
+M1 subsequently passed with commit `39b551c`, GitHub Actions run
+`33604028771`, and artifact SHA-256
+`87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C`.
+The FTP round-trip hash matched. That canary validates and calls Aurora
+Rev1655's complete thread wrapper at `0x82361AA8`, after validating the
+Xapi-thread-startup probe at `0x82804650`. The primary `AZM1` record reported
+`source_ordinal=4`, `phase=5` (`COMPLETE`), `state=2` (`RUNNING`), and zero
+create/resume statuses; the separate worker record reported `phase=7`
+(`WORKER_ENTERED`). Together they prove that Aurora invoked ordinal 4
+automatically and that the wrapper entered AuroraAZ-owned worker code. See
+[`reference/NETDBG_BOOTSTRAP.md`](reference/NETDBG_BOOTSTRAP.md) and
+[`reference/NATIVE_LOADER.md`](reference/NATIVE_LOADER.md).
 
 Functional test r3 is retained only as a hardware research build. It requires a
 custom skin and its attempted D-pad Down remap does not work: the coverflow
@@ -94,10 +99,10 @@ The production implementation must be a version-gated runtime extension for
 Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
 its own selector overlay above the active skin, and bridge A-button selection
 to Aurora's coverflow filtering. It must not write to `Skins`. The XEX
-toolchain is operational; Aurora's Network Debugger bootstrap must still pass
-the remaining M1 code-execution observation gate before any hooks are linked.
-Failure of that gate is reported rather than worked around with extra installed
-files.
+toolchain and Network Debugger bootstrap are operational, and M1 is complete.
+The current M2a image is deliberately limited to input observation; input
+consumption, rendering, and filter mutation remain behind later hardware
+gates.
 
 ## Project layout
 
@@ -111,7 +116,7 @@ scripts/xzp.ps1          XZP extract/build utility
 scripts/build-openxechain.sh
                          Native Xbox cross-build entry point
 scripts/capture-nova.ps1 Repeatable hardware screenshots through NOVA
-native/                  Host-tested selector core and version-gated canary
+native/                  Host-tested core, proven bootstrap, observe-only M2a
 source/utility/          On-console Lua: QuickView installer, API dump
 research/                Rejected skin route, kept as evidence only
 

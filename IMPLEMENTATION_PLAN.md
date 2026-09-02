@@ -8,10 +8,10 @@ mode with R3, accepts D-pad and left-stick Left/Right, and applies the selected
 letter with A. It must leave every skin, the on-disk `Aurora.xex`, and Aurora's
 normal RB QuickView menu unchanged. The production release and installed
 payload must be exactly one self-contained binary. It is released as
-`AuroraAZ.xex` and, if M1 succeeds, installed as `Plugins\NetDbgDll.xex`, the
-literal path used by Aurora's optional Network Debugger wrapper. Static
-analysis proves the path and ordinal contract; hardware acceptance of the
-one-file bootstrap is still pending.
+`AuroraAZ.xex` and installed as `Plugins\NetDbgDll.xex`, the literal path used
+by Aurora's optional Network Debugger wrapper. Static analysis established the
+path and ordinal contract, and M1 has now proved the one-file bootstrap and
+worker entry on hardware.
 
 `REQUIREMENTS.md` is the product contract. `ARCHITECTURE.md` is the architecture
 decision. This file defines the order in which the risky parts must be proven.
@@ -39,7 +39,7 @@ decision. This file defines the order in which the risky parts must be proven.
 | Milestone | Deliverable | Exit gate |
 |---|---|---|
 | M0 — Safe baseline | Clean database, console/repo snapshots, performance baseline, isolated Aurora lab copy | Stock seven QuickViews restored; production Aurora still boots; backups and hashes verified |
-| M1 — Native lab | Reproducible Rev1655 analysis project and minimal export-capable `AuroraAZ.xex` | Installed as the one `Plugins\NetDbgDll.xex` file, it loads without unresolved ordinals and is disabled by removing that file |
+| M1 — Native lab | Reproducible Rev1655 analysis project and minimal export-capable `AuroraAZ.xex` | One lab file loads, receives automatic ordinal 4, and enters an AuroraAZ worker through the validated Aurora wrapper; removing the file disables it |
 | M2 — Input bridge | Log-only, then selectively consuming controller hook | R3, D-pad, left stick, and A are detected on the coverflow; RB and other scenes remain unchanged |
 | M3 — Overlay spike | Runtime-owned row and highlight, with no filtering yet | Same overlay works on Default, CleanNXE, and two materially different third-party skins |
 | M4 — Filter bridge | In-memory application of `NameFilter.Other` or `NameFilter.*.<letter>` | Correct results on 2,241 titles without adding QuickViews; latency gate passes |
@@ -50,12 +50,14 @@ decision. This file defines the order in which the risky parts must be proven.
 Failure at a gate stops dependent work. A partial success must not be labelled a
 functional release.
 
-Current gate status: M0 is safe and reproducible. M1 is partially satisfied.
-The corrected inert canary is byte-verified and now passes Aurora's module-load
-and ordinal-resolution path in the isolated lab. Its expected `AuroraAZ` log
-and resident thread were not observed, so the code-execution observation gate
-is still open. M2 and later work must not be linked or deployed until that
-remaining M1 gate passes.
+Current gate status: M0 is safe and reproducible, and M1 is complete. Commit
+`39b551c`, GitHub Actions run `33604028771`, produced the hardware-passing M1
+artifact with SHA-256
+`87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C`;
+its FTP round-trip hash matched. Primary phase `5` and worker phase `7` markers
+prove automatic ordinal-4 dispatch and worker entry. M2a observe-only work is
+underway. No input consumption, overlay, or filter behavior has passed a
+hardware gate.
 
 ## M0 — Stabilize and measure
 
@@ -138,24 +140,23 @@ SDK files.
 
 Build `AuroraAZ.xex`, with no companion manifest, asset, configuration, script,
 database record, or boot-loader edit. Copy the same bytes to the lab as
-`Plugins\NetDbgDll.xex` only after confirming that path is absent. The canary
-does only five things:
+`Plugins\NetDbgDll.xex` only after confirming that path is absent. The M1
+canary does only five things:
 
 1. validates Aurora's loader identity, image layout, and exact code probes;
-2. writes a canary lifecycle/result message to the kernel debug channel;
-3. makes no hooks or database writes;
-4. cleanly unloads or becomes inert when incompatible.
-5. exports valid ordinal-only NetDbg entries 2-5; all remain inert.
+2. publishes durable startup and worker-entry marker records;
+3. starts its worker only through the validated Aurora wrapper;
+4. makes no hooks, rendering calls, filter calls, or database writes;
+5. exports valid ordinal-only NetDbg entries 2-5.
 
-Test it only in `AuroraAZLab`. The M1 gate passes only if Aurora loads this
-standalone file through the exact key-7 wrapper and NOVA independently proves
-the canary thread is alive. A
-DashLaunch plugin, `launch.ini` edit, patched executable, helper loader, or
-companion manifest may be investigated to understand the platform but is not a
-compliant fallback. If the gate fails, stop and present the evidence before
-revisiting the one-file requirement.
+Test it only in `AuroraAZLab`. The M1 gate required Aurora to load this
+standalone file through the exact key-7 wrapper, call an export automatically,
+and produce independent proof that AuroraAZ-owned worker code entered. The
+durable primary and worker markers satisfied that gate. A DashLaunch plugin,
+`launch.ini` edit, patched executable, helper loader, or companion manifest is
+not a compliant fallback.
 
-### M1 hardware attempt and corrected retry
+### Earlier M1 hardware attempts (superseded)
 
 The first hardware attempt failed safely in `Hdd1:\AuroraAZLab\`. Its
 round-tripped SHA-256 matched the uploaded build, the lab dashboard remained
@@ -199,12 +200,29 @@ IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
 PluginManager: Module Loaded:  dll.aurora.netdbg
 ```
 
-The lab remained usable at 1280x720. These events pass the module-container and
-ordinal-resolution portion of M1. They do not complete M1: NOVA found no thread
-in `0x91D00000-0x91DFFFFF` and `debug.log` contained no `AuroraAZ` line, so
-plugin code execution is not independently observed. The corrected file was
-renamed `.disabled-c51e3a322b07`, the lab restarted without an active target,
-and production Aurora was restored untouched.
+The lab remained usable at 1280x720. These events passed the module-container
+and ordinal-resolution portion of M1. The original `DllMain`/NOVA observation
+contract did not prove worker entry, so this retry was superseded by the final
+marker-based canary. The corrected file was renamed
+`.disabled-c51e3a322b07`, the lab restarted without an active target, and
+production Aurora was restored untouched.
+
+### Final M1 hardware result
+
+The passing canary was commit `39b551c`, GitHub Actions run `33604028771`, with
+CI and FTP round-trip SHA-256:
+
+```text
+87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C
+```
+
+It validates the complete Rev1655 thread wrapper at `0x82361AA8` and the first
+32 bytes of `XapiThreadStartup` at `0x82804650`, then delegates thread creation
+to that wrapper. The primary `AZM1` v4 marker reported one call from ordinal 4,
+phase `5` (`COMPLETE`), state `2` (`RUNNING`), and zero create/resume statuses.
+The separate worker marker reported phase `7` (`WORKER_ENTERED`). This proves
+both automatic ordinal-4 dispatch and entry into AuroraAZ-owned code. M1 is
+complete.
 
 ## M2 — Input bridge
 
@@ -214,11 +232,16 @@ dialogs and launched games.
 
 Develop in two steps:
 
-1. **Observe only:** log R3, D-pad Left/Right, left-stick Left/Right, A, and RB,
-   including the current scene/state. Do not consume anything.
-2. **Selector ownership:** after an R3 edge on the coverflow, consume only the
-   required navigation/A events until selection completes. All other states
-   pass through unchanged.
+1. **M2a — observe only:** observe R3, D-pad Left/Right, left-stick Left/Right,
+   A, and RB, including the current scene/state. Do not consume anything.
+2. **M2b — selector ownership:** after an R3 edge on the coverflow, consume
+   only the required navigation/A events until selection completes. All other
+   states pass through unchanged.
+
+M2a is the current work. Its ordinal-4 bootstrap starts only
+`AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE`. Passing M1 does not establish that
+this input hook works on hardware, and M2a must not silently widen into M2b,
+rendering, or filtering.
 
 The bridge needs edge detection, left-stick dead-zone/hysteresis, and controlled
 repeat for held directions. It must ignore R3 outside the main coverflow and
@@ -359,15 +382,16 @@ editing the skin.
 
 ## Immediate next work session
 
-1. Disassemble the corrected entry path and confirm the exact DLL attach ABI,
-   section permissions, and thread-start imports in the packaged XEX.
-2. Build a still-inert observation canary with one independently visible,
-   non-recursive signal from initialization or a safely called NetDbg ordinal;
-   ordinal 4 must remain a no-op because it is Aurora's log sink.
-3. Repeat the exact CI validation, isolated upload, FTP round-trip hash, lab
-   launch, NOVA/log observation, and recoverable rollback procedure.
-4. Require both Aurora's module-loaded events and the AuroraAZ-owned execution
-   signal before closing M1.
+1. Build and record the exact M2a observe-only artifact, CI run, and SHA-256;
+   confirm its runtime entry selects only input observation and its link
+   manifest excludes renderer and filter-consumer sources.
+2. Repeat the isolated-lab preflight, upload, FTP round-trip hash, launch, and
+   recoverable rollback procedure without changing `launch.ini`.
+3. Require the M2a bootstrap marker and log-backed evidence that the Rev1655
+   input hook observes the required buttons while leaving RB, coverflow motion,
+   and other scenes unchanged.
+4. Keep M2b input ownership, M3 overlay work, and M4 filtering gated until the
+   M2a hardware evidence is reviewed.
 
-No input hook, overlay, or production deployment begins until plugin code
-execution is independently observed and M1 closes in the isolated lab copy.
+M1 is closed. The project is not yet a functional selector: input consumption,
+the mockup-faithful overlay, and filter application remain later milestones.

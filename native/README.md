@@ -1,13 +1,13 @@
 # Native implementation
 
 This directory contains the platform-independent selector core and the native
-Xbox 360 canary. The release payload remains one file, `AuroraAZ.xex`. Aurora
+Xbox 360 runtime. The release payload remains one file, `AuroraAZ.xex`. Aurora
 Rev1655's reserved optional wrapper requests those same bytes under the
 installed filename `Plugins\NetDbgDll.xex`. No companion file or DashLaunch
-slot is used. This is still a candidate loader path: the first hardware image
-was rejected before its entry point, while the corrected retry now loads and
-resolves through Aurora's wrapper. Its own initialization signal remains
-unobserved, so M1 is not complete.
+slot is used. M1 has now proved this loader path, automatic ordinal-4 dispatch,
+and entry into an AuroraAZ-owned worker on hardware. The current M2a build is
+observe-only: it does not consume input, render the alphabet row, or apply a
+filter.
 
 ## Host tests
 
@@ -21,26 +21,26 @@ ctest --test-dir build/native-host --output-on-failure
 ```
 
 Both endpoint behaviors are implemented and tested. The Xbox integration must
-choose `AZ_EDGE_CLAMP` or `AZ_EDGE_WRAP` only after that still-open product
-decision is recorded in `REQUIREMENTS.md`.
+choose `AZ_EDGE_CLAMP` or `AZ_EDGE_WRAP` only after that product decision is
+recorded in `REQUIREMENTS.md`.
 
-## Xbox canary
+## M1 Xbox canary
 
-`src/canary.c` is deliberately read-only. A system thread validates Aurora's
-fixed-base PE identity and `.text` layout before checking three exact Rev1655
-code probes. It then sleeps using only an atomic stop flag and a bounded kernel
-delay; it never polls the module loader. This lets Aurora join it safely during
-detach while leaving a live proof address for NOVA. The canary logs its result
-with `DbgPrint`, installs no hooks, draws nothing, and writes no console state.
+`src/canary.c` is the historical, deliberately inert M1 payload. Its worker
+validates Aurora's fixed-base PE identity and `.text` layout before checking
+the exact Rev1655 code probes. It installs no hooks, draws nothing, and mutates
+no Aurora state.
 
-After a canary reboot, verify that evidence from the development PC with:
+The older NOVA helper remains available for read-only thread diagnostics:
 
 ```powershell
 pwsh -File scripts/verify-nova-canary.ps1
 ```
 
-The check is read-only and fails unless Aurora is the running title and NOVA
-reports a live thread starting inside the canary's reserved module window.
+It is not the final M1 acceptance oracle. Aurora's working thread wrapper starts
+at `XapiThreadStartup`, so M1 used durable primary and worker marker records to
+prove the ordinal call and the first instruction executed by AuroraAZ-owned
+worker code.
 
 The first hardware attempt failed safely in the isolated lab. Aurora logged:
 
@@ -60,23 +60,45 @@ IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
 PluginManager: Module Loaded:  dll.aurora.netdbg
 ```
 
-This proves the corrected container and ordinal-resolution path. No canary
-thread or `AuroraAZ` log appeared, so code execution still lacks an independent
-signal. The production installation remained untouched and the lab file was
-recoverably renamed `.disabled-c51e3a322b07`.
+This earlier retry proved the corrected container and ordinal-resolution path,
+but its entry-point observation was inconclusive. The production installation
+remained untouched and the lab file was recoverably renamed
+`.disabled-c51e3a322b07`.
 
-`src/netdbg_exports.c` supplies the four ordinal-only exports required by the
-Rev1655 Network Debugger wrapper. They immediately return and ordinal 4 never
-logs, avoiding recursion through Aurora's log sink. The cross-build validates
-that the PE export table is exactly ordinals 2, 3, 4, and 5. Because stock
-SynthXEX does not generate the Xbox export fields itself, the pipeline embeds
-the big-endian export-address table before packaging, sets the security-info
-pointer afterward, and then validates the module flags, explicit image-base
-header, absence of the synthetic TLS header, export table, code-page
-descriptor, page hash chain, and header hash before producing the SHA-256
-file. A PE-only export success cannot reach deployment.
+The final M1 canary came from commit `39b551c`, GitHub Actions run
+`33604028771`, with SHA-256
+`87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C`.
+The staged file downloaded from the lab had the same hash. It validated
+Aurora's complete 100-byte Rev1655 thread wrapper at `0x82361AA8` and the first
+32 bytes of `XapiThreadStartup` at `0x82804650` before calling the wrapper. The
+wrapper supplies `XapiThreadStartup`, creates the thread with flags `2`, selects
+processor `3`, sets priority `15`, and resumes the handle once.
 
-The cross-build entry point is `scripts/build-openxechain.sh`. It requires a
-complete OpenXeChain prefix; SynthXEX alone is not a compiler. See
-`reference/NATIVE_TOOLCHAIN.md` and `reference/NATIVE_LOADER.md` before trying
-to deploy the result.
+The 36-byte big-endian `AZM1` primary record decoded as version `4`, record size
+`36`, call count `1`, source ordinal `4`, phase `5` (`COMPLETE`), state `2`
+(`RUNNING`), create status `0`, and resume status `0`. A separate worker record
+had the same identity and status fields with phase `7` (`WORKER_ENTERED`). These
+records prove automatic ordinal-4 dispatch and worker entry, so M1 is complete.
+
+`src/netdbg_exports.c` preserves the M1 canary contract. The current M2a build
+uses `src/netdbg_m2a_exports.c`: ordinal 4 is Aurora's deterministic logger
+callback and performs only a once-gated worker bootstrap before returning;
+ordinals 2, 3, and 5 remain compatibility no-ops. The worker in
+`src/netdbg_bootstrap.c` records its entry and starts only
+`AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE`. It does not enable selector ownership,
+overlay rendering, or filtering.
+
+The cross-build validates that the PE export table is exactly ordinals 2, 3, 4,
+and 5. Because stock SynthXEX does not generate the Xbox export fields itself,
+the pipeline embeds the big-endian export-address table before packaging, sets
+the security-info pointer afterward, and then validates the module flags,
+explicit image-base header, absence of the synthetic TLS header, export table,
+code-page descriptor, page hash chain, and header hash before producing the
+SHA-256 file. A PE-only export success cannot reach deployment.
+
+The cross-build entry point is `scripts/build-openxechain.sh`. It currently
+packages the M2a observe-only bootstrap and input-hook runtime; render and
+filter-consumer sources are deliberately excluded. It requires a complete
+OpenXeChain prefix; SynthXEX alone is not a compiler. See
+`reference/NATIVE_TOOLCHAIN.md`, `reference/NATIVE_LOADER.md`, and
+`reference/NETDBG_BOOTSTRAP.md` before trying to deploy the result.

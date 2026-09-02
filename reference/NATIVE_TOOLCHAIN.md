@@ -206,21 +206,25 @@ APT archive cache about 241 MiB at the time of measurement.
 
 ## Current gate
 
-The compiler, packager, corrected XEX shape, and Aurora wrapper resolution are
-operational on retail hardware. The remaining M1 question is why no
-AuroraAZ-owned log or resident thread was observed after Aurora reported the
-module loaded. The next build must remain a no-hook observation canary and must
-be tested only through `Hdd1:\AuroraAZLab\`.
+The compiler, packager, corrected XEX shape, and Aurora wrapper are operational
+on retail hardware. M1 completed with commit `39b551c`, GitHub Actions run
+`33604028771`, and byte-matched artifact/FTP SHA-256
+`87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C`.
+The passing canary validated Aurora's thread wrapper at `0x82361AA8` and the
+Xapi probe at `0x82804650`; its primary phase-5/source-ordinal-4 marker and
+separate phase-7 worker marker prove automatic export dispatch and worker
+entry. The current gate is M2a input observation, tested only through
+`Hdd1:\AuroraAZLab\`.
 
 Before calling the runtime usable:
 
 1. preserve the now-passing module flags, image-base header, TLS omission, and
    exports 2-5;
-2. add one minimal, non-recursive signal that distinguishes AuroraAZ code
-   execution from Aurora's wrapper notification;
+2. keep the current runtime entry limited to non-consuming input observation;
 3. repeat the isolated upload, round-trip hash, NOVA/log observation, and
    recoverable rollback procedure;
 4. leave production Aurora and `launch.ini` untouched throughout.
 
-Until that signal is observed, the correct statement is: the one-file XEX loads
-and resolves on hardware, but AuroraAZ initialization is not yet proven.
+M1 proves the one-file bootstrap, automatic ordinal 4, and AuroraAZ worker
+entry. It does not prove that the M2a input hook works, and it says nothing yet
+about input consumption, overlay rendering, or filter application.

@@ -2,11 +2,11 @@
 
 Date: 2026-09-02
 
-## Candidate decision
+## Proven bootstrap decision
 
-Aurora A-Z is testing Aurora 0.7b.2 Rev1655's optional Network Debugger wrapper
-as its one-file bootstrap. The proposed release artifact is `AuroraAZ.xex`;
-installation would copy the same binary bytes to:
+Aurora A-Z uses Aurora 0.7b.2 Rev1655's optional Network Debugger wrapper as
+its one-file bootstrap. M1 proved this path on hardware. The release artifact
+is `AuroraAZ.xex`; installation copies the same binary bytes to:
 
 ```text
 Hdd1:\Aurora\Plugins\NetDbgDll.xex
@@ -18,9 +18,11 @@ the target file is absent. An installer must never overwrite an existing
 Network Debugger module.
 
 This design intentionally supplies Aurora's expected NetDbg ABI. It does not
-claim that Rev1655 has a generic third-party plugin interface. The corrected
-container is hardware-proven through Aurora's module-loaded notification; the
-AuroraAZ-owned code-execution signal is the remaining M1 gate.
+claim that Rev1655 has a generic third-party plugin interface. Hardware evidence
+now proves the corrected container, ordinal resolution, automatic ordinal-4
+dispatch, Aurora's thread wrapper, and entry into AuroraAZ-owned worker code.
+That closes M1; it does not prove that controller observation, input
+consumption, overlay rendering, or coverflow filtering works.
 
 ## Exact tested image
 
@@ -45,16 +47,18 @@ PluginManager key 7 constructs the wrapper at `0x8238E848` with literal path
 `0x82389650` requests ordinals 2 through 5. It marks the wrapper ready from the
 module handle alone, so every export must be present and non-null.
 
-| Ordinal | Call site | Aurora arguments | Required canary behavior |
+| Ordinal | Call site | Aurora arguments | Current M2a compatibility behavior |
 | ---: | --- | --- | --- |
-| 2 | `0x8232A740` | `r3=9994`, `r4=9993`, `r5=3` | Start the idempotent canary monitor, then return zero |
-| 3 | `0x8232A7BC` | No deliberate argument setup | Stop the canary monitor safely, then return zero |
-| 4 | `0x8232A9D8` | `r3` = NUL-terminated formatted log line | Ignore it and return; never log recursively |
+| 2 | `0x8232A740` | `r3=9994`, `r4=9993`, `r5=3` | Compatibility no-op; return zero |
+| 3 | `0x8232A7BC` | No deliberate argument setup | Network-loss/final-shutdown compatibility no-op; return zero |
+| 4 | `0x8232A9D8` | `r3` = NUL-terminated formatted log line | Atomically claim the one-shot bootstrap, start a worker, and return without recursive logging |
 | 5 | No key-7 call site | Resolved only | Export a valid immediate-return stub |
 
 Aurora ignores the return value at every observed call. The key-7 logger has
 one direct construction site at `0x8232A550` and no hidden ordinal-5 call in
-its primary or secondary vtable paths.
+its primary or secondary vtable paths. The final M1 marker identifies ordinal
+4 as the automatic startup source; this is observed hardware behavior rather
+than an inference from the static call graph.
 
 The build requires an ordinal-only PE export table (`NONAME`) containing
 exactly ordinals 2, 3, 4, and 5. That check alone is not sufficient: pinned
@@ -67,6 +71,8 @@ page hash chain, and header hash. A PE-only export success cannot reach the
 hardware gate.
 
 ## Hardware results
+
+### Earlier loader attempts (superseded)
 
 The first canary did not pass M1. It was uploaded only to
 `Hdd1:\AuroraAZLab\Plugins\NetDbgDll.xex`; a fresh download matched the local
@@ -112,53 +118,59 @@ IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
 PluginManager: Module Loaded:  dll.aurora.netdbg
 ```
 
-This proves the corrected XEX reaches the wrapper's post-resolution loaded
-notification. It did not produce an `AuroraAZ` log or a thread in
-`0x91D00000-0x91DFFFFF`, so the original `DllMain` observation was not a valid
-code-execution proof. The file was renamed
+This proved that the corrected XEX reached the wrapper's post-resolution loaded
+notification. It did not produce the expected signal because the original
+`DllMain`/thread-start observation contract was wrong; it is not the current M1
+status. The file was renamed
 `NetDbgDll.xex.disabled-c51e3a322b07`, the lab restarted with the active path
 absent, and production Aurora was restored without modifying its files or
 `launch.ini`.
 
-## Ordinal-2 code-execution gate
+### Final M1 acceptance (complete)
 
-The next retry remains an inert canary. It starts the same bounded monitor from
-ordinal 2, a callback recovered directly from Aurora, and stops it from ordinal
-3. `DllMain` performs teardown only:
+The passing canary was built from commit `39b551c` by GitHub Actions run
+`33604028771`. Both the CI artifact and the file downloaded after staging in
+`Hdd1:\AuroraAZLab\Plugins\NetDbgDll.xex` had SHA-256:
 
-1. Verify the console still runs the exact Aurora build, normal boot points to
-   the known-good `Hdd1:\Aurora\Aurora.xex`, and the target path is absent in
-   both the production and laboratory plugin directories.
-2. Inspect the built XEX2 header, hash, load base, imports, entry point, and
-   exported ordinals offline.
-3. Create and boot-test a clean `Hdd1:\AuroraAZLab\` copy before adding the
-   canary. Its `Aurora.xex` must hash to
-   `583BCD442D8017D6FCB2645B93CDA987F4C0A43A688B652D7364CCAEDAEEFA9F`.
-4. Copy the single verified binary only to
-   `Hdd1:\AuroraAZLab\Plugins\NetDbgDll.xex`, then download it to a new local
-   filename and require the round-trip SHA-256 to match.
-5. Launch the lab `Aurora.xex` through NOVA and confirm it returns to the
-   coverflow. Do not change `launch.ini`.
-6. Use NOVA `GET /thread` to prove the ordinal-2 callback started a live canary
-   monitor inside the reserved `0x91D00000-0x91DFFFFF` module window.
-7. Confirm Aurora, FTP, NOVA, RB QuickView, and ordinary coverflow navigation
-   still behave normally.
-8. Return to the production Aurora copy, rename the lab canary to a
-   SHA-derived `.disabled-<sha12>` filename, restart the lab once more, and
-   prove the module-window thread is absent. A power cycle must always return
-   to production Aurora if the lab crashes.
-
-For a NOVA instance with security enabled, set `AURORAAZ_NOVA_USERNAME` and
-`AURORAAZ_NOVA_PASSWORD` in the current process. The lab verification command
-is:
-
-```powershell
-pwsh -File scripts/verify-nova-canary.ps1 `
-  -ExpectedTitlePathSuffix '\AuroraAZLab\Aurora.xex'
+```text
+87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C
 ```
 
-No input hook, renderer, or filter mutation is linked into this retry image.
-Failure at any gate stops the native rollout.
+Raw `ExCreateThread` variants did not enter the worker. The passing contract
+validates and calls Aurora Rev1655's complete 25-word/100-byte thread wrapper at
+`0x82361AA8`. Before that call it also validates the first 8 words/32 bytes of
+`XapiThreadStartup` at `0x82804650`:
+
+```text
+7D8802A6 48163679 3BE1FF80 9421FF80
+7C7E1B78 7C9D2378 39600000 917F0050
+```
+
+The validated wrapper supplies `XapiThreadStartup`, passes create flags `2`,
+selects processor `3`, sets priority `15`, and resumes the returned handle once.
+AuroraAZ does not duplicate those operations around the wrapper.
+
+The two durable, 36-byte, big-endian `AZM1` records decoded as follows:
+
+| Record | Magic/version/size | Calls | Source | Phase | State | Create | Resume |
+| --- | --- | ---: | ---: | --- | --- | ---: | ---: |
+| Primary `AuroraAZ-M1.bin` | `AZM1` / `4` / `36` | 1 | 4 | 5 (`COMPLETE`) | 2 (`RUNNING`) | 0 | 0 |
+| Worker `AuroraAZ-M1-worker.bin` | `AZM1` / `4` / `36` | 1 | 4 | 7 (`WORKER_ENTERED`) | 2 (`RUNNING`) | 0 | 0 |
+
+The primary source field proves that normal Aurora logger traffic called
+ordinal 4 automatically. The independent worker-phase record can only be
+published after AuroraAZ-owned worker code begins executing. Along with the
+matching artifact/round-trip hash and Aurora's module-loaded events, these
+records satisfy the M1 one-file bootstrap and code-execution gates.
+
+### M2a boundary
+
+M2a is now underway. Its ordinal-4 path is once-gated and starts a worker
+through the same validated wrapper. That worker requests only
+`AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE`. M2a may observe controller state but
+must not consume it; overlay and filter-consumer sources are outside this
+milestone. No input, overlay, or filter functionality should be inferred from
+the completed M1 result.
 
 ## Compatibility boundary
 
