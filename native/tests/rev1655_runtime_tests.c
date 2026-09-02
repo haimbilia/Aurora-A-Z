@@ -12,6 +12,7 @@
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
 #include <auroraaz/m2a_input_telemetry.h>
+#include <auroraaz/netdbg_lifetime_rev1655.h>
 #include <auroraaz/rev1655_hook_gate.h>
 #include <auroraaz/rev1655_runtime.h>
 
@@ -77,6 +78,9 @@ static uint32_t installed_target;
 static uint32_t image_probe_calls;
 static uint32_t sparse_gap_probe_calls;
 static uintptr_t rejected_image_address;
+static uint32_t lifetime_pin_calls;
+static uint8_t lifetime_exact_image_verified;
+static uint32_t lifetime_expected_ordinal4;
 static uint32_t telemetry_open_calls;
 static uint32_t telemetry_write_calls;
 static uint32_t telemetry_close_calls;
@@ -100,6 +104,8 @@ static AzInputDetourResult configured_observe_result =
 static HANDLE configured_wrapper_handle =
     (HANDLE)(uintptr_t)0x1234u;
 static uint8_t reject_thread_startup;
+static AzNetDbgLifetimeRev1655Result configured_lifetime_result =
+    AZ_NETDBG_LIFETIME_OK;
 
 typedef uint32_t (*TestWorker)(void *context);
 
@@ -107,6 +113,7 @@ uint8_t az_rev1655_runtime_test_write_complete_file(
     char *path,
     const uint8_t *bytes,
     uint32_t size);
+void az_rev1655_runtime_test_reset_lifetime(void);
 void az_rev1655_runtime_test_telemetry_init(uint32_t generation);
 AzM2aInputTelemetryResult az_rev1655_runtime_test_telemetry_record(
     const AzInputDetourObservation *observation);
@@ -182,6 +189,41 @@ int DbgPrint(const char *format, ...)
     va_start(arguments, format);
     va_end(arguments);
     return 0;
+}
+
+uint32_t AuroraAZNetDbgWrite(const char *message)
+{
+    (void)message;
+    return 0u;
+}
+
+AzNetDbgLifetimeRev1655Result az_rev1655_netdbg_lifetime_pin_default(
+    uint8_t exact_image_verified,
+    uint32_t expected_ordinal4_export,
+    AzNetDbgLifetimeRev1655Status *status)
+{
+    ++lifetime_pin_calls;
+    lifetime_exact_image_verified = exact_image_verified;
+    lifetime_expected_ordinal4 = expected_ordinal4_export;
+    CHECK(status != NULL);
+    if (status != NULL) {
+        memset(status, 0, sizeof(*status));
+        status->result = configured_lifetime_result;
+        if (configured_lifetime_result == AZ_NETDBG_LIFETIME_OK) {
+            status->wrapper_address = 0x83001000u;
+            status->policy_after = AZ_REV1655_NETDBG_POLICY_RESIDENT;
+            status->compare_exchange_succeeded = 1u;
+            status->pinned_for_title_lifetime = 1u;
+        }
+    }
+    return configured_lifetime_result;
+}
+
+const char *az_netdbg_lifetime_rev1655_result_name(
+    AzNetDbgLifetimeRev1655Result result)
+{
+    (void)result;
+    return "test-lifetime-result";
 }
 
 HANDLE CreateFileA(
@@ -549,10 +591,14 @@ static void test_gate_failure_precedes_host_mutation(void)
         AZ_REV1655_RUNTIME_BAD_STAGE);
     CHECK(gate_calls == 0u);
     CHECK(arena_calls == 0u);
-
-    rejected_image_address = rejected_text_page;
     CHECK(az_rev1655_runtime_start(
         AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE) ==
+        AZ_REV1655_RUNTIME_LIFETIME_REJECTED);
+    CHECK(gate_calls == 0u);
+
+    rejected_image_address = rejected_text_page;
+    CHECK(az_rev1655_runtime_pin_module(
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite) ==
         AZ_REV1655_RUNTIME_IMAGE_UNMAPPED);
     CHECK(gate_calls == 0u);
     CHECK(site_calls == 0u);
@@ -560,13 +606,15 @@ static void test_gate_failure_precedes_host_mutation(void)
     CHECK(arena_calls == 0u);
     CHECK(hook_install_calls == 0u);
     CHECK(thread_wrapper_calls == 0u);
+    CHECK(lifetime_pin_calls == 0u);
     CHECK(image_probe_calls != 0u);
     CHECK(sparse_gap_probe_calls == 0u);
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
     rejected_image_address = (uintptr_t)0u;
+    az_rev1655_runtime_test_reset_lifetime();
 
-    CHECK(az_rev1655_runtime_start(
-        AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE) ==
+    CHECK(az_rev1655_runtime_pin_module(
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite) ==
         AZ_REV1655_RUNTIME_IMAGE_REJECTED);
     CHECK(gate_calls == 1u);
     CHECK(site_calls == 0u);
@@ -574,8 +622,10 @@ static void test_gate_failure_precedes_host_mutation(void)
     CHECK(arena_calls == 0u);
     CHECK(hook_install_calls == 0u);
     CHECK(thread_wrapper_calls == 0u);
+    CHECK(lifetime_pin_calls == 0u);
     CHECK(sparse_gap_probe_calls == 0u);
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
+    az_rev1655_runtime_test_reset_lifetime();
 }
 
 static void test_telemetry_file_completion_matrix(void)
@@ -695,6 +745,7 @@ static void test_observe_only_lifecycle(void)
     uint32_t gate_calls_after_start;
     uint32_t hook_install_calls_before;
     uint32_t hook_remove_calls_before;
+    uint32_t lifetime_pin_calls_before;
     uint32_t thread_close_calls_before;
     uint32_t thread_wrapper_calls_before;
     uint32_t thread_wait_calls_before;
@@ -706,13 +757,42 @@ static void test_observe_only_lifecycle(void)
     reject_thread_startup = 1u;
     arena_calls_before = arena_calls;
     thread_wrapper_calls_before = thread_wrapper_calls;
-    CHECK(az_rev1655_runtime_start(
-        AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE) ==
+    CHECK(az_rev1655_runtime_pin_module(
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite) ==
         AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED);
     CHECK(arena_calls == arena_calls_before);
     CHECK(thread_wrapper_calls == thread_wrapper_calls_before);
+    CHECK(lifetime_pin_calls == 0u);
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
     reject_thread_startup = 0u;
+    az_rev1655_runtime_test_reset_lifetime();
+
+    configured_lifetime_result = AZ_NETDBG_LIFETIME_BAD_POLICY;
+    arena_calls_before = arena_calls;
+    lifetime_pin_calls_before = lifetime_pin_calls;
+    thread_wrapper_calls_before = thread_wrapper_calls;
+    CHECK(az_rev1655_runtime_pin_module(
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite) ==
+        AZ_REV1655_RUNTIME_LIFETIME_REJECTED);
+    CHECK(lifetime_pin_calls == lifetime_pin_calls_before + 1u);
+    CHECK(lifetime_exact_image_verified == 1u);
+    CHECK(lifetime_expected_ordinal4 ==
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite);
+    CHECK(thread_wrapper_calls == thread_wrapper_calls_before);
+    CHECK(arena_calls == arena_calls_before);
+    CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
+    configured_lifetime_result = AZ_NETDBG_LIFETIME_OK;
+    az_rev1655_runtime_test_reset_lifetime();
+
+    lifetime_pin_calls_before = lifetime_pin_calls;
+    CHECK(az_rev1655_runtime_pin_module(
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite) ==
+        AZ_REV1655_RUNTIME_OK);
+    CHECK(lifetime_pin_calls == lifetime_pin_calls_before + 1u);
+    CHECK(az_rev1655_runtime_pin_module(
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite) ==
+        AZ_REV1655_RUNTIME_OK);
+    CHECK(lifetime_pin_calls == lifetime_pin_calls_before + 1u);
 
     configured_wrapper_handle = NULL;
     thread_wrapper_calls_before = thread_wrapper_calls;
@@ -848,6 +928,9 @@ int main(void)
     CHECK(strcmp(az_rev1655_runtime_result_name(
         AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED),
         "thread-startup-rejected") == 0);
+    CHECK(strcmp(az_rev1655_runtime_result_name(
+        AZ_REV1655_RUNTIME_LIFETIME_REJECTED),
+        "lifetime-rejected") == 0);
     CHECK(strcmp(az_rev1655_runtime_result_name(
         AZ_REV1655_RUNTIME_THREAD_CREATE_FAILED),
         "thread-create-failed") == 0);

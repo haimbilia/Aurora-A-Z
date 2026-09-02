@@ -73,6 +73,8 @@ static uint32_t marker_open_calls;
 static uint32_t marker_write_calls;
 static uint32_t marker_close_calls;
 static uint32_t runtime_start_calls;
+static uint32_t runtime_pin_calls;
+static uint32_t observed_ordinal4_export;
 static TestWorker pending_worker;
 static void *pending_worker_context;
 static AzRev1655RuntimeStage observed_stage;
@@ -96,10 +98,19 @@ HANDLE g_auroraaz_test_thread_wrapper(
     void *start_address,
     void *start_context)
 {
+    CHECK(runtime_pin_calls == 1u);
     ++wrapper_calls;
     pending_worker = (TestWorker)(uintptr_t)start_address;
     pending_worker_context = start_context;
     return (HANDLE)(uintptr_t)0x1234u;
+}
+
+AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
+    uint32_t expected_ordinal4_export)
+{
+    ++runtime_pin_calls;
+    observed_ordinal4_export = expected_ordinal4_export;
+    return AZ_REV1655_RUNTIME_OK;
 }
 
 HANDLE CreateFileA(
@@ -180,6 +191,9 @@ int main(void)
     CHECK(AuroraAZNetDbgWrite("recursive") == 0u);
     CHECK(AuroraAZNetDbgWrite("later") == 0u);
     CHECK(wrapper_calls == 1u);
+    CHECK(runtime_pin_calls == 1u);
+    CHECK(observed_ordinal4_export ==
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite);
     CHECK(close_calls == 1u);
     CHECK(pending_worker != NULL);
     CHECK(runtime_start_calls == 0u);

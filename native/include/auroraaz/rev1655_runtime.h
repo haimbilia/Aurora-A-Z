@@ -34,12 +34,22 @@ typedef enum AzRev1655RuntimeResult {
     AZ_REV1655_RUNTIME_IMAGE_REJECTED,
     AZ_REV1655_RUNTIME_SITE_REJECTED,
     AZ_REV1655_RUNTIME_WRONG_INPUT_SITE,
+    AZ_REV1655_RUNTIME_LIFETIME_REJECTED,
     AZ_REV1655_RUNTIME_ARENA_FAILED,
     AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED,
     AZ_REV1655_RUNTIME_THREAD_CREATE_FAILED,
     AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED,
     AZ_REV1655_RUNTIME_DETOUR_STAGE_FAILED
 } AzRev1655RuntimeResult;
+
+/*
+ * Synchronously verifies the exact Rev1655 image and live key-7 wrapper, then
+ * pins that wrapper for the title lifetime. Ordinal 4 must call this before it
+ * returns to Aurora; worker startup and every live hook are rejected until it
+ * succeeds. The resident policy is intentionally never restored in-title.
+ */
+AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
+    uint32_t expected_ordinal4_export);
 
 /*
  * Selects one reviewed runtime milestone.  INPUT_OBSERVE installs only the

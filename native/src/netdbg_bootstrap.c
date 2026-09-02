@@ -87,6 +87,7 @@ uint32_t AuroraAZNetDbgBootstrapStart(void)
     uint32_t expected = 0u;
     HANDLE thread = NULL;
     AzRev1655ThreadCreateResult create_result;
+    AzRev1655RuntimeResult pin_result;
 
     /* Aurora's logger may recursively dispatch while startup is in flight.
      * Claim before the first kernel call so every nested/subsequent write is
@@ -99,6 +100,15 @@ uint32_t AuroraAZNetDbgBootstrapStart(void)
             __ATOMIC_ACQ_REL,
             __ATOMIC_ACQUIRE)) {
         return 0u;
+    }
+
+    /* Close the only unload window before ordinal 4 returns to Aurora. This
+     * synchronous path is deliberately quiet: recursive logger dispatch sees
+     * g_bootstrap_claimed and becomes a constant-time no-op. */
+    pin_result = az_rev1655_runtime_pin_module(
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite);
+    if (pin_result != AZ_REV1655_RUNTIME_OK) {
+        return AZ_STATUS_REVISION_MISMATCH;
     }
 
     create_result = az_rev1655_thread_create(

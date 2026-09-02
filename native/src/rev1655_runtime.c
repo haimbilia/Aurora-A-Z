@@ -13,6 +13,8 @@
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
 #include <auroraaz/m2a_input_telemetry.h>
+#include <auroraaz/netdbg_bootstrap.h>
+#include <auroraaz/netdbg_lifetime_rev1655.h>
 #include <auroraaz/rev1655_hook_gate.h>
 #include <auroraaz/rev1655_runtime.h>
 
@@ -28,6 +30,11 @@
 #define AZ_WORKER_INTERVAL_100NS (-500000LL)
 #define AZ_CONTROL_WAIT_100NS (-10000LL)
 
+#define AZ_LIFETIME_UNPINNED 0u
+#define AZ_LIFETIME_PINNING 1u
+#define AZ_LIFETIME_PINNED 2u
+#define AZ_LIFETIME_FAILED 3u
+
 typedef char AzM2aInputContinuationMustMatch[
     AZ_M2A_INPUT_TARGET_ADDRESS + 4u ==
         AZ_REV1655_INPUT_WRAPPER_CONTINUE_ADDRESS ? 1 : -1];
@@ -39,6 +46,8 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t state;
     volatile uint32_t stage;
     volatile uint32_t observations_logged;
+    volatile uint32_t lifetime_state;
+    volatile uint32_t pinned_ordinal4_export;
     AzM2aInputTelemetry telemetry;
     uint32_t telemetry_flush_ticks;
 } AzRev1655Runtime;
@@ -112,6 +121,12 @@ static uint8_t write_complete_file(
 }
 
 #if defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+void az_rev1655_runtime_test_reset_lifetime(void)
+{
+    store_u32(&g_runtime.pinned_ordinal4_export, 0u);
+    store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_UNPINNED);
+}
+
 uint8_t az_rev1655_runtime_test_write_complete_file(
     char *path,
     const uint8_t *bytes,
@@ -320,7 +335,8 @@ static uint8_t image_range_is_mapped(const uint8_t *image, size_t size)
 
 static AzRev1655RuntimeResult validate_input_site(
     AzRev1655LoadedImage *image,
-    AzRev1655ResolvedHookSite *resolved)
+    AzRev1655ResolvedHookSite *resolved,
+    uint8_t log_failures)
 {
     const AzRev1655HookPermit *permit = NULL;
     const AzRev1655HookSiteDescriptor *descriptor;
@@ -336,7 +352,9 @@ static AzRev1655RuntimeResult validate_input_site(
         image_range_is_mapped(
             (const uint8_t *)(uintptr_t)AZ_REV1655_TEXT_BASE,
             (size_t)AZ_REV1655_TEXT_SIZE) == 0u) {
-        DbgPrint("AuroraAZ: M2a image mapping rejected\n");
+        if (log_failures != 0u) {
+            DbgPrint("AuroraAZ: M2a image mapping rejected\n");
+        }
         return AZ_REV1655_RUNTIME_IMAGE_UNMAPPED;
     }
 
@@ -345,9 +363,11 @@ static AzRev1655RuntimeResult validate_input_site(
      * before the complete gate succeeds. */
     gate_result = az_rev1655_hook_gate_validate(image, &permit);
     if (gate_result != AZ_REV1655_HOOK_GATE_OK) {
-        DbgPrint(
-            "AuroraAZ: M2a image gate rejected: %s\n",
-            az_rev1655_hook_gate_result_name(gate_result));
+        if (log_failures != 0u) {
+            DbgPrint(
+                "AuroraAZ: M2a image gate rejected: %s\n",
+                az_rev1655_hook_gate_result_name(gate_result));
+        }
         return AZ_REV1655_RUNTIME_IMAGE_REJECTED;
     }
 
@@ -355,7 +375,9 @@ static AzRev1655RuntimeResult validate_input_site(
         permit,
         AZ_REV1655_HOOK_SITE_INPUT_WRAPPER);
     if (descriptor == NULL) {
-        DbgPrint("AuroraAZ: M2a input descriptor rejected\n");
+        if (log_failures != 0u) {
+            DbgPrint("AuroraAZ: M2a input descriptor rejected\n");
+        }
         return AZ_REV1655_RUNTIME_SITE_REJECTED;
     }
 
@@ -365,9 +387,11 @@ static AzRev1655RuntimeResult validate_input_site(
         image,
         resolved);
     if (gate_result != AZ_REV1655_HOOK_GATE_OK) {
-        DbgPrint(
-            "AuroraAZ: M2a live input gate rejected: %s\n",
-            az_rev1655_hook_gate_result_name(gate_result));
+        if (log_failures != 0u) {
+            DbgPrint(
+                "AuroraAZ: M2a live input gate rejected: %s\n",
+                az_rev1655_hook_gate_result_name(gate_result));
+        }
         return AZ_REV1655_RUNTIME_SITE_REJECTED;
     }
 
@@ -376,14 +400,92 @@ static AzRev1655RuntimeResult validate_input_site(
             AZ_REV1655_INPUT_WRAPPER_FIRST_INSTRUCTION ||
         resolved->complete_signature_size !=
             (size_t)AZ_INPUT_SIGNATURE_SIZE) {
-        DbgPrint(
-            "AuroraAZ: M2a wrong input site target=%08X insn=%08X size=%u\n",
-            (unsigned int)resolved->target_address,
-            (unsigned int)resolved->expected_instruction,
-            (unsigned int)resolved->complete_signature_size);
+        if (log_failures != 0u) {
+            DbgPrint(
+                "AuroraAZ: M2a wrong input site target=%08X insn=%08X size=%u\n",
+                (unsigned int)resolved->target_address,
+                (unsigned int)resolved->expected_instruction,
+                (unsigned int)resolved->complete_signature_size);
+        }
         return AZ_REV1655_RUNTIME_WRONG_INPUT_SITE;
     }
 
+    return AZ_REV1655_RUNTIME_OK;
+}
+
+AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
+    uint32_t expected_ordinal4_export)
+{
+    AzRev1655LoadedImage image;
+    AzRev1655ResolvedHookSite resolved;
+    AzNetDbgLifetimeRev1655Status lifetime_status;
+    AzNetDbgLifetimeRev1655Result lifetime_result;
+    AzRev1655RuntimeResult validation;
+    uint32_t expected_state;
+    uint32_t state;
+
+    if (expected_ordinal4_export == 0u) {
+        return AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    }
+
+    state = load_u32(&g_runtime.lifetime_state);
+    if (state == AZ_LIFETIME_PINNED) {
+        return load_u32(&g_runtime.pinned_ordinal4_export) ==
+            expected_ordinal4_export ?
+                AZ_REV1655_RUNTIME_OK :
+                AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    }
+    if (state != AZ_LIFETIME_UNPINNED) {
+        return state == AZ_LIFETIME_PINNING ?
+            AZ_REV1655_RUNTIME_BUSY :
+            AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    }
+
+    expected_state = AZ_LIFETIME_UNPINNED;
+    if (!__atomic_compare_exchange_n(
+            &g_runtime.lifetime_state,
+            &expected_state,
+            AZ_LIFETIME_PINNING,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        return expected_state == AZ_LIFETIME_PINNED &&
+            load_u32(&g_runtime.pinned_ordinal4_export) ==
+                expected_ordinal4_export ?
+                    AZ_REV1655_RUNTIME_OK :
+                    AZ_REV1655_RUNTIME_BUSY;
+    }
+
+    /* The ordinal-4 callback performs this complete read-only revision gate
+     * synchronously. Aurora cannot regain control and unload key 7 before the
+     * subsequent policy CAS has made this image title-resident. */
+    validation = validate_input_site(&image, &resolved, 0u);
+    if (validation != AZ_REV1655_RUNTIME_OK) {
+        store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_FAILED);
+        return validation;
+    }
+    if (az_rev1655_thread_wrapper_is_valid() == 0u) {
+        store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_FAILED);
+        return AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED;
+    }
+
+    lifetime_result = az_rev1655_netdbg_lifetime_pin_default(
+        1u,
+        expected_ordinal4_export,
+        &lifetime_status);
+    if (lifetime_result != AZ_NETDBG_LIFETIME_OK ||
+        lifetime_status.pinned_for_title_lifetime == 0u ||
+        lifetime_status.compare_exchange_succeeded == 0u ||
+        lifetime_status.policy_after !=
+            AZ_REV1655_NETDBG_POLICY_RESIDENT) {
+        store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_FAILED);
+        return AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    }
+
+    store_u32(
+        &g_runtime.pinned_ordinal4_export,
+        expected_ordinal4_export);
+    store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_PINNED);
     return AZ_REV1655_RUNTIME_OK;
 }
 
@@ -616,7 +718,7 @@ static AzRev1655RuntimeResult start_input_observe(void)
     AzRev1655ThreadCreateResult create_result;
     HANDLE worker_thread = NULL;
 
-    validation = validate_input_site(&image, &resolved);
+    validation = validate_input_site(&image, &resolved, 1u);
     if (validation != AZ_REV1655_RUNTIME_OK) {
         return validation;
     }
@@ -705,6 +807,11 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
 
     if (stage != AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE) {
         return AZ_REV1655_RUNTIME_BAD_STAGE;
+    }
+    if (load_u32(&g_runtime.lifetime_state) != AZ_LIFETIME_PINNED ||
+        load_u32(&g_runtime.pinned_ordinal4_export) !=
+            (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite) {
+        return AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
     }
 
     expected = load_u32(&g_runtime.state);
@@ -811,6 +918,8 @@ const char *az_rev1655_runtime_result_name(AzRev1655RuntimeResult result)
         return "site-rejected";
     case AZ_REV1655_RUNTIME_WRONG_INPUT_SITE:
         return "wrong-input-site";
+    case AZ_REV1655_RUNTIME_LIFETIME_REJECTED:
+        return "lifetime-rejected";
     case AZ_REV1655_RUNTIME_ARENA_FAILED:
         return "arena-failed";
     case AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED:

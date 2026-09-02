@@ -11,6 +11,7 @@ packager="${toolchain_root}/bin/synthxex"
 m2a_sources=(
     "${repo_root}/native/src/netdbg_bootstrap.c"
     "${repo_root}/native/src/netdbg_m2a_exports.c"
+    "${repo_root}/native/src/netdbg_lifetime_rev1655.c"
     "${repo_root}/native/src/image.c"
     "${repo_root}/native/src/sha256.c"
     "${repo_root}/native/src/rev1655_hook_gate.c"

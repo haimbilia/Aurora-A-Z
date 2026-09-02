@@ -91,6 +91,12 @@ if(BUILD_TESTING)
             AURORAAZ_XBOX360=1
             AURORAAZ_REV1655_THREAD_TEST=1)
 
+    add_executable(auroraaz_netdbg_lifetime_rev1655_tests
+        tests/netdbg_lifetime_rev1655_tests.c
+        src/netdbg_lifetime_rev1655.c)
+    target_include_directories(auroraaz_netdbg_lifetime_rev1655_tests
+        PRIVATE include)
+
     # Compile the Xbox-facing runtime drafts only into their host test
     # executables. They intentionally remain outside auroraaz_core and the
     # release linkage until their hardware gates have passed.
@@ -147,6 +153,7 @@ if(BUILD_TESTING)
         auroraaz_hook_runtime_tests
         auroraaz_rev1655_runtime_tests
         auroraaz_netdbg_bootstrap_tests
+        auroraaz_netdbg_lifetime_rev1655_tests
         auroraaz_filter_consumer_xbox360_tests
         auroraaz_input_detour_xbox_tests
         auroraaz_overlay_renderer_xbox360_tests
@@ -179,6 +186,8 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_rev1655_runtime_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_netdbg_bootstrap_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_netdbg_lifetime_rev1655_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_filter_consumer_xbox360_tests
             PRIVATE /W4 /WX)
@@ -223,6 +232,9 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_netdbg_bootstrap_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_netdbg_lifetime_rev1655_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
         target_compile_options(auroraaz_filter_consumer_xbox360_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
@@ -258,6 +270,8 @@ if(BUILD_TESTING)
         COMMAND auroraaz_rev1655_runtime_tests)
     add_test(NAME auroraaz_netdbg_bootstrap_tests
         COMMAND auroraaz_netdbg_bootstrap_tests)
+    add_test(NAME auroraaz_netdbg_lifetime_rev1655_tests
+        COMMAND auroraaz_netdbg_lifetime_rev1655_tests)
     add_test(NAME auroraaz_filter_consumer_xbox360_tests
         COMMAND auroraaz_filter_consumer_xbox360_tests
             "${CMAKE_CURRENT_SOURCE_DIR}/../original/Aurora.exe")
