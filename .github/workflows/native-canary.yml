@@ -1,4 +1,4 @@
-name: Native canary
+name: Native runtime
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build inert AuroraAZ.xex canary
+    name: Build gated AuroraAZ.xex runtime
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
@@ -192,13 +192,13 @@ jobs:
           cmake --install "${SYNTHXEX_BUILD_DIR}"
           "${OPENXECHAIN_ROOT}/bin/synthxex" --version
 
-      - name: Cross-build inert Xbox 360 canary
+      - name: Cross-build gated Xbox 360 runtime
         env:
           OPENXECHAIN_ROOT: ${{ runner.temp }}/openxechain-prefix
           AURORAAZ_OUTPUT_DIR: ${{ github.workspace }}/build/native-xbox360
         run: bash scripts/build-openxechain.sh
 
-      - name: Validate canary artifact
+      - name: Validate runtime artifact
         run: |
           output_dir="${GITHUB_WORKSPACE}/build/native-xbox360"
           mapfile -t xex_files < <(find "${output_dir}" -maxdepth 1 -type f -name '*.xex' -print)
@@ -225,10 +225,10 @@ jobs:
 
           (cd "${output_dir}" && sha256sum --check "AuroraAZ.xex.sha256")
 
-      - name: Upload AuroraAZ.xex canary
+      - name: Upload AuroraAZ.xex runtime
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: AuroraAZ-canary-${{ github.sha }}
+          name: AuroraAZ-runtime-${{ github.sha }}
           path: |
             build/native-xbox360/AuroraAZ.xex
             build/native-xbox360/AuroraAZ.xex.sha256

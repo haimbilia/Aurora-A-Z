@@ -1,0 +1,529 @@
+#if !defined(AURORAAZ_XBOX360)
+#error "hook_runtime.c must only be built for the Xbox 360 target"
+#endif
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include <xecore/xboxkrnl.h>
+
+#include <auroraaz/hook_plan.h>
+#include <auroraaz/hook_runtime.h>
+
+#define AZ_ALLOCATION_GRANULARITY 0x10000u
+#define AZ_ADMITTED_RELAY_WORDS 21u
+#define AZ_RESIDENT_EXIT_WORDS 7u
+
+typedef struct AzResidentAdmission {
+    volatile uint32_t active_entries;
+    volatile uint32_t accepting;
+} AzResidentAdmission;
+
+typedef char AzAdmissionActiveOffsetMustMatch[
+    offsetof(AzResidentAdmission, active_entries) ==
+        AZ_HOOK_ADMISSION_ACTIVE_OFFSET ? 1 : -1];
+typedef char AzAdmissionAcceptingOffsetMustMatch[
+    offsetof(AzResidentAdmission, accepting) ==
+        AZ_HOOK_ADMISSION_ACCEPTING_OFFSET ? 1 : -1];
+typedef char AzAdmittedRelayMustFit[
+    AZ_ADMITTED_RELAY_WORDS * sizeof(uint32_t) <=
+        AZ_HOOK_TRAMPOLINE_OFFSET ? 1 : -1];
+typedef char AzResidentStateMustFit[
+    AZ_HOOK_ADMISSION_OFFSET + sizeof(AzResidentAdmission) <=
+        AZ_HOOK_SLOT_SIZE ? 1 : -1];
+typedef char AzResidentExitMustFit[
+    AZ_HOOK_RESIDENT_EXIT_OFFSET +
+        AZ_RESIDENT_EXIT_WORDS * sizeof(uint32_t) <=
+        AZ_HOOK_ADMISSION_OFFSET ? 1 : -1];
+
+/* xecorelib exports these ordinals but does not currently declare them. */
+extern void KeSweepDcacheRange(void *address, uint32_t size);
+extern void KeSweepIcacheRange(void *address, uint32_t size);
+
+static void clear_arena(AzHookArena *arena)
+{
+    arena->base = (uintptr_t)0u;
+    arena->size = 0u;
+    arena->used = 0u;
+}
+
+static void clear_hook(AzLiveHook *hook)
+{
+    size_t index;
+
+    hook->plan.target_address = 0u;
+    hook->plan.relay_address = 0u;
+    hook->plan.trampoline_address = 0u;
+    hook->plan.detour_address = 0u;
+    hook->plan.original_instruction = 0u;
+    hook->plan.target_branch = 0u;
+    for (index = 0u; index < AZ_HOOK_RELAY_WORDS; ++index) {
+        hook->plan.relay[index] = 0u;
+    }
+    for (index = 0u; index < AZ_HOOK_TRAMPOLINE_WORDS; ++index) {
+        hook->plan.trampoline[index] = 0u;
+    }
+    hook->admission_address = (uintptr_t)0u;
+    hook->old_protect = 0u;
+    hook->installed = 0u;
+    hook->target_restored = 0u;
+}
+
+static void release_allocation(void *base)
+{
+    void *release_base = base;
+    uint32_t release_size = 0u;
+
+    if (release_base != NULL) {
+        (void)NtFreeVirtualMemory(
+            &release_base,
+            &release_size,
+            MEM_RELEASE,
+            REGION_TITLE);
+    }
+}
+
+static void flush_code(void *address, uint32_t size)
+{
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    KeSweepDcacheRange(address, size);
+    KeSweepIcacheRange(address, size);
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+}
+
+static void write_words(
+    volatile uint32_t *destination,
+    const uint32_t *source,
+    size_t count)
+{
+    size_t index;
+
+    for (index = 0u; index < count; ++index) {
+        destination[index] = source[index];
+    }
+}
+
+static uint32_t load_u32(const volatile uint32_t *value)
+{
+    return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+}
+
+static void store_u32(volatile uint32_t *value, uint32_t replacement)
+{
+    __atomic_store_n(value, replacement, __ATOMIC_SEQ_CST);
+}
+
+static AzResidentAdmission *hook_admission(const AzLiveHook *hook)
+{
+    if (hook == NULL || hook->admission_address == (uintptr_t)0u) {
+        return NULL;
+    }
+
+    return (AzResidentAdmission *)hook->admission_address;
+}
+
+/*
+ * Emit a resident admission relay using only volatile r0/r11/r12, CR0 and
+ * CTR. It increments active_entries before observing accepting. An admitted
+ * detour receives the state pointer in r0; a closed entry decrements locally
+ * and executes the resident trampoline without touching module code/data.
+ */
+static AzPpcResult build_admitted_relay(
+    uint32_t relay_address,
+    uint32_t admission_address,
+    uint32_t detour_address,
+    uint32_t trampoline_address,
+    uint32_t relay[AZ_ADMITTED_RELAY_WORDS])
+{
+    uint32_t detour_branch[AZ_PPC_ABSOLUTE_BRANCH_WORDS];
+    AzPpcResult result;
+
+    if (relay == NULL) {
+        return AZ_PPC_NULL;
+    }
+
+    result = az_ppc_emit_absolute_branch(
+        detour_address,
+        0u,
+        detour_branch);
+    if (result != AZ_PPC_OK) {
+        return result;
+    }
+
+    relay[0] = 0x3D600000u | ((admission_address >> 16u) & 0xFFFFu);
+    relay[1] = 0x616B0000u | (admission_address & 0xFFFFu);
+    relay[2] = 0x7D805828u; /* lwarx r12, 0, r11 */
+    relay[3] = 0x398C0001u; /* addi r12, r12, 1 */
+    relay[4] = 0x7D80592Du; /* stwcx. r12, 0, r11 */
+    relay[5] = 0x4082FFF4u; /* bne relay[2] */
+    relay[6] = 0x7C0004ACu; /* sync */
+    relay[7] = 0x818B0004u; /* lwz r12, 4(r11) */
+    relay[8] = 0x2C0C0000u; /* cmpwi r12, 0 */
+    relay[9] = 0x41820018u; /* beq relay[15] */
+    relay[10] = 0x7D605B78u; /* mr r0, r11 */
+    relay[11] = detour_branch[0];
+    relay[12] = detour_branch[1];
+    relay[13] = detour_branch[2];
+    relay[14] = detour_branch[3];
+    relay[15] = 0x7D805828u; /* lwarx r12, 0, r11 */
+    relay[16] = 0x398CFFFFu; /* addi r12, r12, -1 */
+    relay[17] = 0x7D80592Du; /* stwcx. r12, 0, r11 */
+    relay[18] = 0x4082FFF4u; /* bne relay[15] */
+    relay[19] = 0x7C0004ACu; /* sync */
+    result = az_ppc_encode_relative_branch(
+        relay_address + 20u * (uint32_t)sizeof(uint32_t),
+        trampoline_address,
+        0u,
+        &relay[20]);
+    return result;
+}
+
+/*
+ * Resident detour exit ABI:
+ *   r3  = function result to return unchanged
+ *   r11 = resident admission-state address
+ *   r12 = Aurora's original caller LR
+ *   r1  = Aurora caller's original stack pointer
+ *
+ * The active count reaches zero inside resident code. No module instruction
+ * or module data is accessed after the successful stwcx.
+ */
+static void build_resident_exit(
+    uint32_t epilogue[AZ_RESIDENT_EXIT_WORDS])
+{
+    epilogue[0] = 0x7D405828u; /* lwarx r10, 0, r11 */
+    epilogue[1] = 0x394AFFFFu; /* addi r10, r10, -1 */
+    epilogue[2] = 0x7D40592Du; /* stwcx. r10, 0, r11 */
+    epilogue[3] = 0x4082FFF4u; /* bne epilogue[0] */
+    epilogue[4] = 0x7C0004ACu; /* sync */
+    epilogue[5] = 0x7D8803A6u; /* mtlr r12 */
+    epilogue[6] = 0x4E800020u; /* blr */
+}
+
+AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
+{
+    uint32_t candidate;
+
+    if (arena == NULL) {
+        return AZ_HOOK_RUNTIME_NULL;
+    }
+    clear_arena(arena);
+
+    for (candidate = AZ_REV1655_HOOK_ARENA_START;
+         candidate <= AZ_REV1655_HOOK_ARENA_END - AZ_HOOK_ARENA_SIZE;
+         candidate += AZ_ALLOCATION_GRANULARITY) {
+        void *requested = (void *)(uintptr_t)candidate;
+        uint32_t requested_size = AZ_HOOK_ARENA_SIZE;
+        NTSTATUS status = NtAllocateVirtualMemory(
+            &requested,
+            &requested_size,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_EXECUTE_READWRITE,
+            REGION_TITLE);
+
+        if (FAILED(status)) {
+            continue;
+        }
+
+        if ((uintptr_t)requested != (uintptr_t)candidate ||
+            requested_size < AZ_HOOK_ARENA_SIZE) {
+            release_allocation(requested);
+            continue;
+        }
+
+        arena->base = (uintptr_t)requested;
+        arena->size = requested_size;
+        arena->used = 0u;
+        return AZ_HOOK_RUNTIME_OK;
+    }
+
+    return AZ_HOOK_RUNTIME_NO_NEAR_MEMORY;
+}
+
+AzHookRuntimeResult az_hook_arena_release_uninstalled(AzHookArena *arena)
+{
+    if (arena == NULL) {
+        return AZ_HOOK_RUNTIME_NULL;
+    }
+    if (arena->base == (uintptr_t)0u) {
+        return AZ_HOOK_RUNTIME_OK;
+    }
+    if (arena->used != 0u) {
+        return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+    }
+
+    release_allocation((void *)arena->base);
+    clear_arena(arena);
+    return AZ_HOOK_RUNTIME_OK;
+}
+
+AzHookRuntimeResult az_live_hook_install(
+    AzHookArena *arena,
+    uint32_t target_address,
+    uint32_t expected_instruction,
+    const void *detour,
+    AzLiveHook *hook)
+{
+    uintptr_t slot;
+    uint32_t relay_address;
+    uint32_t trampoline_address;
+    uint32_t admission_address;
+    uint32_t admitted_relay[AZ_ADMITTED_RELAY_WORDS];
+    uint32_t resident_exit[AZ_RESIDENT_EXIT_WORDS];
+    AzResidentAdmission *admission;
+    AzPpcResult plan_result;
+    volatile uint32_t *target;
+    uint32_t compare;
+    int exchanged;
+
+    if (arena == NULL || detour == NULL || hook == NULL) {
+        return AZ_HOOK_RUNTIME_NULL;
+    }
+    clear_hook(hook);
+
+    if (arena->base == (uintptr_t)0u ||
+        arena->size < AZ_HOOK_SLOT_SIZE ||
+        arena->used > arena->size - AZ_HOOK_SLOT_SIZE) {
+        return AZ_HOOK_RUNTIME_ARENA_FULL;
+    }
+
+    target = (volatile uint32_t *)(uintptr_t)target_address;
+    if ((target_address & 3u) != 0u ||
+        !MmIsAddressValid((void *)(uintptr_t)target_address)) {
+        return AZ_HOOK_RUNTIME_BAD_TARGET;
+    }
+    if (__atomic_load_n(target, __ATOMIC_ACQUIRE) != expected_instruction) {
+        return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+    }
+
+    slot = arena->base + (uintptr_t)arena->used;
+    relay_address = (uint32_t)slot;
+    trampoline_address = relay_address + AZ_HOOK_TRAMPOLINE_OFFSET;
+    admission_address = relay_address + AZ_HOOK_ADMISSION_OFFSET;
+
+    plan_result = az_hook_plan_build(
+        target_address,
+        relay_address,
+        trampoline_address,
+        (uint32_t)(uintptr_t)detour,
+        expected_instruction,
+        &hook->plan);
+    if (plan_result != AZ_PPC_OK) {
+        clear_hook(hook);
+        return AZ_HOOK_RUNTIME_PLAN_FAILED;
+    }
+
+    plan_result = build_admitted_relay(
+        relay_address,
+        admission_address,
+        (uint32_t)(uintptr_t)detour,
+        trampoline_address,
+        admitted_relay);
+    if (plan_result != AZ_PPC_OK) {
+        clear_hook(hook);
+        return AZ_HOOK_RUNTIME_PLAN_FAILED;
+    }
+    build_resident_exit(resident_exit);
+
+    admission = (AzResidentAdmission *)(uintptr_t)admission_address;
+    store_u32(&admission->active_entries, 0u);
+    store_u32(&admission->accepting, 0u);
+
+    write_words(
+        (volatile uint32_t *)(uintptr_t)relay_address,
+        admitted_relay,
+        AZ_ADMITTED_RELAY_WORDS);
+    write_words(
+        (volatile uint32_t *)(uintptr_t)trampoline_address,
+        hook->plan.trampoline,
+        AZ_HOOK_TRAMPOLINE_WORDS);
+    write_words(
+        (volatile uint32_t *)(
+            slot + (uintptr_t)AZ_HOOK_RESIDENT_EXIT_OFFSET),
+        resident_exit,
+        AZ_RESIDENT_EXIT_WORDS);
+    flush_code((void *)slot, AZ_HOOK_SLOT_SIZE);
+
+    /* Permanently reserve the slot before any target can reach it. Even an
+     * install CAS failure deliberately leaks this small resident slot rather
+     * than permitting concurrent lifecycle code to reclaim or reuse it. */
+    arena->used += AZ_HOOK_SLOT_SIZE;
+    hook->admission_address = (uintptr_t)admission_address;
+    store_u32(&admission->accepting, 1u);
+
+    hook->old_protect =
+        MmQueryAddressProtect((void *)(uintptr_t)target_address);
+    MmSetAddressProtect(
+        (void *)(uintptr_t)target_address,
+        (uint32_t)sizeof(uint32_t),
+        PAGE_EXECUTE_READWRITE);
+
+    compare = expected_instruction;
+    exchanged = __atomic_compare_exchange_n(
+        target,
+        &compare,
+        hook->plan.target_branch,
+        0,
+        __ATOMIC_SEQ_CST,
+        __ATOMIC_SEQ_CST);
+    if (exchanged == 0) {
+        store_u32(&admission->accepting, 0u);
+        MmSetAddressProtect(
+            (void *)(uintptr_t)target_address,
+            (uint32_t)sizeof(uint32_t),
+            hook->old_protect);
+        clear_hook(hook);
+        return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+    }
+
+    flush_code(
+        (void *)(uintptr_t)target_address,
+        (uint32_t)sizeof(uint32_t));
+    MmSetAddressProtect(
+        (void *)(uintptr_t)target_address,
+        (uint32_t)sizeof(uint32_t),
+        hook->old_protect);
+
+    hook->installed = 1u;
+    hook->target_restored = 0u;
+    return AZ_HOOK_RUNTIME_OK;
+}
+
+AzHookRuntimeResult az_live_hook_remove(AzLiveHook *hook)
+{
+    volatile uint32_t *target;
+    AzResidentAdmission *admission;
+    uint32_t compare;
+    int exchanged;
+
+    if (hook == NULL) {
+        return AZ_HOOK_RUNTIME_NULL;
+    }
+    if (hook->installed == 0u) {
+        return AZ_HOOK_RUNTIME_NOT_INSTALLED;
+    }
+
+    admission = hook_admission(hook);
+    if (admission == NULL) {
+        return AZ_HOOK_RUNTIME_NULL;
+    }
+
+    /* Close admission before restoring the target. This store participates in
+     * the relay's sync/atomic ordering; no later relay entry can branch into
+     * the module. */
+    store_u32(&admission->accepting, 0u);
+
+    if (hook->target_restored != 0u) {
+        if (load_u32(&admission->active_entries) != 0u) {
+            return AZ_HOOK_RUNTIME_QUIESCING;
+        }
+        hook->installed = 0u;
+        return AZ_HOOK_RUNTIME_OK;
+    }
+
+    target = (volatile uint32_t *)(uintptr_t)hook->plan.target_address;
+    if (!MmIsAddressValid((void *)(uintptr_t)hook->plan.target_address)) {
+        return AZ_HOOK_RUNTIME_BAD_TARGET;
+    }
+
+    MmSetAddressProtect(
+        (void *)(uintptr_t)hook->plan.target_address,
+        (uint32_t)sizeof(uint32_t),
+        PAGE_EXECUTE_READWRITE);
+    compare = hook->plan.target_branch;
+    exchanged = __atomic_compare_exchange_n(
+        target,
+        &compare,
+        hook->plan.original_instruction,
+        0,
+        __ATOMIC_SEQ_CST,
+        __ATOMIC_SEQ_CST);
+    if (exchanged == 0) {
+        MmSetAddressProtect(
+            (void *)(uintptr_t)hook->plan.target_address,
+            (uint32_t)sizeof(uint32_t),
+            hook->old_protect);
+        return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+    }
+
+    flush_code(
+        (void *)(uintptr_t)hook->plan.target_address,
+        (uint32_t)sizeof(uint32_t));
+    MmSetAddressProtect(
+        (void *)(uintptr_t)hook->plan.target_address,
+        (uint32_t)sizeof(uint32_t),
+        hook->old_protect);
+    hook->target_restored = 1u;
+    if (load_u32(&admission->active_entries) != 0u) {
+        return AZ_HOOK_RUNTIME_QUIESCING;
+    }
+    hook->installed = 0u;
+    return AZ_HOOK_RUNTIME_OK;
+}
+
+uint32_t az_live_hook_active_entries(const AzLiveHook *hook)
+{
+    AzResidentAdmission *admission = hook_admission(hook);
+
+    if (admission == NULL) {
+        return 0u;
+    }
+    return load_u32(&admission->active_entries);
+}
+
+uint8_t az_live_hook_accepting(const AzLiveHook *hook)
+{
+    AzResidentAdmission *admission = hook_admission(hook);
+
+    if (admission == NULL) {
+        return 0u;
+    }
+    return load_u32(&admission->accepting) != 0u ? 1u : 0u;
+}
+
+uint8_t az_live_hook_can_unload(const AzLiveHook *hook)
+{
+    AzResidentAdmission *admission = hook_admission(hook);
+
+    if (hook == NULL || admission == NULL ||
+        hook->target_restored == 0u ||
+        load_u32(&admission->accepting) != 0u ||
+        load_u32(&admission->active_entries) != 0u) {
+        return 0u;
+    }
+    return 1u;
+}
+
+void *az_live_hook_trampoline(const AzLiveHook *hook)
+{
+    if (hook == NULL || hook->installed == 0u) {
+        return NULL;
+    }
+    return (void *)(uintptr_t)hook->plan.trampoline_address;
+}
+
+const char *az_hook_runtime_result_name(AzHookRuntimeResult result)
+{
+    switch (result) {
+    case AZ_HOOK_RUNTIME_OK:
+        return "ok";
+    case AZ_HOOK_RUNTIME_NULL:
+        return "null";
+    case AZ_HOOK_RUNTIME_NO_NEAR_MEMORY:
+        return "no-near-memory";
+    case AZ_HOOK_RUNTIME_ARENA_FULL:
+        return "arena-full";
+    case AZ_HOOK_RUNTIME_BAD_TARGET:
+        return "bad-target";
+    case AZ_HOOK_RUNTIME_TARGET_CHANGED:
+        return "target-changed";
+    case AZ_HOOK_RUNTIME_PLAN_FAILED:
+        return "plan-failed";
+    case AZ_HOOK_RUNTIME_QUIESCING:
+        return "quiescing";
+    case AZ_HOOK_RUNTIME_NOT_INSTALLED:
+        return "not-installed";
+    default:
+        return "unknown";
+    }
+}

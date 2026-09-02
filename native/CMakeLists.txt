@@ -56,6 +56,72 @@ if(BUILD_TESTING)
         PRIVATE auroraaz_core)
     target_include_directories(auroraaz_rev1655_hook_gate_tests PRIVATE src)
 
+    add_executable(auroraaz_hook_runtime_tests
+        tests/hook_runtime_tests.c
+        src/hook_runtime.c)
+    target_link_libraries(auroraaz_hook_runtime_tests
+        PRIVATE auroraaz_core)
+    target_include_directories(auroraaz_hook_runtime_tests
+        PRIVATE tests/stubs)
+    target_compile_definitions(auroraaz_hook_runtime_tests
+        PRIVATE AURORAAZ_XBOX360=1)
+
+    add_executable(auroraaz_rev1655_runtime_tests
+        tests/rev1655_runtime_tests.c
+        src/rev1655_runtime.c)
+    target_link_libraries(auroraaz_rev1655_runtime_tests
+        PRIVATE auroraaz_core)
+    target_include_directories(auroraaz_rev1655_runtime_tests
+        PRIVATE tests/rev1655_runtime_include src)
+    target_compile_definitions(auroraaz_rev1655_runtime_tests
+        PRIVATE
+            AURORAAZ_XBOX360=1
+            AURORAAZ_REV1655_THREAD_TEST=1)
+
+    add_executable(auroraaz_netdbg_bootstrap_tests
+        tests/netdbg_bootstrap_tests.c
+        src/netdbg_bootstrap.c
+        src/netdbg_m2a_exports.c)
+    target_include_directories(auroraaz_netdbg_bootstrap_tests
+        PRIVATE tests/netdbg_bootstrap_include include)
+    target_compile_definitions(auroraaz_netdbg_bootstrap_tests
+        PRIVATE
+            AURORAAZ_XBOX360=1
+            AURORAAZ_REV1655_THREAD_TEST=1)
+
+    # Compile the Xbox-facing runtime drafts only into their host test
+    # executables. They intentionally remain outside auroraaz_core and the
+    # release linkage until their hardware gates have passed.
+    add_executable(auroraaz_filter_consumer_xbox360_tests
+        tests/filter_consumer_xbox360_tests.c
+        src/filter_consumer_xbox360.c)
+    target_link_libraries(auroraaz_filter_consumer_xbox360_tests
+        PRIVATE auroraaz_core)
+
+    add_executable(auroraaz_input_detour_xbox_tests
+        tests/input_detour_xbox_tests.c
+        src/input_detour.c)
+    target_link_libraries(auroraaz_input_detour_xbox_tests
+        PRIVATE auroraaz_core)
+    target_include_directories(auroraaz_input_detour_xbox_tests
+        PRIVATE tests/include)
+    target_compile_definitions(auroraaz_input_detour_xbox_tests
+        PRIVATE AURORAAZ_XBOX360=1)
+
+    add_executable(auroraaz_overlay_renderer_xbox360_tests
+        tests/overlay_renderer_xbox360_tests.c
+        src/overlay_renderer_xbox360.c)
+    target_link_libraries(auroraaz_overlay_renderer_xbox360_tests
+        PRIVATE auroraaz_core)
+    target_compile_definitions(auroraaz_overlay_renderer_xbox360_tests
+        PRIVATE AURORAAZ_XBOX360=1)
+
+    add_executable(auroraaz_render_detours_tests
+        tests/render_detours_tests.c
+        src/render_detours.c)
+    target_link_libraries(auroraaz_render_detours_tests
+        PRIVATE auroraaz_core)
+
     set(AURORAAZ_TEST_TARGETS
         auroraaz_core_tests
         auroraaz_input_tests
@@ -64,6 +130,13 @@ if(BUILD_TESTING)
         auroraaz_overlay_model_tests
         auroraaz_ppc_tests
         auroraaz_rev1655_hook_gate_tests
+        auroraaz_hook_runtime_tests
+        auroraaz_rev1655_runtime_tests
+        auroraaz_netdbg_bootstrap_tests
+        auroraaz_filter_consumer_xbox360_tests
+        auroraaz_input_detour_xbox_tests
+        auroraaz_overlay_renderer_xbox360_tests
+        auroraaz_render_detours_tests
     )
 
     # These tests use assert() as their executable check. Keep assertions
@@ -84,6 +157,20 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_overlay_model_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_ppc_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_rev1655_hook_gate_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_hook_runtime_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_rev1655_runtime_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_netdbg_bootstrap_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_filter_consumer_xbox360_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_input_detour_xbox_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_overlay_renderer_xbox360_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_render_detours_tests
             PRIVATE /W4 /WX)
     else()
         target_compile_options(auroraaz_core_tests PRIVATE
@@ -107,6 +194,27 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_rev1655_hook_gate_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_hook_runtime_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_rev1655_runtime_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_netdbg_bootstrap_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_filter_consumer_xbox360_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_input_detour_xbox_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_overlay_renderer_xbox360_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_render_detours_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
     endif()
 
     add_test(NAME auroraaz_core_tests COMMAND auroraaz_core_tests)
@@ -118,4 +226,19 @@ if(BUILD_TESTING)
     add_test(NAME auroraaz_rev1655_hook_gate_tests
         COMMAND auroraaz_rev1655_hook_gate_tests
             "${CMAKE_CURRENT_SOURCE_DIR}/../original/Aurora.exe")
+    add_test(NAME auroraaz_hook_runtime_tests
+        COMMAND auroraaz_hook_runtime_tests)
+    add_test(NAME auroraaz_rev1655_runtime_tests
+        COMMAND auroraaz_rev1655_runtime_tests)
+    add_test(NAME auroraaz_netdbg_bootstrap_tests
+        COMMAND auroraaz_netdbg_bootstrap_tests)
+    add_test(NAME auroraaz_filter_consumer_xbox360_tests
+        COMMAND auroraaz_filter_consumer_xbox360_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/../original/Aurora.exe")
+    add_test(NAME auroraaz_input_detour_xbox_tests
+        COMMAND auroraaz_input_detour_xbox_tests)
+    add_test(NAME auroraaz_overlay_renderer_xbox360_tests
+        COMMAND auroraaz_overlay_renderer_xbox360_tests)
+    add_test(NAME auroraaz_render_detours_tests
+        COMMAND auroraaz_render_detours_tests)
 endif()

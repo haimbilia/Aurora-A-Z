@@ -8,6 +8,22 @@ output_dir="${AURORAAZ_OUTPUT_DIR:-${repo_root}/build/native-xbox360}"
 compiler="${toolchain_root}/bin/clang"
 packager="${toolchain_root}/bin/synthxex"
 
+m2a_sources=(
+    "${repo_root}/native/src/netdbg_bootstrap.c"
+    "${repo_root}/native/src/netdbg_m2a_exports.c"
+    "${repo_root}/native/src/image.c"
+    "${repo_root}/native/src/sha256.c"
+    "${repo_root}/native/src/rev1655_hook_gate.c"
+    "${repo_root}/native/src/ppc.c"
+    "${repo_root}/native/src/hook_plan.c"
+    "${repo_root}/native/src/hook_runtime.c"
+    "${repo_root}/native/src/selector.c"
+    "${repo_root}/native/src/input.c"
+    "${repo_root}/native/src/input_detour.c"
+    "${repo_root}/native/src/input_detour_shim.S"
+    "${repo_root}/native/src/rev1655_runtime.c"
+)
+
 if [[ ! -x "${compiler}" ]]; then
     echo "OpenXeChain compiler not found: ${compiler}" >&2
     exit 1
@@ -31,10 +47,7 @@ export CPLUS_INCLUDE_PATH=""
     -Wall -Wextra -Werror \
     -DAURORAAZ_XBOX360=1 \
     -I"${repo_root}/native/include" \
-    "${repo_root}/native/src/canary.c" \
-    "${repo_root}/native/src/netdbg_exports.c" \
-    "${repo_root}/native/src/compatibility.c" \
-    "${repo_root}/native/src/image.c" \
+    "${m2a_sources[@]}" \
     -Wl,/dll \
     -Wl,/entry:DllMain \
     -Wl,/def:"${repo_root}/native/netdbg_exports.def" \

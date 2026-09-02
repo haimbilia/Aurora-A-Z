@@ -1,0 +1,212 @@
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <xecore/xam.h>
+#include <xecore/xboxkrnl.h>
+
+#include <auroraaz/rev1655_runtime.h>
+
+#define CHECK(condition)                                                   \
+    do {                                                                   \
+        if (!(condition)) {                                                \
+            fprintf(stderr, "check failed: %s:%d: %s\n",                 \
+                __FILE__, __LINE__, #condition);                           \
+            exit(1);                                                       \
+        }                                                                  \
+    } while (0)
+
+typedef uint32_t (*TestWorker)(void *context);
+
+typedef struct TestM2aMarker {
+    uint8_t magic[4];
+    uint32_t version;
+    uint32_t record_size;
+    uint32_t phase;
+    uint32_t runtime_result;
+} TestM2aMarker;
+
+const uint32_t g_auroraaz_test_xapi_thread_startup[8] = {
+    0x7D8802A6u,
+    0x48163679u,
+    0x3BE1FF80u,
+    0x9421FF80u,
+    0x7C7E1B78u,
+    0x7C9D2378u,
+    0x39600000u,
+    0x917F0050u
+};
+
+const uint32_t g_auroraaz_test_thread_wrapper_probe[25] = {
+    0x7D8802A6u,
+    0x9181FFF8u,
+    0x9421FFA0u,
+    0x3D608280u,
+    0x7C882378u,
+    0x7C671B78u,
+    0x39200002u,
+    0x38CB4650u,
+    0x38A10054u,
+    0x38800000u,
+    0x38610050u,
+    0x488049B9u,
+    0x38800003u,
+    0x80610050u,
+    0x484A0879u,
+    0x3880000Fu,
+    0x80610050u,
+    0x484A0645u,
+    0x80610050u,
+    0x484A256Du,
+    0x80610050u,
+    0x38210060u,
+    0x8181FFF8u,
+    0x7D8803A6u,
+    0x4E800020u
+};
+
+static uint32_t wrapper_calls;
+static uint32_t close_calls;
+static uint32_t marker_open_calls;
+static uint32_t marker_write_calls;
+static uint32_t marker_close_calls;
+static uint32_t runtime_start_calls;
+static TestWorker pending_worker;
+static void *pending_worker_context;
+static AzRev1655RuntimeStage observed_stage;
+static TestM2aMarker observed_markers[2];
+
+uint32_t AuroraAZNetDbgConfigure(
+    uint32_t command_port,
+    uint32_t debug_port,
+    uint32_t mode);
+uint32_t AuroraAZNetDbgShutdown(void);
+uint32_t AuroraAZNetDbgWrite(const char *message);
+uint32_t AuroraAZNetDbgReserved(void);
+int DllMain(void *module, uint32_t reason, void *reserved);
+
+bool MmIsAddressValid(void *address)
+{
+    return address != NULL;
+}
+
+HANDLE g_auroraaz_test_thread_wrapper(
+    void *start_address,
+    void *start_context)
+{
+    ++wrapper_calls;
+    pending_worker = (TestWorker)(uintptr_t)start_address;
+    pending_worker_context = start_context;
+    return (HANDLE)(uintptr_t)0x1234u;
+}
+
+HANDLE CreateFileA(
+    const char *path,
+    uint32_t desired_access,
+    uint32_t share_mode,
+    void *security_attributes,
+    uint32_t creation_disposition,
+    uint32_t flags_and_attributes,
+    HANDLE template_file)
+{
+    CHECK(strcmp(path, "game:\\Data\\Logs\\AuroraAZ-M2a.bin") == 0);
+    CHECK(desired_access == GENERIC_WRITE);
+    CHECK(share_mode == FILE_SHARE_READ);
+    CHECK(security_attributes == NULL);
+    CHECK(creation_disposition == CREATE_ALWAYS);
+    CHECK(flags_and_attributes == FILE_ATTRIBUTE_NORMAL);
+    CHECK(template_file == NULL);
+    ++marker_open_calls;
+    return (HANDLE)(uintptr_t)0x5678u;
+}
+
+int WriteFile(
+    HANDLE file,
+    void *buffer,
+    uint32_t bytes_to_write,
+    uint32_t *bytes_written,
+    void *overlapped)
+{
+    CHECK(file == (HANDLE)(uintptr_t)0x5678u);
+    CHECK(buffer != NULL);
+    CHECK(bytes_to_write == (uint32_t)sizeof(TestM2aMarker));
+    CHECK(bytes_written != NULL);
+    CHECK(overlapped == NULL);
+    CHECK(marker_write_calls < 2u);
+    if (marker_write_calls < 2u) {
+        memcpy(
+            &observed_markers[marker_write_calls],
+            buffer,
+            sizeof(TestM2aMarker));
+    }
+    ++marker_write_calls;
+    *bytes_written = bytes_to_write;
+    return 1;
+}
+
+int CloseHandle(HANDLE handle)
+{
+    CHECK(handle == (HANDLE)(uintptr_t)0x5678u);
+    ++marker_close_calls;
+    return 1;
+}
+
+NTSTATUS NtClose(HANDLE handle)
+{
+    CHECK(handle == (HANDLE)(uintptr_t)0x1234u);
+    ++close_calls;
+    return 0;
+}
+
+AzRev1655RuntimeResult az_rev1655_runtime_start(
+    AzRev1655RuntimeStage stage)
+{
+    ++runtime_start_calls;
+    observed_stage = stage;
+    return AZ_REV1655_RUNTIME_OK;
+}
+
+int main(void)
+{
+    CHECK(AuroraAZNetDbgConfigure(730u, 731u, 1u) == 0u);
+    CHECK(AuroraAZNetDbgShutdown() == 0u);
+    CHECK(AuroraAZNetDbgReserved() == 0u);
+    CHECK(wrapper_calls == 0u);
+    CHECK(runtime_start_calls == 0u);
+
+    CHECK(AuroraAZNetDbgWrite("first") == 0u);
+    CHECK(AuroraAZNetDbgWrite("recursive") == 0u);
+    CHECK(AuroraAZNetDbgWrite("later") == 0u);
+    CHECK(wrapper_calls == 1u);
+    CHECK(close_calls == 1u);
+    CHECK(pending_worker != NULL);
+    CHECK(runtime_start_calls == 0u);
+
+    CHECK(pending_worker(pending_worker_context) ==
+        (uint32_t)AZ_REV1655_RUNTIME_OK);
+    CHECK(runtime_start_calls == 1u);
+    CHECK(observed_stage == AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE);
+    CHECK(marker_open_calls == 2u);
+    CHECK(marker_write_calls == 2u);
+    CHECK(marker_close_calls == 2u);
+    CHECK(memcmp(observed_markers[0].magic, "AZM2", 4u) == 0);
+    CHECK(observed_markers[0].version == 1u);
+    CHECK(observed_markers[0].record_size ==
+        (uint32_t)sizeof(TestM2aMarker));
+    CHECK(observed_markers[0].phase == 1u);
+    CHECK(observed_markers[0].runtime_result == 0xFFFFFFFFu);
+    CHECK(observed_markers[1].phase == 2u);
+    CHECK(observed_markers[1].runtime_result ==
+        (uint32_t)AZ_REV1655_RUNTIME_OK);
+
+    CHECK(DllMain(NULL, 1u, NULL) == 1);
+    CHECK(close_calls == 1u);
+
+    CHECK(DllMain(NULL, 0u, NULL) == 1);
+    CHECK(close_calls == 1u);
+
+    puts("AuroraAZ NetDbg M2a bootstrap host tests passed");
+    return 0;
+}
