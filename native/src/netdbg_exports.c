@@ -17,6 +17,9 @@ __attribute__((section(".xexexp"), used, aligned(4)))
 #endif
 const uint8_t g_auroraaz_xex_export_reserve[0x3Cu] = {0};
 
+uint32_t AuroraAZCanaryStartMonitor(void);
+void AuroraAZCanaryStopMonitor(void);
+
 /*
  * Aurora Rev1655 resolves NetDbgDll ordinals 2-5 immediately after loading
  * game:\\Plugins\\NetDbgDll.xex.  The canary deliberately provides the ABI
@@ -35,11 +38,14 @@ uint32_t AuroraAZNetDbgConfigure(
     (void)command_port;
     (void)debug_port;
     (void)mode;
+
+    (void)AuroraAZCanaryStartMonitor();
     return 0u;
 }
 
 uint32_t AuroraAZNetDbgShutdown(void)
 {
+    AuroraAZCanaryStopMonitor();
     return 0u;
 }
 

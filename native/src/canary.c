@@ -11,17 +11,29 @@
 #include <auroraaz/image.h>
 
 #define AZ_DLL_PROCESS_DETACH 0u
-#define AZ_DLL_PROCESS_ATTACH 1u
 #define AZ_SYSTEM_THREAD_FLAG 2u
 #define AZ_MONITOR_INTERVAL_100NS (-1000000LL)
+#define AZ_CONTROL_WAIT_100NS (-10000LL)
+
+#define AZ_MONITOR_STOPPED 0u
+#define AZ_MONITOR_STARTING 1u
+#define AZ_MONITOR_RUNNING 2u
+#define AZ_MONITOR_STOPPING 3u
 
 typedef struct AzCanaryResult {
     AzImageResult image;
     AzCompatibilityResult compatibility;
 } AzCanaryResult;
 
-static uint32_t g_running = 0u;
+static uint32_t g_monitor_state = AZ_MONITOR_STOPPED;
 static HANDLE g_monitor_thread = NULL;
+
+static void wait_for_monitor_control(void)
+{
+    int64_t interval = AZ_CONTROL_WAIT_100NS;
+
+    (void)KeDelayExecutionThread(0u, 0u, &interval);
+}
 
 static AzCanaryResult validate_running_aurora(void)
 {
@@ -60,9 +72,18 @@ static AzCanaryResult validate_running_aurora(void)
 
 static uint32_t monitor_aurora(void *context)
 {
+    uint32_t state;
+
     (void)context;
 
-    if (__atomic_load_n(&g_running, __ATOMIC_ACQUIRE) != 0u) {
+    do {
+        state = __atomic_load_n(&g_monitor_state, __ATOMIC_ACQUIRE);
+        if (state == AZ_MONITOR_STARTING) {
+            wait_for_monitor_control();
+        }
+    } while (state == AZ_MONITOR_STARTING);
+
+    if (state == AZ_MONITOR_RUNNING) {
         const AzCanaryResult result = validate_running_aurora();
         DbgPrint(
             "AuroraAZ: canary image=%s, compatibility=%s\n",
@@ -75,15 +96,106 @@ static uint32_t monitor_aurora(void *context)
      * therefore stop and join this thread while the loader lock is held: the
      * worker needs only this atomic flag and a bounded kernel delay to exit.
      */
-    while (__atomic_load_n(&g_running, __ATOMIC_ACQUIRE) != 0u) {
+    while (__atomic_load_n(&g_monitor_state, __ATOMIC_ACQUIRE) ==
+           AZ_MONITOR_RUNNING) {
         {
             int64_t interval = AZ_MONITOR_INTERVAL_100NS;
             (void)KeDelayExecutionThread(0u, 0u, &interval);
         }
     }
 
-    __atomic_store_n(&g_running, 0u, __ATOMIC_RELEASE);
     return 0u;
+}
+
+uint32_t AuroraAZCanaryStartMonitor(void)
+{
+    uint32_t expected = AZ_MONITOR_STOPPED;
+    HANDLE monitor_thread = NULL;
+    NTSTATUS status;
+
+    if (!__atomic_compare_exchange_n(
+            &g_monitor_state,
+            &expected,
+            AZ_MONITOR_STARTING,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        return 0u;
+    }
+
+    status = ExCreateThread(
+        &monitor_thread,
+        0u,
+        NULL,
+        NULL,
+        (void *)(uintptr_t)&monitor_aurora,
+        NULL,
+        AZ_SYSTEM_THREAD_FLAG);
+    if (FAILED(status)) {
+        __atomic_store_n(
+            &g_monitor_state,
+            AZ_MONITOR_STOPPED,
+            __ATOMIC_RELEASE);
+        return (uint32_t)status;
+    }
+
+    g_monitor_thread = monitor_thread;
+    __atomic_store_n(
+        &g_monitor_state,
+        AZ_MONITOR_RUNNING,
+        __ATOMIC_RELEASE);
+    return 0u;
+}
+
+void AuroraAZCanaryStopMonitor(void)
+{
+    for (;;) {
+        uint32_t state =
+            __atomic_load_n(&g_monitor_state, __ATOMIC_ACQUIRE);
+
+        if (state == AZ_MONITOR_STOPPED) {
+            return;
+        }
+        if (state == AZ_MONITOR_STARTING ||
+            state == AZ_MONITOR_STOPPING) {
+            wait_for_monitor_control();
+            continue;
+        }
+
+        if (state == AZ_MONITOR_RUNNING) {
+            uint32_t expected = AZ_MONITOR_RUNNING;
+
+            if (__atomic_compare_exchange_n(
+                    &g_monitor_state,
+                    &expected,
+                    AZ_MONITOR_STOPPING,
+                    0,
+                    __ATOMIC_ACQ_REL,
+                    __ATOMIC_ACQUIRE)) {
+                break;
+            }
+        }
+    }
+
+    if (g_monitor_thread != NULL) {
+        NTSTATUS wait_status;
+
+        do {
+            wait_status = NtWaitForSingleObjectEx(
+                (uint32_t)(uintptr_t)g_monitor_thread,
+                0u,
+                0u,
+                NULL);
+        } while (FAILED(wait_status));
+
+        (void)NtClose(g_monitor_thread);
+        g_monitor_thread = NULL;
+    }
+
+    __atomic_store_n(
+        &g_monitor_state,
+        AZ_MONITOR_STOPPED,
+        __ATOMIC_RELEASE);
 }
 
 int DllMain(void *module, uint32_t reason, void *reserved)
@@ -91,46 +203,8 @@ int DllMain(void *module, uint32_t reason, void *reserved)
     (void)module;
     (void)reserved;
 
-    if (reason == AZ_DLL_PROCESS_ATTACH) {
-        NTSTATUS status;
-
-        __atomic_store_n(&g_running, 1u, __ATOMIC_RELEASE);
-        status = ExCreateThread(
-            &g_monitor_thread,
-            0u,
-            NULL,
-            NULL,
-            (void *)(uintptr_t)&monitor_aurora,
-            NULL,
-            AZ_SYSTEM_THREAD_FLAG);
-        if (FAILED(status)) {
-            __atomic_store_n(&g_running, 0u, __ATOMIC_RELEASE);
-            g_monitor_thread = NULL;
-            DbgPrint("AuroraAZ: canary monitor start failed, status=%08X\n", status);
-        }
-        else {
-            DbgPrint("AuroraAZ: canary monitor started\n");
-        }
-    }
-    else if (reason == AZ_DLL_PROCESS_DETACH) {
-        __atomic_store_n(&g_running, 0u, __ATOMIC_RELEASE);
-
-        if (g_monitor_thread != NULL) {
-            NTSTATUS wait_status;
-
-            do {
-                wait_status = NtWaitForSingleObjectEx(
-                    (uint32_t)(uintptr_t)g_monitor_thread,
-                    0u,
-                    0u,
-                    NULL);
-            } while (FAILED(wait_status));
-
-            (void)NtClose(g_monitor_thread);
-            g_monitor_thread = NULL;
-        }
-
-        DbgPrint("AuroraAZ: canary detach\n");
+    if (reason == AZ_DLL_PROCESS_DETACH) {
+        AuroraAZCanaryStopMonitor();
     }
 
     return 1;
