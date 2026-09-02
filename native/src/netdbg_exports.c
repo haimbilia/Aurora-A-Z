@@ -41,18 +41,20 @@ typedef char AzM1RecordMustBe36Bytes[
 
 static char g_m1_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M1.bin";
+static char g_m1_worker_marker_path[] =
+    "game:\\Data\\Logs\\AuroraAZ-M1-worker.bin";
 static uint32_t g_m1_start_claimed = 0u;
-static uint32_t g_m1_start_complete = 0u;
-static uint32_t g_m1_worker_recorded = 0u;
-static AzM1Record g_m1_record;
+static AzM1Record g_m1_identity;
 
-static void write_m1_record(const AzM1Record *record)
+static void write_m1_record(
+    char *path,
+    const AzM1Record *record)
 {
     HANDLE file;
     uint32_t bytes_written = 0u;
 
     file = CreateFileA(
-        g_m1_marker_path,
+        path,
         GENERIC_WRITE,
         FILE_SHARE_READ,
         NULL,
@@ -76,38 +78,21 @@ static void update_m1_record(
     const AzCanaryStartSnapshot *snapshot,
     void *context)
 {
-    AzM1Record *record = (AzM1Record *)context;
+    const AzM1Record *identity =
+        (const AzM1Record *)context;
+    AzM1Record record = *identity;
+    char *path = g_m1_marker_path;
 
-    record->phase = snapshot->phase;
-    record->state = snapshot->state;
-    record->ex_create_thread_status =
+    record.phase = snapshot->phase;
+    record.state = snapshot->state;
+    record.ex_create_thread_status =
         snapshot->ex_create_thread_status;
-    record->nt_resume_thread_status =
+    record.nt_resume_thread_status =
         snapshot->nt_resume_thread_status;
-    write_m1_record(record);
-}
-
-static void record_worker_entry_from_logger(void)
-{
-    uint32_t expected = 0u;
-
-    if (__atomic_load_n(
-            &g_m1_start_complete,
-            __ATOMIC_ACQUIRE) == 0u ||
-        AuroraAZCanaryGetWorkerEntered() == 0u ||
-        !__atomic_compare_exchange_n(
-            &g_m1_worker_recorded,
-            &expected,
-            1u,
-            0,
-            __ATOMIC_ACQ_REL,
-            __ATOMIC_ACQUIRE)) {
-        return;
+    if (snapshot->phase == AZ_CANARY_START_WORKER_ENTERED) {
+        path = g_m1_worker_marker_path;
     }
-
-    g_m1_record.phase = AZ_CANARY_START_WORKER_ENTERED;
-    g_m1_record.state = AuroraAZCanaryGetMonitorState();
-    write_m1_record(&g_m1_record);
+    write_m1_record(path, &record);
 }
 
 static void try_start_m1(uint32_t source_ordinal)
@@ -115,7 +100,7 @@ static void try_start_m1(uint32_t source_ordinal)
     uint32_t expected = 0u;
     const AzM1Record marker = {
         {'A', 'Z', 'M', '1'},
-        2u,
+        3u,
         (uint32_t)sizeof(AzM1Record),
         1u,
         source_ordinal,
@@ -136,21 +121,21 @@ static void try_start_m1(uint32_t source_ordinal)
             0,
             __ATOMIC_ACQ_REL,
             __ATOMIC_ACQUIRE)) {
-        record_worker_entry_from_logger();
         return;
     }
 
-    g_m1_record = marker;
-    g_m1_record.state = AuroraAZCanaryGetMonitorState();
-    write_m1_record(&g_m1_record);
+    /*
+     * The worker proof has its own file so a later startup-phase write on
+     * the caller thread cannot overwrite it.  Remove any old proof before
+     * publishing this run's immutable identity and creating the worker.
+     */
+    (void)DeleteFileA(g_m1_worker_marker_path);
+    g_m1_identity = marker;
+    g_m1_identity.state = AuroraAZCanaryGetMonitorState();
+    write_m1_record(g_m1_marker_path, &g_m1_identity);
     (void)AuroraAZCanaryStartMonitor(
         update_m1_record,
-        &g_m1_record);
-    __atomic_store_n(
-        &g_m1_start_complete,
-        1u,
-        __ATOMIC_RELEASE);
-    record_worker_entry_from_logger();
+        &g_m1_identity);
 }
 
 /*
