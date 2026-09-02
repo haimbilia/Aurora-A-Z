@@ -85,7 +85,7 @@ jobs:
 
       - name: Build and test portable core
         run: |
-          python3 -m unittest scripts/tests/test_xex_exports.py
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
           cmake -S native -B build/native-host -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build/native-host --parallel 2
           ctest --test-dir build/native-host --output-on-failure
