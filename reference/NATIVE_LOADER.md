@@ -18,8 +18,10 @@ analysis recovered a complete candidate contract for the unused Network
 Debugger wrapper (key 7, mode 9, policy 1): it requests
 `game:\Plugins\NetDbgDll.xex` and resolves ordinals 2-5. Static analysis does
 not prove that a newly built XEX satisfies the Xbox image loader. The first
-hardware canary was rejected before its entry point ran, so the one-file
-bootstrap remains unproven; see `NETDBG_BOOTSTRAP.md`.
+hardware canary was rejected, but the corrected image now reaches Aurora's
+module-loaded notification with ordinals 2-5 resolved. The one-file wrapper
+contract is therefore hardware-proven; AuroraAZ-owned code execution remains
+unobserved. See `NETDBG_BOOTSTRAP.md`.
 
 ## Analysis baseline
 
@@ -203,8 +205,8 @@ security-information load address when the optional header is absent.
 The corrected retry is packaged by SynthXEX as `titledll`, changing XEX module
 flags from `0xA` to `0x9`; emits `0x10201 = 0x91D00000`; and omits the
 synthesized empty TLS optional header `0x20104`. These three changes are bundled
-in the next image, so a successful retry will validate the bundle rather than
-identify one field as the sole cause. In particular:
+in the corrected image, so its successful retry validates the bundle rather
+than identifying one field as the sole cause. In particular:
 
 - Aurora's wrapper mode `9` is a private constructor/load-path value and is not
   known to map to XEX module flags `0x9`.
@@ -216,8 +218,21 @@ identify one field as the sole cause. In particular:
   the title-like stub is therefore a strong DLL-shape A/B candidate, but it is
   still not independently proven as the cause.
 
-M1 therefore remains pending until the corrected image survives the same
-isolated hardware load, NOVA thread, regression, and rollback checks.
+The corrected 24,576-byte image round-tripped with SHA-256
+`C51E3A322B07D1DE094C644E33D005D87305FFB24B587548953F1E88678C63E5`.
+AuroraAZLab survived at 1280x720 and logged exactly:
+
+```text
+IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
+PluginManager: Module Loaded:  dll.aurora.netdbg
+```
+
+This passes the module-container and ordinal-resolution gate. NOVA nevertheless
+found no thread in `0x91D00000-0x91DFFFFF`, and `debug.log` contained no
+`AuroraAZ` line. M1 therefore remains pending at code-execution observation,
+not image loading. The file was renamed `.disabled-c51e3a322b07`, the lab
+restarted without an active target, and production Aurora was restored
+untouched.
 
 Primary format evidence for this retry:
 
@@ -237,15 +252,15 @@ Primary format evidence for this retry:
 
 ## Implication for the implementation plan
 
-M1 remains at hardware-canary testing through the key-7 Network Debugger
-wrapper. Input, rendering, and filtering hooks remain disabled until a
-corrected inert load/unload test passes.
+M1 has passed hardware module loading and ordinal resolution through the key-7
+Network Debugger wrapper. Input, rendering, and filtering hooks remain disabled
+until AuroraAZ-owned code execution is independently observed.
 
 The available directions change at least one current constraint:
 
 | Direction | Technically plausible | Requirement impact |
 | --- | --- | --- |
-| Install the one release binary as `Plugins\NetDbgDll.xex` | Candidate for exact Rev1655 with ordinal-only exports 2-5; hardware retry pending | Occupies an otherwise absent optional Network Debugger identity; no skin or configuration change |
+| Install the one release binary as `Plugins\NetDbgDll.xex` | Hardware-proven to load and resolve on exact Rev1655; plugin initialization signal pending | Occupies an otherwise absent optional Network Debugger identity; no skin or configuration change |
 | Configure `AuroraAZ.xex` as a DashLaunch system plugin | Yes; requires a hardware canary and title-lifecycle handling | Adds or changes boot-loader configuration, so installation is not literally one untouched-file drop |
 | Patch Aurora's manager to add an eighth wrapper/path | Yes for this exact hash, with substantial reverse engineering | Modifies Aurora code in memory or on disk; an external bootstrap is still needed for an in-memory patch |
 | Ship a patched `Aurora.xex` | Technically direct | Violates the no-on-disk-patch constraint and is unsuitable for distribution |
@@ -266,6 +281,9 @@ that is the only literal path the selected wrapper loads.
   Xbox API calling patterns.
 - **Recovered for NetDbg:** ordinals 2-5, all key-7 call sites, their arguments,
   and ignored-return behavior. Ordinal 5 is resolved but not called.
-- **Hardware result:** the first compatible-ABI canary reached
-  `XexLoadImage` but was rejected before its entry point. The corrected
-  title-DLL/header-shape retry is not yet tested.
+- **Hardware result:** the first compatible-ABI canary was rejected by
+  `XexLoadImage`; the corrected title-DLL/header-shape image loads, completes
+  wrapper resolution, and rolls back cleanly.
+- **Not yet observed:** an `AuroraAZ` initialization log or live canary thread.
+  Do not equate Aurora's module-loaded notification with proof that the intended
+  plugin lifecycle code executed.

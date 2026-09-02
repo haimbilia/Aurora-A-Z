@@ -8,8 +8,9 @@ skin unchanged. The extension is distributed and installed as one
 self-contained binary. Its release name is `AuroraAZ.xex`; its required
 Rev1655 candidate installed name is `Plugins\NetDbgDll.xex`, the literal path
 owned by the optional key-7 wrapper. That wrapper contract is established by
-static analysis; the one-file bootstrap is not accepted until M1 passes on
-hardware.
+static analysis and now passes Aurora's hardware module-load and ordinal
+resolution path. Runtime canary code execution still needs an independent M1
+observation before hooks are enabled.
 
 Implementation must proceed through the safety and feasibility gates in
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). In particular, rendering
@@ -58,6 +59,6 @@ the basis of a release claim.
 - Is top-level XUI scene injection stable across skin changes, or is a small
   renderer-owned overlay safer?
 - Can the export-capable XEX canary satisfy the key-7 Network Debugger wrapper
-  on hardware and roll back cleanly before any hook is enabled? The first
-  attempt was rejected by `XexLoadImage`; a corrected title-DLL image is
-  awaiting the M1 retry.
+  on hardware and roll back cleanly before any hook is enabled? The corrected
+  image now loads, resolves, and rolls back cleanly; the remaining question is
+  why its expected `AuroraAZ` log and resident canary thread were not observed.

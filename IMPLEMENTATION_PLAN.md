@@ -50,11 +50,12 @@ decision. This file defines the order in which the risky parts must be proven.
 Failure at a gate stops dependent work. A partial success must not be labelled a
 functional release.
 
-Current gate status: M0 is safe and reproducible. M1 is still open. The first
-inert hardware canary was byte-verified after FTP upload and Aurora survived
-the isolated lab launch, but `XexLoadImage` rejected the image before its entry
-point ran. The corrected retry is described under M1 below; M2 and later work
-must not be linked or deployed until that retry passes.
+Current gate status: M0 is safe and reproducible. M1 is partially satisfied.
+The corrected inert canary is byte-verified and now passes Aurora's module-load
+and ordinal-resolution path in the isolated lab. Its expected `AuroraAZ` log
+and resident thread were not observed, so the code-execution observation gate
+is still open. M2 and later work must not be linked or deployed until that
+remaining M1 gate passes.
 
 ## M0 — Stabilize and measure
 
@@ -185,12 +186,25 @@ private wrapper mode `9` is not known to mean XEX module flags `0x9`; stock
 Nova loads with flags `0xA`. The working `FtpDll.xex` and Nova DLLs omit the
 TLS header, while stock Aurora itself carries the same empty TLS tuple as the
 failed image. The absent `0x10201` is the strongest isolated difference because
-all three inspected working Rev1655 XEX images carry it, but only a hardware
-retry can establish whether the corrected bundle loads.
+all three inspected working Rev1655 XEX images carry it. The corrected bundle
+has now loaded on hardware, but because all three changes shipped together the
+successful retry does not isolate the causal field.
 
-Repeat the isolated upload, round-trip hash, lab launch, debug-log,
-NOVA-thread, and rollback checks. M1 passes only after the corrected image
-loads on hardware.
+The corrected XEX SHA-256
+`C51E3A322B07D1DE094C644E33D005D87305FFB24B587548953F1E88678C63E5`
+round-tripped exactly over FTP. Aurora logged:
+
+```text
+IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
+PluginManager: Module Loaded:  dll.aurora.netdbg
+```
+
+The lab remained usable at 1280x720. These events pass the module-container and
+ordinal-resolution portion of M1. They do not complete M1: NOVA found no thread
+in `0x91D00000-0x91DFFFFF` and `debug.log` contained no `AuroraAZ` line, so
+plugin code execution is not independently observed. The corrected file was
+renamed `.disabled-c51e3a322b07`, the lab restarted without an active target,
+and production Aurora was restored untouched.
 
 ## M2 — Input bridge
 
@@ -345,17 +359,15 @@ editing the skin.
 
 ## Immediate next work session
 
-1. Build the corrected inert canary in CI with the pinned, cached OpenXeChain
-   toolchain and patched SynthXEX.
-2. Require the strict validator and `jeff.exe` inspection to show module flags
-   `0x9`, load address `0x91D00000`, optional header `0x10201`, no empty TLS
-   header, and ordinal-only exports 2-5.
-3. Upload only that verified image to the isolated lab, download it again, and
-   require an exact SHA-256 match before launch.
-4. Launch the lab through NOVA, inspect `debug.log`, and require a live canary
-   thread in `0x91D00000-0x91DFFFFF`.
-5. Return to production, disable the lab file by recoverable rename, relaunch
-   the lab once, and prove that the canary thread disappears.
+1. Disassemble the corrected entry path and confirm the exact DLL attach ABI,
+   section permissions, and thread-start imports in the packaged XEX.
+2. Build a still-inert observation canary with one independently visible,
+   non-recursive signal from initialization or a safely called NetDbg ordinal;
+   ordinal 4 must remain a no-op because it is Aurora's log sink.
+3. Repeat the exact CI validation, isolated upload, FTP round-trip hash, lab
+   launch, NOVA/log observation, and recoverable rollback procedure.
+4. Require both Aurora's module-loaded events and the AuroraAZ-owned execution
+   signal before closing M1.
 
-No input hook, overlay, or production deployment begins until the corrected
-no-op module passes M1 in the isolated lab copy.
+No input hook, overlay, or production deployment begins until plugin code
+execution is independently observed and M1 closes in the isolated lab copy.

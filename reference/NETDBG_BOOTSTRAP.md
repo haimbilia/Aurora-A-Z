@@ -18,8 +18,9 @@ the target file is absent. An installer must never overwrite an existing
 Network Debugger module.
 
 This design intentionally supplies Aurora's expected NetDbg ABI. It does not
-claim that Rev1655 has a generic third-party plugin interface, nor that the
-candidate bootstrap is hardware-proven before M1 passes.
+claim that Rev1655 has a generic third-party plugin interface. The corrected
+container is hardware-proven through Aurora's module-loaded notification; the
+AuroraAZ-owned code-execution signal is the remaining M1 gate.
 
 ## Exact tested image
 
@@ -46,8 +47,8 @@ module handle alone, so every export must be present and non-null.
 
 | Ordinal | Call site | Aurora arguments | Required canary behavior |
 | ---: | --- | --- | --- |
-| 2 | `0x8232A740` | `r3=9994`, `r4=9993`, `r5=3` | Return immediately |
-| 3 | `0x8232A7BC` | No deliberate argument setup | Return immediately |
+| 2 | `0x8232A740` | `r3=9994`, `r4=9993`, `r5=3` | Start the idempotent canary monitor, then return zero |
+| 3 | `0x8232A7BC` | No deliberate argument setup | Stop the canary monitor safely, then return zero |
 | 4 | `0x8232A9D8` | `r3` = NUL-terminated formatted log line | Ignore it and return; never log recursively |
 | 5 | No key-7 call site | Resolved only | Export a valid immediate-return stub |
 
@@ -65,7 +66,7 @@ SynthXEX hashes the image, sets the absolute pointer at security-info offset
 page hash chain, and header hash. A PE-only export success cannot reach the
 hardware gate.
 
-## First hardware result
+## Hardware results
 
 The first canary did not pass M1. It was uploaded only to
 `Hdd1:\AuroraAZLab\Plugins\NetDbgDll.xex`; a fresh download matched the local
@@ -95,12 +96,35 @@ Comparison with working Rev1655 XEX images identified a corrected retry shape:
 
 Aurora wrapper mode `9` and XEX module flags `0x9` are unrelated fields; no
 source establishes a numeric mapping between them. The retry changes all three
-XEX fields together; the correction pipeline is validator-tested, but M1
-remains pending until the resulting image loads on hardware.
+XEX fields together, so the hardware result does not isolate a single cause.
 
-## Corrected hardware gate
+The corrected 24,576-byte image had SHA-256:
 
-The retry remains an inert canary:
+```text
+C51E3A322B07D1DE094C644E33D005D87305FFB24B587548953F1E88678C63E5
+```
+
+Its FTP round-trip hash matched. AuroraAZLab remained usable at 1280x720 and
+logged:
+
+```text
+IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
+PluginManager: Module Loaded:  dll.aurora.netdbg
+```
+
+This proves the corrected XEX reaches the wrapper's post-resolution loaded
+notification. It did not produce an `AuroraAZ` log or a thread in
+`0x91D00000-0x91DFFFFF`, so the original `DllMain` observation was not a valid
+code-execution proof. The file was renamed
+`NetDbgDll.xex.disabled-c51e3a322b07`, the lab restarted with the active path
+absent, and production Aurora was restored without modifying its files or
+`launch.ini`.
+
+## Ordinal-2 code-execution gate
+
+The next retry remains an inert canary. It starts the same bounded monitor from
+ordinal 2, a callback recovered directly from Aurora, and stops it from ordinal
+3. `DllMain` performs teardown only:
 
 1. Verify the console still runs the exact Aurora build, normal boot points to
    the known-good `Hdd1:\Aurora\Aurora.xex`, and the target path is absent in
@@ -115,8 +139,8 @@ The retry remains an inert canary:
    filename and require the round-trip SHA-256 to match.
 5. Launch the lab `Aurora.xex` through NOVA and confirm it returns to the
    coverflow. Do not change `launch.ini`.
-6. Use NOVA `GET /thread` to prove a live canary monitor starts inside the
-   reserved `0x91D00000-0x91DFFFFF` module window.
+6. Use NOVA `GET /thread` to prove the ordinal-2 callback started a live canary
+   monitor inside the reserved `0x91D00000-0x91DFFFFF` module window.
 7. Confirm Aurora, FTP, NOVA, RB QuickView, and ordinary coverflow navigation
    still behave normally.
 8. Return to the production Aurora copy, rename the lab canary to a

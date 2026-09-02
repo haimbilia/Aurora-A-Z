@@ -5,8 +5,9 @@ Xbox 360 canary. The release payload remains one file, `AuroraAZ.xex`. Aurora
 Rev1655's reserved optional wrapper requests those same bytes under the
 installed filename `Plugins\NetDbgDll.xex`. No companion file or DashLaunch
 slot is used. This is still a candidate loader path: the first hardware image
-was rejected before its entry point, and the corrected retry has not yet passed
-M1.
+was rejected before its entry point, while the corrected retry now loads and
+resolves through Aurora's wrapper. Its own initialization signal remains
+unobserved, so M1 is not complete.
 
 ## Host tests
 
@@ -48,12 +49,21 @@ Failed to load game:\Plugins\NetDbgDll.xex
 Failed to load NetDbgDll
 ```
 
-No canary thread appeared. The production installation was untouched and the
-lab file was recoverably disabled. The current retry packages as a title DLL
-(`0x9` rather than `0xA`), includes Image Base Address optional header
-`0x10201 = 0x91D00000`, and omits SynthXEX's empty TLS header. Those bundled
-changes are validator-tested compatibility candidates, not a hardware-proven
-image; M1 remains open.
+The corrected retry packages as a title DLL (`0x9` rather than `0xA`), includes
+Image Base Address optional header `0x10201 = 0x91D00000`, and omits
+SynthXEX's empty TLS header. Its round-trip SHA-256 was
+`C51E3A322B07D1DE094C644E33D005D87305FFB24B587548953F1E88678C63E5`,
+and Aurora then logged:
+
+```text
+IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
+PluginManager: Module Loaded:  dll.aurora.netdbg
+```
+
+This proves the corrected container and ordinal-resolution path. No canary
+thread or `AuroraAZ` log appeared, so code execution still lacks an independent
+signal. The production installation remained untouched and the lab file was
+recoverably renamed `.disabled-c51e3a322b07`.
 
 `src/netdbg_exports.c` supplies the four ordinal-only exports required by the
 Rev1655 Network Debugger wrapper. They immediately return and ordinal 4 never

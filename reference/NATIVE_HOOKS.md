@@ -11,10 +11,10 @@ fail-closed hardware canary. The filter pipeline is not yet safe to call from a
 release build: its functions and call order are known, but the ownership,
 threading, and transient work-object ABI still need to be confirmed on hardware.
 
-Nothing in this analysis was uploaded to or changed on the console. Loading is
-handled separately by the exact key-7 compatibility contract in
+Nothing in this hook analysis was uploaded to or changed on the console.
+Loading is handled separately by the exact key-7 compatibility contract in
 `reference/NETDBG_BOOTSTRAP.md`; none of these hooks may be enabled until its
-inert hardware canary passes.
+ordinal-2 code-execution canary produces the expected resident-thread signal.
 
 ## Exact binary scope
 

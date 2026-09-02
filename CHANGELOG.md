@@ -29,8 +29,10 @@
   the image before entry, production Aurora remained untouched, and the lab
   payload was recoverably disabled.
 - Correct the retry XEX shape from module flags `0xA` to `0x9`, add Image Base
-  Address optional header `0x10201`, and omit SynthXEX's empty TLS stub. M1
-  remains pending until this bundle passes hardware.
+  Address optional header `0x10201`, and omit SynthXEX's empty TLS stub.
+- Prove that the corrected XEX loads through Aurora's key-7 wrapper and reaches
+  its module-loaded notification with ordinals 2-5 resolved. M1 remains pending
+  because neither the canary log nor its resident thread was observed.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

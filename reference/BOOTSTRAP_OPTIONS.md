@@ -158,7 +158,7 @@ through their hardcoded native wrappers.
 | Add a custom XUI `ClassOverride` | No; native class must already exist | No | No | Replaces a skin | **Reject** |
 | Add a User Lua utility/content script | No documented arbitrary XEX load API; also requires a companion script and user/script lifecycle | UI portion can vary | No | Adds script state | **Reject** |
 | Launch the XEX as a title from File Manager/Nova | Runs as a different title, not as an in-process Aurora module | Yes | Yes | Manual launch; leaves Aurora | **Not a bootstrap** |
-| Use `NetDbgDll.xex` with the exact recovered key-7 ABI | Static candidate on exact Rev1655; first hardware image rejected | Yes | **Yes** | Occupies an absent optional wrapper identity | **Selected candidate; corrected canary pending** |
+| Use `NetDbgDll.xex` with the exact recovered key-7 ABI | Yes on exact Rev1655: corrected image reaches Aurora's loaded notification | Yes | **Yes** | Occupies an absent optional wrapper identity | **Selected candidate; code-execution signal pending** |
 | Use another reserved wrapper filename blindly | Potentially | Varies | One renamed file | Replaces functionality with an unproven ABI | **Unsafe; reject** |
 | Replace or proxy `Nova.xex`/`FtpDll.xex` | Yes in principle | Yes | Not an independent named file | Replaces stock functionality | **Unsafe; reject** |
 | Patch `Aurora.xex` on disk | Yes | Yes | No | Replaces dashboard executable | **Reject** |
@@ -202,13 +202,19 @@ add a second binary.
 - **High confidence:** the key-7 logger's complete calls to ordinals 2-4 and
   lack of an ordinal-5 call are recovered from the exact image; all returns are
   ignored.
-- **Hardware-tested failure:** the first compatible-ABI XEX was rejected by
-  `XexLoadImage` before its entry point. A corrected image changes `0xA` to
-  `0x9`, adds Image Base Address header `0x10201`, and omits the empty TLS
-  stub; it is not yet hardware-tested.
+- **Hardware-tested correction:** the first compatible-ABI XEX was rejected by
+  `XexLoadImage`. The corrected `C51E3A...` image changes `0xA` to `0x9`, adds
+  Image Base Address header `0x10201`, and omits the empty TLS stub. Aurora
+  logged both `Completing DLLModule loading` and `Module Loaded` for
+  `dll.aurora.netdbg`; the combined change does not isolate which field fixed
+  the rejection.
+- **Still pending:** the corrected image produced no `AuroraAZ` log and NOVA
+  found no resident thread in its module window. The container/ordinal resolver
+  is proven, but AuroraAZ-owned code execution needs a separate signal.
 
 ## Decision gate
 
-Keep input, rendering, and filter mutation disabled until the inert
-`NetDbgDll.xex` compatibility canary passes load, observation, rollback, and
-normal-Aurora regression checks. M1 is complete only after that hardware gate.
+Keep input, rendering, and filter mutation disabled until the ordinal-2
+execution canary produces its resident-thread signal and passes rollback and
+normal-Aurora regression checks. The wrapper load and resolution portion of M1
+has passed; the code-execution observation portion remains open.

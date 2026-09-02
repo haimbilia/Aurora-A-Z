@@ -42,23 +42,26 @@ copies those same bytes under that literal filename. It requires no
 DashLaunch slot, `launch.ini` change, skin change, or companion file, and it
 is valid only when no real `NetDbgDll.xex` is installed.
 
-The first hardware loader canary did **not** pass M1. Aurora survived in the
-isolated `Hdd1:\AuroraAZLab\` copy, but its log reported exactly:
+The first hardware loader canary was rejected safely in the isolated lab:
 
 ```text
 Failed to load game:\Plugins\NetDbgDll.xex
 Failed to load NetDbgDll
 ```
 
-The canary entry point never ran. The test file was recoverably renamed in the
-lab and the production `Hdd1:\Aurora\` installation was untouched. Comparison
-with stock title DLLs found that the failed OpenXeChain image used module flags
-`0xA`, omitted optional header `0x10201` (Image Base Address), and emitted an
-empty TLS header. The corrected retry uses title-DLL flags `0x9`, emits
-`0x10201 = 0x91D00000`, and omits the empty TLS header. That correction pipeline
-is validator-tested offline but is **not yet hardware-proven**, so M1 remains
-open. See
-`reference/NETDBG_BOOTSTRAP.md` and `reference/NATIVE_LOADER.md`.
+The corrected `C51E3A...` retry uses title-DLL flags `0x9`, emits
+`0x10201 = 0x91D00000`, and omits the empty TLS header. It passed the hardware
+module-container and ordinal-resolution gate: Aurora logged exactly
+`IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg` and
+`PluginManager: Module Loaded:  dll.aurora.netdbg`, then remained usable at
+1280x720. Its FTP round-trip hash matched. However, NOVA found no thread in
+`0x91D00000-0x91DFFFFF` and the log contained no `AuroraAZ` line, so canary
+code execution is not yet independently observed. The lab file was renamed
+`.disabled-c51e3a322b07`, the lab restarted without an active target, and
+production Aurora was restored untouched. The one-file loader contract is now
+hardware-proven through Aurora's wrapper, but M1 remains open at the plugin
+code-execution observation gate. See `reference/NETDBG_BOOTSTRAP.md` and
+`reference/NATIVE_LOADER.md`.
 
 Functional test r3 is retained only as a hardware research build. It requires a
 custom skin and its attempted D-pad Down remap does not work: the coverflow
@@ -92,8 +95,9 @@ Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
 its own selector overlay above the active skin, and bridge A-button selection
 to Aurora's coverflow filtering. It must not write to `Skins`. The XEX
 toolchain is operational; Aurora's Network Debugger bootstrap must still pass
-the corrected M1 hardware canary before any hooks are linked. Failure of that
-gate is reported rather than worked around with extra installed files.
+the remaining M1 code-execution observation gate before any hooks are linked.
+Failure of that gate is reported rather than worked around with extra installed
+files.
 
 ## Project layout
 

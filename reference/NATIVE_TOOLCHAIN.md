@@ -14,8 +14,9 @@ The first CI XEX was nevertheless rejected by the retail console's
 hash validation therefore remain offline gates, not hardware acceptance. The
 current retry patches pinned SynthXEX to emit a title-DLL-shaped image with
 module flags `0x9`, explicit Image Base Address header `0x10201`, and no empty
-TLS stub. That retry is not usable until it passes M1 on the isolated console
-copy.
+TLS stub. The resulting image now passes Aurora's hardware load and ordinal
+resolution path. Toolchain/container acceptance is proven; the canary's own
+code-execution signal remains pending.
 
 Do not treat a file renamed to `.xex`, a libXenon ELF, or a repacked existing
 binary as a plugin build.
@@ -102,7 +103,13 @@ header-hash validators, then failed the hardware load described in
 `NETDBG_BOOTSTRAP.md`. The corrected pipeline additionally requires XEX module
 flags `0x9`, optional header `0x10201` equal to the PE/security image base, and
 absence of the synthetic empty TLS header. These checks prevent a known-bad
-header shape from reaching the next hardware attempt; they cannot replace it.
+header shape from reaching hardware; they cannot replace hardware observation.
+
+Corrected workflow run `33588884258` built source commit
+`43cef3a3f40fed2787c3a0246a6647a9511d4272`. Its 24,576-byte XEX has SHA-256
+`C51E3A322B07D1DE094C644E33D005D87305FFB24B587548953F1E88678C63E5`.
+The console accepted it through Aurora's wrapper and emitted both module-loaded
+events, proving the corrected container shape and ordinal-resolution path.
 
 ## Local packager proof
 
@@ -199,22 +206,21 @@ APT archive cache about 241 MiB at the time of measurement.
 
 ## Current gate
 
-The compiler and packager are operational. The remaining M1 question is
-whether the corrected XEX header shape is accepted by retail hardware through
-Aurora's literal Network Debugger wrapper. The next build must remain a no-hook
-canary and must be tested only through `Hdd1:\AuroraAZLab\`.
+The compiler, packager, corrected XEX shape, and Aurora wrapper resolution are
+operational on retail hardware. The remaining M1 question is why no
+AuroraAZ-owned log or resident thread was observed after Aurora reported the
+module loaded. The next build must remain a no-hook observation canary and must
+be tested only through `Hdd1:\AuroraAZLab\`.
 
-Before calling the artifact usable:
+Before calling the runtime usable:
 
-1. inspect it offline and require module flags `0x9`, Image Base Address header
-   `0x10201 = 0x91D00000`, no `0x20104`, and exports 2-5;
-2. upload it to the absent lab `Plugins\NetDbgDll.xex` target and require a
-   round-trip SHA-256 match;
-3. launch the lab, require the failure log lines to be absent, and prove the
-   canary thread with NOVA;
-4. disable it by recoverable rename, relaunch the lab, and prove the thread is
-   gone;
-5. leave production Aurora and `launch.ini` untouched throughout.
+1. preserve the now-passing module flags, image-base header, TLS omission, and
+   exports 2-5;
+2. add one minimal, non-recursive signal that distinguishes AuroraAZ code
+   execution from Aurora's wrapper notification;
+3. repeat the isolated upload, round-trip hash, NOVA/log observation, and
+   recoverable rollback procedure;
+4. leave production Aurora and `launch.ini` untouched throughout.
 
-Until these checks succeed, the correct statement is: a real XEX can be built,
-but the one-file Aurora bootstrap has not passed hardware acceptance.
+Until that signal is observed, the correct statement is: the one-file XEX loads
+and resolves on hardware, but AuroraAZ initialization is not yet proven.

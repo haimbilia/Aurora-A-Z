@@ -16,9 +16,9 @@ settings. The fixed uninstaller completed the cleanup described in §7.
 
 The console currently runs the production Aurora copy. Nothing we built is
 active there. The inert canary was tested only in `Hdd1:\AuroraAZLab\` and was
-then recoverably renamed to
-`Plugins\NetDbgDll.xex.disabled-b20e2f54608f`; the active lab target path is
-absent again.
+then recoverably disabled. The latest, successfully loaded file is now
+`Plugins\NetDbgDll.xex.disabled-c51e3a322b07`; the active lab target path is
+absent again and the lab was restarted in that state.
 
 ### Current console state
 
@@ -308,9 +308,10 @@ letter highlighted, responding to the D-pad.
   calls only 2-4 with ignored returns. The release archive and live console
   contain no stock `NetDbgDll.xex`, so the candidate occupies an unused
   optional path rather than replacing an installed feature. It would keep the
-  product skin agnostic and one-file with no `launch.ini` change, but the first
-  hardware canary was rejected by the Xbox image loader and M1 is still open.
-  See `reference/NETDBG_BOOTSTRAP.md`.
+  product skin agnostic and one-file with no `launch.ini` change. The corrected
+  hardware canary now passes the wrapper load and ordinal-resolution gate, but
+  M1 remains open because its own code-execution signal was not observed. See
+  `reference/NETDBG_BOOTSTRAP.md`.
 
 ### First native loader canary: failed safely
 
@@ -342,8 +343,36 @@ is omitted. Do not turn those facts into a proven cause: stock Nova loads with
 flags `0xA`, stock Aurora carries an empty TLS tuple, and Aurora wrapper mode
 `9` is not the same field as XEX module flags `0x9`. The missing Image Base
 Address header is the strongest difference because every inspected working
-Rev1655 XEX has it, but M1 remains pending until the corrected bundle passes
-the same hardware test.
+Rev1655 XEX has it. The corrected bundle has now passed that loader test, but
+the combined change does not isolate which field fixed the rejection.
+
+### Corrected loader retry: wrapper gate passed
+
+The corrected 24,576-byte XEX round-tripped through FTP with SHA-256:
+
+```text
+C51E3A322B07D1DE094C644E33D005D87305FFB24B587548953F1E88678C63E5
+```
+
+AuroraAZLab remained usable at 1280x720 and its log contained exactly these
+successful wrapper events:
+
+```text
+IDllBase::Load: Completing DLLModule loading:  dll.aurora.netdbg
+PluginManager: Module Loaded:  dll.aurora.netdbg
+```
+
+This proves that the corrected XEX enters Aurora's module container and reaches
+the post-resolution loaded notification for the wrapper that requests ordinals
+2-5. It does **not** yet prove that AuroraAZ's initialization path executed:
+the log contains no `AuroraAZ` line and NOVA reported no live thread in
+`0x91D00000-0x91DFFFFF`.
+
+After evidence capture, the file was renamed
+`NetDbgDll.xex.disabled-c51e3a322b07`, the lab restarted without an active
+target, and production Aurora was restored. Production files and `launch.ini`
+were untouched. The next gate is a minimal, independently observable entry or
+export-call signal; do not link hooks yet.
 
 The user rejected the popup-list fallback and does not want a 27-QuickView
 carousel. If the mockup is non-negotiable, the honest next step is reverse
