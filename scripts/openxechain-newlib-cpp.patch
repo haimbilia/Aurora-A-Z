@@ -1,0 +1,13 @@
+diff --git a/build-toolchain.sh b/build-toolchain.sh
+index 60e740c..f85c0ca 100755
+--- a/build-toolchain.sh
++++ b/build-toolchain.sh
+@@ -213,7 +213,7 @@ echo -e "${TOOLCHAIN_STEM}Configuring the Newlib C library... (this may take a w
+ 
+ ../newlib/newlib/configure \
+     CC="${PREFIX}/bin/clang -nostdlib -I${PWD}/xecorelibtmp/include" \
+-    CPP="${PREFIX}/bin/clang-cpp" \
++    CPP="${PREFIX}/bin/clang -E -nostdlib -I${PWD}/xecorelibtmp/include" \
+     LD="${PREFIX}/bin/lld-link" \
+     AR="${PREFIX}/bin/llvm-ar" \
+     AS="${PREFIX}/bin/llvm-as" \

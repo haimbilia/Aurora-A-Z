@@ -8,6 +8,7 @@ on:
     paths:
       - native/**
       - scripts/build-openxechain.sh
+      - scripts/openxechain-newlib-cpp.patch
       - scripts/xex_exports.py
       - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
@@ -15,6 +16,7 @@ on:
     paths:
       - native/**
       - scripts/build-openxechain.sh
+      - scripts/openxechain-newlib-cpp.patch
       - scripts/xex_exports.py
       - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
@@ -91,7 +93,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/openxechain-prefix
-          key: openxechain-linux-x64-v1-${{ env.OPENXECHAIN_BUILDSCRIPT_COMMIT }}
+          key: openxechain-linux-x64-v2-${{ env.OPENXECHAIN_BUILDSCRIPT_COMMIT }}
 
       - name: Fetch pinned OpenXeChain sources
         if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -116,6 +118,21 @@ jobs:
             "${OPENXECHAIN_SYNTHXEX_COMMIT}"
           test "$(git -C "${SOURCE_DIR}/xecorelib" rev-parse HEAD)" = \
             "${OPENXECHAIN_XECORELIB_COMMIT}"
+
+      - name: Apply pinned Newlib preprocessor fix
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        env:
+          SOURCE_DIR: ${{ runner.temp }}/openxechain-source
+        run: |
+          patch_file="${GITHUB_WORKSPACE}/scripts/openxechain-newlib-cpp.patch"
+          git -C "${SOURCE_DIR}" apply --check "${patch_file}"
+          git -C "${SOURCE_DIR}" apply "${patch_file}"
+          git -C "${SOURCE_DIR}" diff --check
+          test "$(git -C "${SOURCE_DIR}" diff --name-only)" = \
+            "build-toolchain.sh"
+          grep --fixed-strings --quiet \
+            'CPP="${PREFIX}/bin/clang -E -nostdlib -I${PWD}/xecorelibtmp/include" \' \
+            "${SOURCE_DIR}/build-toolchain.sh"
 
       - name: Build pinned OpenXeChain toolchain
         if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -144,7 +161,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/openxechain-prefix
-          key: openxechain-linux-x64-v1-${{ env.OPENXECHAIN_BUILDSCRIPT_COMMIT }}
+          key: openxechain-linux-x64-v2-${{ env.OPENXECHAIN_BUILDSCRIPT_COMMIT }}
 
       - name: Cross-build inert Xbox 360 canary
         env:
@@ -195,6 +212,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: openxechain-build-log-${{ github.run_id }}
-          path: ${{ runner.temp }}/openxechain-source/build.log
+          path: |
+            ${{ runner.temp }}/openxechain-source/build.log
+            ${{ runner.temp }}/openxechain-source/build/config.log
           if-no-files-found: ignore
           retention-days: 7
