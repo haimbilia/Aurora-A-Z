@@ -7,6 +7,7 @@
 
 #include <xecore/xboxkrnl.h>
 
+#include <auroraaz/canary.h>
 #include <auroraaz/compatibility.h>
 #include <auroraaz/image.h>
 
@@ -15,18 +16,23 @@
 #define AZ_MONITOR_INTERVAL_100NS (-1000000LL)
 #define AZ_CONTROL_WAIT_100NS (-10000LL)
 
-#define AZ_MONITOR_STOPPED 0u
-#define AZ_MONITOR_STARTING 1u
-#define AZ_MONITOR_RUNNING 2u
-#define AZ_MONITOR_STOPPING 3u
-
 typedef struct AzCanaryResult {
     AzImageResult image;
     AzCompatibilityResult compatibility;
 } AzCanaryResult;
 
-static uint32_t g_monitor_state = AZ_MONITOR_STOPPED;
+static uint32_t g_monitor_state = AZ_CANARY_MONITOR_STOPPED;
 static HANDLE g_monitor_thread = NULL;
+
+static void observe_start(
+    AzCanaryStartObserver observer,
+    const AzCanaryStartSnapshot *snapshot,
+    void *observer_context)
+{
+    if (observer != NULL) {
+        observer(snapshot, observer_context);
+    }
+}
 
 static void wait_for_monitor_control(void)
 {
@@ -78,12 +84,12 @@ static uint32_t monitor_aurora(void *context)
 
     do {
         state = __atomic_load_n(&g_monitor_state, __ATOMIC_ACQUIRE);
-        if (state == AZ_MONITOR_STARTING) {
+        if (state == AZ_CANARY_MONITOR_STARTING) {
             wait_for_monitor_control();
         }
-    } while (state == AZ_MONITOR_STARTING);
+    } while (state == AZ_CANARY_MONITOR_STARTING);
 
-    if (state == AZ_MONITOR_RUNNING) {
+    if (state == AZ_CANARY_MONITOR_RUNNING) {
         const AzCanaryResult result = validate_running_aurora();
         DbgPrint(
             "AuroraAZ: canary image=%s, compatibility=%s\n",
@@ -97,7 +103,7 @@ static uint32_t monitor_aurora(void *context)
      * worker needs only this atomic flag and a bounded kernel delay to exit.
      */
     while (__atomic_load_n(&g_monitor_state, __ATOMIC_ACQUIRE) ==
-           AZ_MONITOR_RUNNING) {
+           AZ_CANARY_MONITOR_RUNNING) {
         {
             int64_t interval = AZ_MONITOR_INTERVAL_100NS;
             (void)KeDelayExecutionThread(0u, 0u, &interval);
@@ -107,21 +113,39 @@ static uint32_t monitor_aurora(void *context)
     return 0u;
 }
 
-uint32_t AuroraAZCanaryStartMonitor(void)
+uint32_t AuroraAZCanaryGetMonitorState(void)
 {
-    uint32_t expected = AZ_MONITOR_STOPPED;
+    return __atomic_load_n(&g_monitor_state, __ATOMIC_ACQUIRE);
+}
+
+uint32_t AuroraAZCanaryStartMonitor(
+    AzCanaryStartObserver observer,
+    void *observer_context)
+{
+    uint32_t expected = AZ_CANARY_MONITOR_STOPPED;
     HANDLE monitor_thread = NULL;
     NTSTATUS status;
+    AzCanaryStartSnapshot snapshot = {
+        AZ_CANARY_START_CREATE_PENDING,
+        AZ_CANARY_MONITOR_STARTING,
+        AZ_CANARY_STATUS_NOT_ATTEMPTED,
+        AZ_CANARY_STATUS_NOT_ATTEMPTED
+    };
 
     if (!__atomic_compare_exchange_n(
             &g_monitor_state,
             &expected,
-            AZ_MONITOR_STARTING,
+            AZ_CANARY_MONITOR_STARTING,
             0,
             __ATOMIC_ACQ_REL,
             __ATOMIC_ACQUIRE)) {
+        snapshot.phase = AZ_CANARY_START_ALREADY_ACTIVE;
+        snapshot.state = expected;
+        observe_start(observer, &snapshot, observer_context);
         return 0u;
     }
+
+    observe_start(observer, &snapshot, observer_context);
 
     status = ExCreateThread(
         &monitor_thread,
@@ -131,37 +155,52 @@ uint32_t AuroraAZCanaryStartMonitor(void)
         (void *)(uintptr_t)&monitor_aurora,
         NULL,
         AZ_SYSTEM_THREAD_FLAG);
+    snapshot.ex_create_thread_status = (uint32_t)status;
     if (FAILED(status)) {
         __atomic_store_n(
             &g_monitor_state,
-            AZ_MONITOR_STOPPED,
+            AZ_CANARY_MONITOR_STOPPED,
             __ATOMIC_RELEASE);
+        snapshot.phase = AZ_CANARY_START_COMPLETE;
+        snapshot.state = AZ_CANARY_MONITOR_STOPPED;
+        observe_start(observer, &snapshot, observer_context);
         return (uint32_t)status;
     }
 
     g_monitor_thread = monitor_thread;
+    snapshot.phase = AZ_CANARY_START_CREATE_RETURNED;
+    observe_start(observer, &snapshot, observer_context);
 
     /*
-     * ExCreateThread returns the new Xbox kernel thread suspended, including
-     * when EX_CREATE_FLAG_SYSTEM is the only creation flag.  Keep the state at
-     * STARTING while it is resumed so monitor_aurora cannot observe partially
-     * published startup state.  The worker waits out STARTING above.
+     * Keep the state at STARTING while the explicit resume is attempted so
+     * monitor_aurora cannot observe partially published startup state.  The
+     * M1 record captures the resume status because kernel implementations
+     * differ in how they interpret the creation flags used here.
      */
     status = NtResumeThread(monitor_thread, NULL);
+    snapshot.phase = AZ_CANARY_START_RESUME_RETURNED;
+    snapshot.nt_resume_thread_status = (uint32_t)status;
+    observe_start(observer, &snapshot, observer_context);
     if (FAILED(status)) {
         (void)NtClose(monitor_thread);
         g_monitor_thread = NULL;
         __atomic_store_n(
             &g_monitor_state,
-            AZ_MONITOR_STOPPED,
+            AZ_CANARY_MONITOR_STOPPED,
             __ATOMIC_RELEASE);
+        snapshot.phase = AZ_CANARY_START_COMPLETE;
+        snapshot.state = AZ_CANARY_MONITOR_STOPPED;
+        observe_start(observer, &snapshot, observer_context);
         return (uint32_t)status;
     }
 
     __atomic_store_n(
         &g_monitor_state,
-        AZ_MONITOR_RUNNING,
+        AZ_CANARY_MONITOR_RUNNING,
         __ATOMIC_RELEASE);
+    snapshot.phase = AZ_CANARY_START_COMPLETE;
+    snapshot.state = AZ_CANARY_MONITOR_RUNNING;
+    observe_start(observer, &snapshot, observer_context);
     return 0u;
 }
 
@@ -171,22 +210,22 @@ void AuroraAZCanaryStopMonitor(void)
         uint32_t state =
             __atomic_load_n(&g_monitor_state, __ATOMIC_ACQUIRE);
 
-        if (state == AZ_MONITOR_STOPPED) {
+        if (state == AZ_CANARY_MONITOR_STOPPED) {
             return;
         }
-        if (state == AZ_MONITOR_STARTING ||
-            state == AZ_MONITOR_STOPPING) {
+        if (state == AZ_CANARY_MONITOR_STARTING ||
+            state == AZ_CANARY_MONITOR_STOPPING) {
             wait_for_monitor_control();
             continue;
         }
 
-        if (state == AZ_MONITOR_RUNNING) {
-            uint32_t expected = AZ_MONITOR_RUNNING;
+        if (state == AZ_CANARY_MONITOR_RUNNING) {
+            uint32_t expected = AZ_CANARY_MONITOR_RUNNING;
 
             if (__atomic_compare_exchange_n(
                     &g_monitor_state,
                     &expected,
-                    AZ_MONITOR_STOPPING,
+                    AZ_CANARY_MONITOR_STOPPING,
                     0,
                     __ATOMIC_ACQ_REL,
                     __ATOMIC_ACQUIRE)) {
@@ -212,7 +251,7 @@ void AuroraAZCanaryStopMonitor(void)
 
     __atomic_store_n(
         &g_monitor_state,
-        AZ_MONITOR_STOPPED,
+        AZ_CANARY_MONITOR_STOPPED,
         __ATOMIC_RELEASE);
 }
 

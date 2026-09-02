@@ -4,6 +4,10 @@
 
 #include <stdint.h>
 
+#include <xecore/xam.h>
+
+#include <auroraaz/canary.h>
+
 /*
  * SynthXEX v0.0.6 does not create an HvImageExportTable.  Reserve the exact
  * mapped, code-page-backed space that scripts/xex_exports.py fills after the
@@ -17,8 +21,102 @@ __attribute__((section(".xexexp"), used, aligned(4)))
 #endif
 const uint8_t g_auroraaz_xex_export_reserve[0x3Cu] = {0};
 
-uint32_t AuroraAZCanaryStartMonitor(void);
-void AuroraAZCanaryStopMonitor(void);
+typedef struct AzM1Record {
+    uint8_t magic[4];
+    uint32_t version;
+    uint32_t record_size;
+    uint32_t call_count;
+    uint32_t source_ordinal;
+    uint32_t phase;
+    uint32_t state;
+    uint32_t ex_create_thread_status;
+    uint32_t nt_resume_thread_status;
+} AzM1Record;
+
+typedef char AzM1RecordMustBe36Bytes[
+    (sizeof(AzM1Record) == 36u) ? 1 : -1];
+
+#define AZ_M1_SOURCE_CONFIGURE_ORDINAL 2u
+#define AZ_M1_SOURCE_WRITE_ORDINAL 4u
+
+static char g_m1_marker_path[] =
+    "game:\\Data\\Logs\\AuroraAZ-M1.bin";
+static uint32_t g_m1_start_claimed = 0u;
+
+static void write_m1_record(const AzM1Record *record)
+{
+    HANDLE file;
+    uint32_t bytes_written = 0u;
+
+    file = CreateFileA(
+        g_m1_marker_path,
+        GENERIC_WRITE,
+        FILE_SHARE_READ,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (file == NULL || file == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    (void)WriteFile(
+        file,
+        (void *)record,
+        (uint32_t)sizeof(*record),
+        &bytes_written,
+        NULL);
+    (void)CloseHandle(file);
+}
+
+static void update_m1_record(
+    const AzCanaryStartSnapshot *snapshot,
+    void *context)
+{
+    AzM1Record *record = (AzM1Record *)context;
+
+    record->phase = snapshot->phase;
+    record->state = snapshot->state;
+    record->ex_create_thread_status =
+        snapshot->ex_create_thread_status;
+    record->nt_resume_thread_status =
+        snapshot->nt_resume_thread_status;
+    write_m1_record(record);
+}
+
+static void try_start_m1(uint32_t source_ordinal)
+{
+    uint32_t expected = 0u;
+    AzM1Record marker = {
+        {'A', 'Z', 'M', '1'},
+        2u,
+        (uint32_t)sizeof(AzM1Record),
+        1u,
+        source_ordinal,
+        AZ_CANARY_START_ORDINAL_ENTRY,
+        AZ_CANARY_MONITOR_STOPPED,
+        AZ_CANARY_STATUS_NOT_ATTEMPTED,
+        AZ_CANARY_STATUS_NOT_ATTEMPTED
+    };
+
+    /*
+     * Ordinal 4 runs inside Aurora's logger dispatcher.  Claim startup before
+     * any file or thread API can itself produce a nested log message.
+     */
+    if (!__atomic_compare_exchange_n(
+            &g_m1_start_claimed,
+            &expected,
+            1u,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        return;
+    }
+
+    marker.state = AuroraAZCanaryGetMonitorState();
+    write_m1_record(&marker);
+    (void)AuroraAZCanaryStartMonitor(update_m1_record, &marker);
+}
 
 /*
  * Aurora Rev1655 resolves NetDbgDll ordinals 2-5 immediately after loading
@@ -39,7 +137,7 @@ uint32_t AuroraAZNetDbgConfigure(
     (void)debug_port;
     (void)mode;
 
-    (void)AuroraAZCanaryStartMonitor();
+    try_start_m1(AZ_M1_SOURCE_CONFIGURE_ORDINAL);
     return 0u;
 }
 
@@ -52,6 +150,7 @@ uint32_t AuroraAZNetDbgShutdown(void)
 uint32_t AuroraAZNetDbgWrite(const char *message)
 {
     (void)message;
+    try_start_m1(AZ_M1_SOURCE_WRITE_ORDINAL);
     return 0u;
 }
 
