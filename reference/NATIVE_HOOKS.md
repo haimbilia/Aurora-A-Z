@@ -11,9 +11,10 @@ fail-closed hardware canary. The filter pipeline is not yet safe to call from a
 release build: its functions and call order are known, but the ownership,
 threading, and transient work-object ABI still need to be confirmed on hardware.
 
-Nothing in this analysis was uploaded to or changed on the console. These
-findings also do not solve the independent loader blocker described in
-`reference/NATIVE_LOADER.md`.
+Nothing in this analysis was uploaded to or changed on the console. Loading is
+handled separately by the exact key-7 compatibility contract in
+`reference/NETDBG_BOOTSTRAP.md`; none of these hooks may be enabled until its
+inert hardware canary passes.
 
 ## Exact binary scope
 
@@ -275,9 +276,10 @@ used by this routine include:
 | --- | --- |
 | `+0x00` | integer QuickView ID |
 | `+0x04` | display-name string |
-| `+0x3C` | filter-method string |
+| `+0x3C` | sort-method string |
+| `+0x58` | raw database filter grammar |
 | `+0x74` | flags bitfield |
-| `+0xA0` | sort-method string |
+| `+0xA0` | compiled Lua filter expression |
 
 It validates the filter method through the registry (`0x82271000` then
 `0x82324C60`) before returning. Its two direct callers are `0x82357718` in
@@ -301,7 +303,9 @@ sequence:
 ```
 
 The event payload is later consumed by the active-list swap path. The event ID
-is `0x102`.
+is `0x102`. The ownership-safe A-Z path, including the active `0xD0` snapshot,
+`Work+0x68` additive vector, and scheduler flag `0x08`, is now documented in
+[`FILTER_IMPLEMENTATION.md`](FILTER_IMPLEMENTATION.md).
 
 **Strong inference:** `0x823566D8..0x823567A4` is the public apply/dispatch
 layer above that worker. With `r8 == 1`, it calls `0x82343628` on
@@ -386,10 +390,10 @@ the exact Rev1655 guard.
 | Need | Preferred site | Fallback | Status |
 | --- | --- | --- | --- |
 | observe/consume R3, Left/Right, A | `0x82801D90` wrapper detour | post-call interception around `0x822113F4` | ready for logging canary |
-| coverflow-scoped overlay | call original `0x82358A08`, draw after successful return | global pre-present point before `0x8221162C` | ready for rectangle canary |
+| coverflow-scoped overlay | mark visibility at `0x82358A08`, draw inside the final ATG Font bracket at `0x8247E390` | global pre-present point before `0x8221162C` | exact renderer ABI mapped; hardware pixel canary required |
 | locate D3D device | `*(IDirect3DDevice9**)0x82BC6BD8` while `RenderMenu` succeeds | device passed through render loop | proven for this build |
 | resolve built-in name | registry `0x82271000` / lookup `0x82324C60` | none | ready for read-only canary |
-| apply without DB writes | transient work + async `0x823566D8` + worker/event `0x102` | no release-safe fallback yet | ABI/thread probe required |
+| apply without DB writes | clone active aggregate, mutate `Work+0x68`, schedule `0x82343628` with `0x08` | no release-safe fallback | ownership ABI proven; runtime queue/interleave canary required |
 
 ## Release gates created by this analysis
 

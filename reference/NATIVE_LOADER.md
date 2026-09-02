@@ -13,9 +13,11 @@ Consequently, copying a new file to
 `Hdd1:\Aurora\Plugins\AuroraAZ.xex` cannot satisfy the M1 loading gate. The
 file will remain unopened because no Rev1655 object refers to that path.
 
-This is a loader blocker, not a compiler blocker. A correctly built system XEX
-still needs an already-running component to call `XexLoadImage` for it. The
-current one-file/no-configuration requirements provide no such bootstrap.
+This was initially a loader blocker rather than a compiler blocker. Further
+analysis proved that the unused Network Debugger wrapper (key 7, mode 9,
+policy 1) is a satisfiable one-file bootstrap on the tested console when the
+payload provides its exact ordinal ABI. Aurora loads it from
+`game:\Plugins\NetDbgDll.xex`; see `NETDBG_BOOTSTRAP.md`.
 
 ## Analysis baseline
 
@@ -165,33 +167,34 @@ The word `Plugins` in the directory name should not be interpreted as a public
 plugin SDK or filesystem discovery contract. In Rev1655 it is merely the
 location of Aurora's own known native modules.
 
-Replacing or renaming one of the known modules is not an acceptable shortcut:
-
-- it removes or corrupts a stock feature;
-- the known wrapper resolves a module-specific ordinal ABI;
-- the manager may invoke those pointers later;
-- update/recovery behavior becomes unsafe;
-- it does not provide an independent Aurora A-Z lifecycle.
+Blindly replacing or renaming a known module is not acceptable. The Network
+Debugger path is the narrow exception now backed by exact evidence: the file is
+absent from both the release package and live console, ordinals 2-5 are fully
+resolved, and every observed call is compatible with inert immediate-return
+stubs. It still occupies a reserved identity and therefore must refuse to
+install over an existing `NetDbgDll.xex`.
 
 ## Implication for the implementation plan
 
-M1 must remain failed until a separate bootstrap is proven. Do not spend time
-on input, rendering, or filtering hooks in an XEX that Aurora cannot load.
+M1 now advances to hardware-canary testing through the key-7 Network Debugger
+wrapper. Input, rendering, and filtering hooks remain disabled until that
+inert load/unload test passes.
 
 The available directions change at least one current constraint:
 
 | Direction | Technically plausible | Requirement impact |
 | --- | --- | --- |
+| Install the one release binary as `Plugins\NetDbgDll.xex` | Yes for exact Rev1655 with ordinal-only exports 2-5 | Occupies an otherwise absent optional Network Debugger identity; no skin or configuration change |
 | Configure `AuroraAZ.xex` as a DashLaunch system plugin | Yes; requires a hardware canary and title-lifecycle handling | Adds or changes boot-loader configuration, so installation is not literally one untouched-file drop |
 | Patch Aurora's manager to add an eighth wrapper/path | Yes for this exact hash, with substantial reverse engineering | Modifies Aurora code in memory or on disk; an external bootstrap is still needed for an in-memory patch |
 | Ship a patched `Aurora.xex` | Technically direct | Violates the no-on-disk-patch constraint and is unsuitable for distribution |
-| Replace `FtpDll.xex`, `NetDbgDll.xex`, or another known file | Unsafe | Conflicts with stock functionality and requires the victim module's ordinal ABI; reject |
+| Replace `FtpDll.xex` or another installed module | Unsafe | Conflicts with stock functionality and requires a larger victim ABI; reject |
 | Modify Nova or another stock module to load Aurora A-Z | Possible in principle | Modifies a second artifact and violates the one-file/no-stock-modification requirements |
 
-The cleanest next decision is whether “one release payload” may include a
-one-time installer change to a DashLaunch plugin slot. If the strict rule is
-instead “copy only `AuroraAZ.xex` into Aurora's Plugins folder and change
-nothing else,” Rev1655 cannot meet it through its native manager.
+The selected path keeps one release payload and requires no DashLaunch
+configuration. The name distinction is mandatory: the distributed artifact is
+`AuroraAZ.xex`, while the installed copy is `Plugins\NetDbgDll.xex` because
+that is the only literal path the selected wrapper loads.
 
 ## Confidence and limits
 
@@ -200,8 +203,6 @@ nothing else,” Rev1655 cannot meet it through its native manager.
   this manager flow, vtable assignments, and ordinal numbers.
 - **High confidence inference:** the four kernel-wrapper roles, based on exact
   Xbox API calling patterns.
-- **Not yet recovered:** source-level names and signatures for the
-  module-specific ordinal exports, a safe externally supplied bootstrap, and
-  the coverflow input/render/filter hook sites.
-- **Not tested here:** loading any experimental image on the console. This was
-  offline analysis only and made no console changes.
+- **Recovered for NetDbg:** ordinals 2-5, all key-7 call sites, their arguments,
+  and ignored-return behavior. Ordinal 5 is resolved but not called.
+- **Not yet tested:** loading the experimental compatible canary on the console.

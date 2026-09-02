@@ -13,25 +13,7 @@
 #define AZ_DLL_PROCESS_DETACH 0u
 #define AZ_DLL_PROCESS_ATTACH 1u
 #define AZ_SYSTEM_THREAD_FLAG 2u
-#define AZ_POLL_INTERVAL_100NS (-5000000LL)
-#define AZ_MAX_POLLS 120u
-
-typedef struct AzLoaderEntry {
-    uint8_t reserved_00[0x18];
-    uint32_t dll_base;
-    uint32_t image_base;
-    uint32_t image_size;
-    uint8_t reserved_24[0x14];
-    uint32_t full_image_size;
-    uint32_t entry_point;
-} AzLoaderEntry;
-
-typedef char AzLoaderEntryImageBaseOffset[
-    offsetof(AzLoaderEntry, image_base) == 0x1Cu ? 1 : -1];
-typedef char AzLoaderEntryFullImageSizeOffset[
-    offsetof(AzLoaderEntry, full_image_size) == 0x38u ? 1 : -1];
-typedef char AzLoaderEntryEntryPointOffset[
-    offsetof(AzLoaderEntry, entry_point) == 0x3Cu ? 1 : -1];
+#define AZ_MONITOR_INTERVAL_100NS (-1000000LL)
 
 typedef struct AzCanaryResult {
     AzImageResult image;
@@ -41,27 +23,10 @@ typedef struct AzCanaryResult {
 static uint32_t g_running = 0u;
 static HANDLE g_monitor_thread = NULL;
 
-static HMODULE find_running_aurora(void)
+static AzCanaryResult validate_running_aurora(void)
 {
-    HMODULE aurora_module = NULL;
-    NTSTATUS status;
-
-    status = XexGetModuleHandle("Aurora.exe", &aurora_module);
-    if (FAILED(status) || aurora_module == NULL) {
-        status = XexGetModuleHandle("Aurora.xex", &aurora_module);
-    }
-
-    if (FAILED(status) || aurora_module == NULL) {
-        return NULL;
-    }
-
-    return aurora_module;
-}
-
-static AzCanaryResult validate_running_aurora(HMODULE aurora_module)
-{
-    const AzLoaderEntry *loader;
-    const uint8_t *image;
+    const uint8_t *image =
+        (const uint8_t *)(uintptr_t)AZ_REV1655_IMAGE_BASE;
     const uint8_t *text = NULL;
     size_t text_size = 0u;
     AzCanaryResult result = {
@@ -69,26 +34,6 @@ static AzCanaryResult validate_running_aurora(HMODULE aurora_module)
         AZ_COMPAT_BAD_TEXT_BASE
     };
 
-    if (aurora_module == NULL ||
-        !MmIsAddressValid(aurora_module) ||
-        !MmIsAddressValid(
-            (uint8_t *)aurora_module + sizeof(AzLoaderEntry) - 1u)) {
-        return result;
-    }
-
-    loader = (const AzLoaderEntry *)aurora_module;
-    if (loader->image_base != AZ_REV1655_IMAGE_BASE ||
-        loader->entry_point != AZ_REV1655_ENTRY_POINT) {
-        result.image = AZ_IMAGE_BAD_IDENTITY;
-        return result;
-    }
-    if (loader->image_size != AZ_REV1655_NT_IMAGE_SIZE ||
-        loader->full_image_size != AZ_REV1655_FULL_IMAGE_SIZE) {
-        result.image = AZ_IMAGE_BAD_SIZE;
-        return result;
-    }
-
-    image = (const uint8_t *)(uintptr_t)loader->image_base;
     if (!MmIsAddressValid((void *)image) ||
         !MmIsAddressValid((void *)(image + 0x3FFu))) {
         return result;
@@ -96,7 +41,7 @@ static AzCanaryResult validate_running_aurora(HMODULE aurora_module)
 
     result.image = az_locate_rev1655_text(
         image,
-        (size_t)loader->image_size,
+        (size_t)AZ_REV1655_NT_IMAGE_SIZE,
         &text,
         &text_size);
     if (result.image != AZ_IMAGE_REV1655 || text == NULL ||
@@ -115,34 +60,26 @@ static AzCanaryResult validate_running_aurora(HMODULE aurora_module)
 
 static uint32_t monitor_aurora(void *context)
 {
-    uint32_t poll;
-
     (void)context;
 
-    for (poll = 0u;
-         poll < AZ_MAX_POLLS &&
-            __atomic_load_n(&g_running, __ATOMIC_ACQUIRE) != 0u;
-         ++poll) {
-        HMODULE current_module = find_running_aurora();
-
-        if (current_module != NULL) {
-            const AzCanaryResult result =
-                validate_running_aurora(current_module);
-            DbgPrint(
-                "AuroraAZ: canary found Aurora, image=%s, compatibility=%s\n",
-                az_image_result_name(result.image),
-                az_compatibility_result_name(result.compatibility));
-            break;
-        }
-
-        {
-            int64_t interval = AZ_POLL_INTERVAL_100NS;
-            (void)KeDelayExecutionThread(0u, 0u, &interval);
-        }
+    if (__atomic_load_n(&g_running, __ATOMIC_ACQUIRE) != 0u) {
+        const AzCanaryResult result = validate_running_aurora();
+        DbgPrint(
+            "AuroraAZ: canary image=%s, compatibility=%s\n",
+            az_image_result_name(result.image),
+            az_compatibility_result_name(result.compatibility));
     }
 
-    if (poll == AZ_MAX_POLLS) {
-        DbgPrint("AuroraAZ: canary timed out waiting for Aurora\n");
+    /*
+     * Stay observable to NOVA without touching the module loader.  Detach can
+     * therefore stop and join this thread while the loader lock is held: the
+     * worker needs only this atomic flag and a bounded kernel delay to exit.
+     */
+    while (__atomic_load_n(&g_running, __ATOMIC_ACQUIRE) != 0u) {
+        {
+            int64_t interval = AZ_MONITOR_INTERVAL_100NS;
+            (void)KeDelayExecutionThread(0u, 0u, &interval);
+        }
     }
 
     __atomic_store_n(&g_running, 0u, __ATOMIC_RELEASE);
@@ -179,11 +116,16 @@ int DllMain(void *module, uint32_t reason, void *reserved)
         __atomic_store_n(&g_running, 0u, __ATOMIC_RELEASE);
 
         if (g_monitor_thread != NULL) {
-            (void)NtWaitForSingleObjectEx(
-                (uint32_t)(uintptr_t)g_monitor_thread,
-                0u,
-                0u,
-                NULL);
+            NTSTATUS wait_status;
+
+            do {
+                wait_status = NtWaitForSingleObjectEx(
+                    (uint32_t)(uintptr_t)g_monitor_thread,
+                    0u,
+                    0u,
+                    NULL);
+            } while (FAILED(wait_status));
+
             (void)NtClose(g_monitor_thread);
             g_monitor_thread = NULL;
         }

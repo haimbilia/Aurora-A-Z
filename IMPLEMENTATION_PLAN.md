@@ -7,7 +7,9 @@ the mockup's centered `# A B ... Z` row over the live coverflow, enters selector
 mode with R3, accepts D-pad and left-stick Left/Right, and applies the selected
 letter with A. It must leave every skin, the on-disk `Aurora.xex`, and Aurora's
 normal RB QuickView menu unchanged. The production release and installed
-payload must be exactly one self-contained file named `AuroraAZ.xex`.
+payload must be exactly one self-contained binary. It is released as
+`AuroraAZ.xex` and installed as `Plugins\NetDbgDll.xex`, the verified literal
+path used by Aurora's optional Network Debugger wrapper.
 
 `REQUIREMENTS.md` is the product contract. `ARCHITECTURE.md` is the architecture
 decision. This file defines the order in which the risky parts must be proven.
@@ -35,7 +37,7 @@ decision. This file defines the order in which the risky parts must be proven.
 | Milestone | Deliverable | Exit gate |
 |---|---|---|
 | M0 — Safe baseline | Clean database, console/repo snapshots, performance baseline, isolated Aurora lab copy | Stock seven QuickViews restored; production Aurora still boots; backups and hashes verified |
-| M1 — Native lab | Reproducible Rev1655 analysis project and minimal `AuroraAZ.xex` | Aurora discovers it without companion state; it loads, logs, and is disabled by removing that one lab-only file |
+| M1 — Native lab | Reproducible Rev1655 analysis project and minimal export-capable `AuroraAZ.xex` | Installed as the one `Plugins\NetDbgDll.xex` file, it loads without unresolved ordinals and is disabled by removing that file |
 | M2 — Input bridge | Log-only, then selectively consuming controller hook | R3, D-pad, left stick, and A are detected on the coverflow; RB and other scenes remain unchanged |
 | M3 — Overlay spike | Runtime-owned row and highlight, with no filtering yet | Same overlay works on Default, CleanNXE, and two materially different third-party skins |
 | M4 — Filter bridge | In-memory application of `NameFilter.Other` or `NameFilter.*.<letter>` | Correct results on 2,241 titles without adding QuickViews; latency gate passes |
@@ -126,15 +128,19 @@ SDK files.
 ### Minimal module
 
 Build `AuroraAZ.xex`, with no companion manifest, asset, configuration, script,
-database record, or boot-loader edit. The canary does only four things:
+database record, or boot-loader edit. Copy the same bytes to the lab as
+`Plugins\NetDbgDll.xex` only after confirming that path is absent. The canary
+does only five things:
 
-1. verifies Aurora's executable hash;
-2. writes `AuroraAZ: loaded` to an observable log or debug channel;
+1. validates Aurora's loader identity, image layout, and exact code probes;
+2. writes a canary lifecycle/result message to the kernel debug channel;
 3. makes no hooks or database writes;
 4. cleanly unloads or becomes inert when incompatible.
+5. exports valid ordinal-only NetDbg entries 2-5; all remain inert.
 
-Test it only in `AuroraAZLab`. The M1 gate passes only if Aurora discovers and
-loads this standalone file through its own verified module mechanism. A
+Test it only in `AuroraAZLab`. The M1 gate passes only if Aurora loads this
+standalone file through the exact key-7 wrapper and NOVA independently proves
+the canary thread is alive. A
 DashLaunch plugin, `launch.ini` edit, patched executable, helper loader, or
 companion manifest may be investigated to understand the platform but is not a
 compliant fallback. If the gate fails, stop and present the evidence before
@@ -285,7 +291,7 @@ editing the skin.
 - exact executable-hash allowlist and hook-site signature checks;
 - fail-closed notification/log on unsupported Aurora builds;
 - no writes under `Skins` and no on-disk `Aurora.xex` changes;
-- one documented `AuroraAZ.xex` removal/rename path that disables the module;
+- one documented `Plugins\NetDbgDll.xex` removal/rename path that disables the module;
 - backup, recovery, uninstall, and crash-log instructions;
 - a release archive containing only `AuroraAZ.xex`, plus a published SHA-256
   checksum and documentation outside the installed payload;

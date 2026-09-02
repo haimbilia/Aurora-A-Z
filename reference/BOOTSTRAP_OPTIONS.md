@@ -4,28 +4,22 @@ Date: 2026-09-02
 
 ## Bottom line
 
-No safe bootstrap path was found that satisfies all of these constraints at
-the same time:
-
-1. the only new installed file is named `AuroraAZ.xex`;
-2. Aurora 0.7b.2 Rev1655 loads it automatically;
-3. no `launch.ini` or other configuration is changed;
-4. no stock XEX is replaced or impersonated;
-5. no skin, XZP, XUR, Lua script, QuickView, or database row is required.
-
-This is a deterministic loader limitation, not an XEX packaging limitation.
-Rev1655 never asks the kernel to load `game:\Plugins\AuroraAZ.xex`. A valid
-XEX at that path therefore remains inert.
+Rev1655 does not load `game:\Plugins\AuroraAZ.xex`, but its unused optional
+Network Debugger wrapper provides a satisfiable one-file contract. The release
+binary is `AuroraAZ.xex`; the same bytes are installed under the literal name
+Aurora requests, `game:\Plugins\NetDbgDll.xex`. Exact tracing proved its
+ordinal 2-5 ABI, and the tested release package and console contain no existing
+file at that path.
 
 `Default.xzp` and the 2015 RealModScene "Aurora plugin patches" do not provide
 a hidden bootstrap. They are UI-resource mechanisms, not native-module
 discovery mechanisms.
 
-The least invasive viable bootstrap remains a DashLaunch system-plugin slot.
-That route can keep the **release payload and new installed payload** to one
-file, `AuroraAZ.xex`, and it is skin agnostic, but installation must add one
-path to the existing DashLaunch configuration. It therefore does not satisfy
-the current "copy one file and change nothing else" rule.
+The Network Debugger path is now the selected least-invasive bootstrap. It is
+skin agnostic and needs no DashLaunch configuration. It does occupy a reserved
+optional identity, so installation must refuse to overwrite a real
+`NetDbgDll.xex`; the two features cannot coexist. The exact contract is in
+`NETDBG_BOOTSTRAP.md`.
 
 ## Evidence baseline
 
@@ -163,34 +157,32 @@ through their hardcoded native wrappers.
 | Add a custom XUI `ClassOverride` | No; native class must already exist | No | No | Replaces a skin | **Reject** |
 | Add a User Lua utility/content script | No documented arbitrary XEX load API; also requires a companion script and user/script lifecycle | UI portion can vary | No | Adds script state | **Reject** |
 | Launch the XEX as a title from File Manager/Nova | Runs as a different title, not as an in-process Aurora module | Yes | Yes | Manual launch; leaves Aurora | **Not a bootstrap** |
-| Use a reserved wrapper filename such as `CFEditDll.xex` or `NetDbgDll.xex` | Potentially, only by impersonating the expected module and ABI | Yes | One renamed file | Occupies/replaces a stock-reserved module | **Unsafe; reject** |
+| Use `NetDbgDll.xex` with the exact recovered key-7 ABI | Yes on exact Rev1655 | Yes | **Yes** | Occupies an absent optional wrapper identity | **Selected; hardware canary pending** |
+| Use another reserved wrapper filename blindly | Potentially | Varies | One renamed file | Replaces functionality with an unproven ABI | **Unsafe; reject** |
 | Replace or proxy `Nova.xex`/`FtpDll.xex` | Yes in principle | Yes | Not an independent named file | Replaces stock functionality | **Unsafe; reject** |
 | Patch `Aurora.xex` on disk | Yes | Yes | No | Replaces dashboard executable | **Reject** |
 | Patch the manager in memory | Only after some other code is already running | Yes | Depends on bootstrap | Requires an external loader | **Circular** |
 | Remote debugger/JRPC-style injection | Possible as a development technique | Yes | No deployable standalone contract | Requires an external resident service/PC | **Lab-only, not release** |
 | DashLaunch system-plugin slot | Yes; the boot loader supplies the missing load request | Yes | **Yes** | **Edits DashLaunch configuration and reboots** | **Viable if constraint is relaxed** |
 
-## Artifact-count distinction for the DashLaunch option
+## Artifact and installed-name distinction
 
-If the user approves a DashLaunch slot, the project can still legitimately
-ship one binary:
+The project ships one binary:
 
 ```text
 AuroraAZ.xex
 ```
 
-No companion font, shader, Lua file, skin, database record, or helper XEX is
-required. The necessary distinction is that one existing configuration file
-must reference that binary. In other words:
+No companion font, shader, Lua file, skin, database record, helper XEX, or
+configuration edit is required. The necessary distinction is the filename:
 
 - release payload count: **one file**;
 - newly installed payload count: **one file**;
-- installation mutations: **copy one file plus change one plugin-slot value**.
+- installed filename: **`Plugins\NetDbgDll.xex`**;
+- installation mutations: **copy one file**.
 
-That is materially different from the current documented promise of copying
-one file with no `launch.ini` change. It requires explicit approval before any
-console deployment because an incorrect boot-plugin configuration can affect
-startup and recovery.
+The installed name is required by Aurora's literal wrapper path. It does not
+add a second binary.
 
 ## Confidence and remaining uncertainty
 
@@ -206,15 +198,13 @@ startup and recovery.
 - **Not claimed:** that no memory-corruption exploit could ever be built from
   an XUI/XZP parser. Such an exploit was neither found nor sought; it would not
   meet the project's safe/supportable requirement.
-- **Not hardware-tested here:** any experimental bootstrap. This investigation
-  was read-only and made no console changes.
+- **High confidence:** the key-7 logger's complete calls to ordinals 2-4 and
+  lack of an ordinal-5 call are recovered from the exact image; all returns are
+  ignored.
+- **Not hardware-tested yet:** the compatible inert XEX canary.
 
 ## Decision gate
 
-Keep native canary, input, rendering, and filter work buildable offline, but do
-not call M1 complete and do not deploy a boot plugin until the user explicitly
-chooses one of these product contracts:
-
-1. **Strict no-configuration contract:** stop; Rev1655 cannot load the file.
-2. **One-binary contract:** permit one DashLaunch plugin-slot entry while the
-   shipped and newly installed payload remains only `AuroraAZ.xex`.
+Keep input, rendering, and filter mutation disabled until the inert
+`NetDbgDll.xex` compatibility canary passes load, observation, rollback, and
+normal-Aurora regression checks. M1 is complete only after that hardware gate.

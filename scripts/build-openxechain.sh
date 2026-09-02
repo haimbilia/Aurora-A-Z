@@ -27,24 +27,42 @@ export CPLUS_INCLUDE_PATH=""
 "${compiler}" \
     -std=c99 \
     -Oz \
+    -fno-zero-initialized-in-bss \
     -Wall -Wextra -Werror \
     -DAURORAAZ_XBOX360=1 \
     -I"${repo_root}/native/include" \
     "${repo_root}/native/src/canary.c" \
+    "${repo_root}/native/src/netdbg_exports.c" \
     "${repo_root}/native/src/compatibility.c" \
     "${repo_root}/native/src/image.c" \
     -Wl,/dll \
     -Wl,/entry:DllMain \
+    -Wl,/def:"${repo_root}/native/netdbg_exports.def" \
     -Wl,/base:0x91D00000 \
     -Wl,/filealign:128 \
     -Wl,/align:4096 \
     -Wl,/opt:ref \
+    -Xlinker "/section:.xexexp,ER" \
     -o "${output_dir}/AuroraAZ.dll"
+
+python3 "${repo_root}/scripts/xex_exports.py" prepare-pe \
+    --pe "${output_dir}/AuroraAZ.dll" \
+    --ordinals 2,3,4,5
 
 "${packager}" \
     -t sysdll \
     -i "${output_dir}/AuroraAZ.dll" \
     -o "${output_dir}/AuroraAZ.xex"
+
+python3 "${repo_root}/scripts/xex_exports.py" finalize-xex \
+    --pe "${output_dir}/AuroraAZ.dll" \
+    --xex "${output_dir}/AuroraAZ.xex" \
+    --ordinals 2,3,4,5
+
+python3 "${repo_root}/scripts/xex_exports.py" validate \
+    --pe "${output_dir}/AuroraAZ.dll" \
+    --xex "${output_dir}/AuroraAZ.xex" \
+    --ordinals 2,3,4,5
 
 (cd "${output_dir}" && sha256sum "AuroraAZ.xex" > "AuroraAZ.xex.sha256")
 echo "Built ${output_dir}/AuroraAZ.xex"

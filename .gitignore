@@ -16,6 +16,9 @@ tools/
 build/
 auto_*.obj
 deploy/
+__pycache__/
+*.py[cod]
+/*.plist
 
 # VS Code workspace state
 .vscode/*.log

@@ -1,0 +1,6 @@
+LIBRARY NetDbgDll.xex
+EXPORTS
+    AuroraAZNetDbgConfigure @2 NONAME
+    AuroraAZNetDbgShutdown  @3 NONAME
+    AuroraAZNetDbgWrite     @4 NONAME
+    AuroraAZNetDbgReserved  @5 NONAME

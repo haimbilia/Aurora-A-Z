@@ -294,13 +294,15 @@ letter highlighted, responding to the D-pad.
 - **Closest achievable:** restyle `ScnQuickView` (§5). One highlighted letter at a
   chosen Y over the live coverflow, LB/RB and the highlight driven by Aurora.
   Built and uploaded; **never tested on hardware**.
-- **The real thing:** needs native code in Aurora's process. Offline Rev1655
-  analysis has since proved that Aurora creates exactly seven hard-coded module
-  wrappers; `FtpDll.xex` and `Nova.xex` do **not** imply discovery of arbitrary
-  `Plugins/*.xex` files. See `reference/NATIVE_LOADER.md`. The cleanest loader
-  found is a DashLaunch system-plugin slot, which would require an explicit
-  product decision because the current one-file contract forbids a
-  `launch.ini` change.
+- **The real thing:** needs native code in Aurora's process. Rev1655 creates
+  exactly seven hard-coded wrappers and does not discover arbitrary
+  `Plugins/*.xex` files. The optional key-7 Network Debugger wrapper is now the
+  chosen bootstrap: it loads `Plugins\NetDbgDll.xex`, resolves ordinals 2-5,
+  and the recovered logger calls only 2-4 with ignored returns. The release
+  archive and live console contain no stock `NetDbgDll.xex`, so this occupies
+  an unused optional path rather than replacing an installed feature. It keeps
+  the product skin agnostic and one-file with no `launch.ini` change. See
+  `reference/NETDBG_BOOTSTRAP.md`.
 
 The user rejected the popup-list fallback and does not want a 27-QuickView
 carousel. If the mockup is non-negotiable, the honest next step is reverse
@@ -325,7 +327,10 @@ the only found route to launching a title programmatically.
 | `research/README.md` | The rejected skin route and what to carry forward from it |
 | `reference/RESEARCH.md` | External research notes |
 | `reference/NATIVE_LOADER.md` | Rev1655 module-loader proof and bootstrap options |
+| `reference/NETDBG_BOOTSTRAP.md` | Exact one-file NetDbg compatibility contract and test gate |
 | `reference/NATIVE_HOOKS.md` | Exact Rev1655 input, render, and filter hook map |
+| `reference/OVERLAY_IMPLEMENTATION.md` | Final-composite overlay ABI, atlas upload, and state contract |
+| `reference/FILTER_IMPLEMENTATION.md` | In-memory A-Z ownership, snapshot, and async scheduler ABI |
 | `reference/NATIVE_TOOLCHAIN.md` | Reproducible native build audit |
 
 Rule of thumb: if it is a *decision*, it belongs in `ARCHITECTURE.md` or

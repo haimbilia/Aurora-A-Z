@@ -8,11 +8,15 @@ on:
     paths:
       - native/**
       - scripts/build-openxechain.sh
+      - scripts/xex_exports.py
+      - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
   pull_request:
     paths:
       - native/**
       - scripts/build-openxechain.sh
+      - scripts/xex_exports.py
+      - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
 
 permissions:
@@ -76,6 +80,7 @@ jobs:
 
       - name: Build and test portable core
         run: |
+          python3 -m unittest scripts/tests/test_xex_exports.py
           cmake -S native -B build/native-host -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build/native-host --parallel 2
           ctest --test-dir build/native-host --output-on-failure
@@ -154,6 +159,11 @@ jobs:
           test "$(basename "${xex_files[0]}")" = "AuroraAZ.xex"
           test -s "${output_dir}/AuroraAZ.xex"
           test -s "${output_dir}/AuroraAZ.xex.sha256"
+
+          python3 scripts/xex_exports.py validate \
+            --pe "${output_dir}/AuroraAZ.dll" \
+            --xex "${output_dir}/AuroraAZ.xex" \
+            --ordinals 2,3,4,5
 
           python3 - "${output_dir}/AuroraAZ.xex" <<'PY'
           from pathlib import Path

@@ -35,11 +35,14 @@ work.
 
 Offline analysis also resolved the loader question: Rev1655 constructs exactly
 seven hard-coded module wrappers and does not enumerate arbitrary files under
-`Plugins`. Consequently, copying `AuroraAZ.xex` into that directory cannot pass
-the strict one-file discovery requirement. A DashLaunch system-plugin slot is
-the cleanest technically viable bootstrap found so far, but it requires a
-one-time `launch.ini` entry and is therefore a product decision rather than a
-silent fallback. See `reference/NATIVE_LOADER.md`.
+`Plugins`. Its optional Network Debugger wrapper does, however, provide a
+usable one-file entry contract on the tested console. The release binary remains
+`AuroraAZ.xex`; installation copies those same bytes as
+`Plugins\NetDbgDll.xex`, the filename Aurora requests. The image exports the
+required ordinals 2-5 as compatible inert functions and does not require a
+DashLaunch slot, `launch.ini` change, skin change, or companion file. This path
+is valid only when no real `NetDbgDll.xex` is installed. See
+`reference/NETDBG_BOOTSTRAP.md` and `reference/NATIVE_LOADER.md`.
 
 Functional test r3 is retained only as a hardware research build. It requires a
 custom skin and its attempted D-pad Down remap does not work: the coverflow
@@ -72,9 +75,9 @@ The production implementation must be a version-gated runtime extension for
 Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
 its own selector overlay above the active skin, and bridge A-button selection
 to Aurora's coverflow filtering. It must not write to `Skins`. Aurora's native
-module loader and the local XEX toolchain must be proven before the first
-canary is installed; failure of either gate is reported rather than worked
-around with extra installed files.
+Network Debugger wrapper and the local XEX toolchain must be proven before the
+first canary is installed; failure of either gate is reported rather than
+worked around with extra installed files.
 
 ## Project layout
 
