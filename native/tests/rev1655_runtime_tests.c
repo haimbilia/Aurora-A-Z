@@ -7,7 +7,9 @@
 
 #include <xecore/xboxkrnl.h>
 
+#include <auroraaz/compatibility.h>
 #include <auroraaz/hook_runtime.h>
+#include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
 #include <auroraaz/rev1655_hook_gate.h>
 #include <auroraaz/rev1655_runtime.h>
@@ -100,6 +102,13 @@ static uint8_t shutdown_requested;
 bool MmIsAddressValid(void *address)
 {
     const uintptr_t candidate = (uintptr_t)address;
+    const uintptr_t image_start = (uintptr_t)AZ_REV1655_IMAGE_BASE;
+    const uintptr_t image_end = image_start +
+        (uintptr_t)AZ_REV1655_NT_IMAGE_SIZE;
+    const uintptr_t header_end = image_start + (uintptr_t)0x400u;
+    const uintptr_t text_start = (uintptr_t)AZ_REV1655_TEXT_BASE;
+    const uintptr_t text_end = text_start +
+        (uintptr_t)AZ_REV1655_TEXT_SIZE;
     const uintptr_t probe_start =
         (uintptr_t)&g_auroraaz_test_xapi_thread_startup[0];
     const uintptr_t probe_end = probe_start +
@@ -113,6 +122,14 @@ bool MmIsAddressValid(void *address)
         ((candidate >= probe_start && candidate < probe_end) ||
          (candidate >= wrapper_start && candidate < wrapper_end))) {
         return false;
+    }
+
+    /* The real loaded image is sparse. Reject every address in its gaps so
+     * the runtime test proves preflight touches only the PE header and .text
+     * ranges that the exact-image gate hashes. */
+    if (candidate >= image_start && candidate < image_end) {
+        return (candidate < header_end) ||
+            (candidate >= text_start && candidate < text_end);
     }
     return address != NULL;
 }

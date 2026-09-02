@@ -7,6 +7,7 @@
 
 #include <xecore/xboxkrnl.h>
 
+#include <auroraaz/compatibility.h>
 #include <auroraaz/hook_runtime.h>
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
@@ -17,6 +18,7 @@
 #include "rev1655_thread_private.h"
 
 #define AZ_IMAGE_VALIDATION_STRIDE 0x1000u
+#define AZ_REV1655_PE_HEADER_SIZE 0x400u
 #define AZ_M2A_INPUT_TARGET_ADDRESS 0x82801D90u
 #define AZ_INPUT_SIGNATURE_SIZE 20u
 #define AZ_OBSERVATION_DRAIN_BUDGET 8u
@@ -62,7 +64,9 @@ static void wait_for_input(void)
     (void)KeDelayExecutionThread(0u, 0u, &interval);
 }
 
-/* Validate every page that the exact-image gate will read before hashing. */
+/* Validate every page that the exact-image gate will actually read. The
+ * loaded PE has intentionally unmapped gaps outside its header and .text;
+ * probing the entire SizeOfImage would reject the genuine Rev1655 image. */
 static uint8_t image_range_is_mapped(const uint8_t *image, size_t size)
 {
     size_t offset;
@@ -95,7 +99,12 @@ static AzRev1655RuntimeResult validate_input_site(
     image->size = (size_t)AZ_REV1655_NT_IMAGE_SIZE;
     image->virtual_address = AZ_REV1655_IMAGE_BASE;
 
-    if (image_range_is_mapped(image->bytes, image->size) == 0u) {
+    if (image_range_is_mapped(
+            image->bytes,
+            (size_t)AZ_REV1655_PE_HEADER_SIZE) == 0u ||
+        image_range_is_mapped(
+            (const uint8_t *)(uintptr_t)AZ_REV1655_TEXT_BASE,
+            (size_t)AZ_REV1655_TEXT_SIZE) == 0u) {
         DbgPrint("AuroraAZ: M2a image mapping rejected\n");
         return AZ_REV1655_RUNTIME_IMAGE_UNMAPPED;
     }
