@@ -23,7 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-canary-${{ github.ref }}
+  # v2 intentionally does not cancel the initial cache-warming run.
+  group: native-canary-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -121,7 +122,7 @@ jobs:
         env:
           PREFIX: ${{ runner.temp }}/openxechain-prefix
           SOURCE_DIR: ${{ runner.temp }}/openxechain-source
-          PARALLEL: 2
+          PARALLEL: 4
           BUILD_TYPE: Release
           HOST_CC: clang
           HOST_CXX: clang++
