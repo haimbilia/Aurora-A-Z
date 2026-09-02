@@ -6,7 +6,8 @@ Build a skin-agnostic runtime extension for Aurora 0.7b.2 Rev1655 that renders
 the mockup's centered `# A B ... Z` row over the live coverflow, enters selector
 mode with R3, accepts D-pad and left-stick Left/Right, and applies the selected
 letter with A. It must leave every skin, the on-disk `Aurora.xex`, and Aurora's
-normal RB QuickView menu unchanged.
+normal RB QuickView menu unchanged. The production release and installed
+payload must be exactly one self-contained file named `AuroraAZ.xex`.
 
 `REQUIREMENTS.md` is the product contract. `ARCHITECTURE.md` is the architecture
 decision. This file defines the order in which the risky parts must be proven.
@@ -18,6 +19,9 @@ decision. This file defines the order in which the risky parts must be proven.
   changes the RB menu and pays Aurora's full sort cost.
 - Reuse Aurora's built-in `NameFilter` predicates instead of shipping redundant
   Lua filters.
+- Embed all code, hook signatures, defaults, shaders, fonts, and glyph data in
+  `AuroraAZ.xex`; do not require companion assets, scripts, configuration,
+  QuickViews, database rows, or `launch.ini` changes.
 - Do not permanently patch `Aurora.xex` on disk.
 - Gate every native hook on the exact Rev1655 executable hash and expected
   instructions at the hook site.
@@ -31,13 +35,13 @@ decision. This file defines the order in which the risky parts must be proven.
 | Milestone | Deliverable | Exit gate |
 |---|---|---|
 | M0 — Safe baseline | Clean database, console/repo snapshots, performance baseline, isolated Aurora lab copy | Stock seven QuickViews restored; production Aurora still boots; backups and hashes verified |
-| M1 — Native lab | Reproducible Rev1655 analysis project and minimal loadable module | Module loads, logs, unloads, and can be disabled by removing one lab-only file |
+| M1 — Native lab | Reproducible Rev1655 analysis project and minimal `AuroraAZ.xex` | Aurora discovers it without companion state; it loads, logs, and is disabled by removing that one lab-only file |
 | M2 — Input bridge | Log-only, then selectively consuming controller hook | R3, D-pad, left stick, and A are detected on the coverflow; RB and other scenes remain unchanged |
 | M3 — Overlay spike | Runtime-owned row and highlight, with no filtering yet | Same overlay works on Default, CleanNXE, and two materially different third-party skins |
 | M4 — Filter bridge | In-memory application of `NameFilter.Other` or `NameFilter.*.<letter>` | Correct results on 2,241 titles without adding QuickViews; latency gate passes |
 | M5 — Vertical slice | Complete R3 → navigate → A state machine | All controller acceptance tests pass on one skin and the coverflow never moves while selecting |
 | M6 — Fidelity and compatibility | Mockup-quality visuals and lifecycle handling | Visual/skin/resolution matrix passes with no skin-file changes |
-| M7 — Release candidate | Reversible installer, compatibility gate, recovery guide, checksums | Cold-boot, stress, uninstall, and unsupported-version tests pass |
+| M7 — Release candidate | Single `AuroraAZ.xex`, compatibility gate, recovery guide, checksum | Cold-boot, stress, one-file removal, and unsupported-version tests pass |
 
 Failure at a gate stops dependent work. A partial success must not be labelled a
 functional release.
@@ -121,18 +125,20 @@ SDK files.
 
 ### Minimal module
 
-Build a module that does only four things:
+Build `AuroraAZ.xex`, with no companion manifest, asset, configuration, script,
+database record, or boot-loader edit. The canary does only four things:
 
 1. verifies Aurora's executable hash;
 2. writes `AuroraAZ: loaded` to an observable log or debug channel;
 3. makes no hooks or database writes;
 4. cleanly unloads or becomes inert when incompatible.
 
-Test it only in `AuroraAZLab`. If Aurora cannot load a standalone module, the
-fallback investigation is a DashLaunch plugin that activates only when the
-exact Aurora module is present. If neither route can be made one-file
-reversible, stop and revisit the skin-agnostic requirement rather than patching
-the production executable.
+Test it only in `AuroraAZLab`. The M1 gate passes only if Aurora discovers and
+loads this standalone file through its own verified module mechanism. A
+DashLaunch plugin, `launch.ini` edit, patched executable, helper loader, or
+companion manifest may be investigated to understand the platform but is not a
+compliant fallback. If the gate fails, stop and present the evidence before
+revisiting the one-file requirement.
 
 ## M2 — Input bridge
 
@@ -173,9 +179,9 @@ elements survive skin changes and can be removed cleanly.
 ### Candidate B: renderer-owned D3D9 overlay
 
 Draw after the coverflow/skin and restore every touched D3D state. Use an
-Aurora A-Z-owned glyph atlas or another redistributable font resource rather
-than a skin font. This is preferable if XUI scene/resource lookup is inseparable
-from the active skin.
+embedded Aurora A-Z-owned glyph atlas or other embedded redistributable font
+resource rather than a skin font. This is preferable if XUI scene/resource
+lookup is inseparable from the active skin.
 
 ### Overlay gate
 
@@ -279,9 +285,10 @@ editing the skin.
 - exact executable-hash allowlist and hook-site signature checks;
 - fail-closed notification/log on unsupported Aurora builds;
 - no writes under `Skins` and no on-disk `Aurora.xex` changes;
-- one documented file/config removal path that disables the module;
+- one documented `AuroraAZ.xex` removal/rename path that disables the module;
 - backup, recovery, uninstall, and crash-log instructions;
-- package manifest and SHA-256 checksums;
+- a release archive containing only `AuroraAZ.xex`, plus a published SHA-256
+  checksum and documentation outside the installed payload;
 - before/after hashes proving skins are unchanged.
 
 ## Immediate next work session

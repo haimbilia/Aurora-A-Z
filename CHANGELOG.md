@@ -19,6 +19,12 @@
 - Require the production selector to be skin agnostic: no `.xzp` or `Skins`
   changes, no dependency on skin-owned controls, and identical behavior across
   Default and third-party skins.
+- Add a host-tested C99 selector core, built-in filter mapping, mockup layout,
+  and exact Rev1655 compatibility probes.
+- Document the Rev1655 native input, render, filter, and module-loader paths.
+- Prove that Aurora does not discover arbitrary `Plugins/*.xex` files; retain
+  the strict loader gate pending an explicit bootstrap decision.
+- Add repeatable NOVA screenshot capture and hardware-baseline documentation.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

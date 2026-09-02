@@ -19,6 +19,26 @@ functional unless it satisfies every acceptance criterion below on Aurora
 - Version-specific native integration may target Aurora 0.7b.2 Rev1655, but
   skin-specific integration is not permitted.
 
+## Single-file distribution
+
+- The production release and installed payload consist of exactly one file:
+  `AuroraAZ.xex`.
+- Executable code, compatibility signatures, default settings, shaders, and
+  every font or glyph resource used by the selector must be embedded in that
+  file.
+- Installation must require only copying `AuroraAZ.xex` to an independently
+  verified Aurora native-module discovery location and restarting Aurora.
+- Disabling or uninstalling must require only removing or renaming
+  `AuroraAZ.xex` and restarting Aurora.
+- The production plugin must not require a companion script, configuration
+  file, asset directory, database row, QuickView, patched skin, patched
+  `Aurora.xex`, or `launch.ini` change.
+- Runtime filtering must remain in memory. It must not persist A-Z QuickViews
+  or other Aurora A-Z-owned records in the user's database.
+- If Aurora cannot discover and load an independent `AuroraAZ.xex` under this
+  contract, development stops at the native-loader gate; another installation
+  model is a product decision, not an implicit fallback.
+
 ## User-visible behavior
 
 - The coverflow displays one centered row containing `# A B ... Z` above the
@@ -75,6 +95,9 @@ specified yet. They must not be assumed by an implementation until documented.
    third-party skin. The controls and filtering behavior remain identical.
 9. Compare the selected skins before and after installation and removal. No
    `.xzp` file or file under `Skins` has changed.
+10. Install and remove the production build using only `AuroraAZ.xex`. Verify
+    that no companion files, database records, or boot-configuration edits are
+    created or required.
 
 ## Explicitly non-compliant implementations
 

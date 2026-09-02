@@ -6,6 +6,11 @@ above the game title, with controller navigation and selection directly from
 the main coverflow. It must work without modifying or replacing the selected
 Aurora skin.
 
+The production artifact is strictly one self-contained file,
+`AuroraAZ.xex`. All runtime resources are embedded. Installation must not
+require Lua scripts, QuickViews, database records, loose assets, skin files,
+changes to `Aurora.xex`, or changes to `launch.ini`.
+
 ## Required interaction
 
 The normative controller and filtering behavior is defined in
@@ -20,90 +25,84 @@ in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
 
 ## Current status
 
-There is no compliant functional release yet. The current source proves two
-pieces independently: a legacy skin prototype can draw the centered alphabet
-row, and the Lua backend can expose initial-character filters as QuickViews. It
-does not yet provide a skin-independent overlay, focus, in-row navigation,
-highlighting, or direct A-to-filter behavior.
+There is no compliant functional release yet. The native C99 selector core is
+now implemented and host-tested: it models the R3/Left/Right/A state machine,
+maps `#` and `A` through `Z` to Aurora's built-in name filters, carries the
+mockup's measured 1280x720 layout, and rejects binaries that do not match the
+exact Rev1655 code probes. The first Xbox build is an inert compatibility
+canary; input hooks, overlay drawing, and filter mutation remain gated hardware
+work.
+
+Offline analysis also resolved the loader question: Rev1655 constructs exactly
+seven hard-coded module wrappers and does not enumerate arbitrary files under
+`Plugins`. Consequently, copying `AuroraAZ.xex` into that directory cannot pass
+the strict one-file discovery requirement. A DashLaunch system-plugin slot is
+the cleanest technically viable bootstrap found so far, but it requires a
+one-time `launch.ini` entry and is therefore a product decision rather than a
+silent fallback. See `reference/NATIVE_LOADER.md`.
 
 Functional test r3 is retained only as a hardware research build. It requires a
 custom skin and its attempted D-pad Down remap does not work: the coverflow
 consumes Down, while RB opens Aurora's separate QuickView menu. That build is
 not the requested selector and is not part of the target architecture.
 
-The earlier filter-only v0.1.0 prerelease is also deprecated because Aurora
+The earlier filter-only v0.1.0 prerelease is deprecated because Aurora
 already contains a stock name filter and it does not implement the project
 interaction.
 
-## Rebuild legacy functional test r3
+The r3/r4 skin builders were deleted on 2026-09-02. They patched `Aurora_Main`
+and repurposed the `QuickViewRB` control, which **broke the RB button on
+hardware**, and rule 1 of `IMPLEMENTATION_PLAN.md` forbids shipping a patched
+skin. Their findings survive in `HANDOFF.md`; the one piece worth keeping is in
+`research/`.
 
-Build the skin:
+## Where to start
 
-```powershell
-.\scripts\build-functional-test.ps1
-```
+Read in this order:
 
-The generated research package is:
-
-```text
-build\Aurora-A-Z-functional-test-r3.zip
-```
-
-Extract it and merge the contents of its `Aurora-A-Z` folder into:
-
-```text
-Hdd1:\Aurora\
-```
-
-For backend or skin research only:
-
-1. Open **Back/System → Scripts → Utility → Aurora A-Z Installer**.
-2. Choose **Install / Update** and restart Aurora.
-3. Open **B → View Settings → Skin** and select
-   **Aurora A-Z Functional Test r3**.
-4. Do not treat the Down-to-select behavior as implemented; it is a known
-   failed experiment documented above.
-
-Do not overwrite or rename `Default.xzp`.
-
-To roll back, run the installer again and choose **Uninstall**, then select the
-Default skin. The uninstall transaction removes only Aurora A-Z QuickViews and
-restores the previous QuickView order and default.
+1. [`REQUIREMENTS.md`](REQUIREMENTS.md) — what the selector must do
+2. [`ARCHITECTURE.md`](ARCHITECTURE.md) — why it must be a native runtime extension
+3. [`HANDOFF.md`](HANDOFF.md) — **verified facts about Aurora**, measured or dumped from
+   the console. Read before designing anything; most of it was expensive to learn
+4. [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) — the gated roadmap
 
 ## Target development workflow
 
 The production implementation must be a version-gated runtime extension for
 Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
 its own selector overlay above the active skin, and bridge A-button selection
-to Aurora's coverflow filtering. It must not write to `Skins`.
+to Aurora's coverflow filtering. It must not write to `Skins`. Aurora's native
+module loader and the local XEX toolchain must be proven before the first
+canary is installed; failure of either gate is reported rather than worked
+around with extra installed files.
 
-## Legacy skin research workflow
-
-The local build uses:
-
-- Aurora 0.7b.2's stock `Default.xzp`
-- [XUIHelper](https://github.com/SGCSam/XUIHelper) for XUR/XUI conversion
-- XboxUnity's `AuroraElements.xml` extension definitions
-- `scripts/xzp.ps1` for open, reproducible XZP extraction and packaging
-
-The required local-only inputs and tools are excluded from Git. The editable
-selector is applied by `source/skin/patches/add-alphabet-row.ps1`, so the
-project does not need to commit Aurora's stock skin assets.
-
-Project layout:
+## Project layout
 
 ```text
-source/skin/patches/     Source-controlled changes to Aurora_Main
-scripts/xzp.ps1          XZP build/extract utility
-scripts/build-visual-test.ps1
-scripts/build-functional-test.ps1
-source/content/          Initial-character filter backend
-source/utility/          Reversible QuickView installer
-original/Default.xzp     Local stock skin; ignored by Git
-original/extracted/      Local extracted stock skin; ignored by Git
-tools/                   Local converters and extension definitions
-build/                   Generated test skins
+REQUIREMENTS.md          Product contract
+ARCHITECTURE.md          Architecture decision
+IMPLEMENTATION_PLAN.md   Gated roadmap, M0-M7
+HANDOFF.md               Verified facts about Aurora, with evidence
+
+scripts/xzp.ps1          XZP extract/build utility
+scripts/build-openxechain.sh
+                         Native Xbox cross-build entry point
+scripts/capture-nova.ps1 Repeatable hardware screenshots through NOVA
+native/                  Host-tested selector core and version-gated canary
+source/utility/          On-console Lua: QuickView installer, API dump
+research/                Rejected skin route, kept as evidence only
+
+original/                Local Aurora binaries and skins; ignored by Git
+tools/                   XUIHelper, jeff.exe, Aurora dev docs; ignored by Git
+reference/               External research notes
 ```
+
+Local-only inputs and tools are excluded from Git, so the project never commits
+Aurora's binaries or stock skin assets.
+
+Third-party tooling in use: [XUIHelper](https://github.com/SGCSam/XUIHelper) for
+XUR/XUI conversion, XboxUnity's `AuroraElements.xml` extension definitions, and
+`tools/jeff.exe` for XEX metadata and PowerPC image extraction.
 
 ## Safety
 

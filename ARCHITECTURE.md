@@ -4,13 +4,14 @@
 
 Aurora A-Z will be implemented as a runtime extension for Aurora 0.7b.2
 Rev1655, not as an Aurora skin. Users keep their existing stock or third-party
-skin unchanged.
+skin unchanged. The extension is distributed and installed as one
+self-contained binary named `AuroraAZ.xex`.
 
 Implementation must proceed through the safety and feasibility gates in
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). In particular, rendering
 and filter work do not begin until a reversible native loader is proven.
 
-## Required components
+## Required components embedded in `AuroraAZ.xex`
 
 1. **Compatibility gate** verifies the running Aurora revision before enabling
    native integration.
@@ -19,11 +20,12 @@ and filter work do not begin until a reversible native loader is proven.
 3. **Selector state** tracks the inactive/active state and the current `#`–`Z`
    index independently of the coverflow.
 4. **Runtime overlay** draws or injects the alphabet row and highlight above
-   the active skin using resources owned by Aurora A-Z.
+   the active skin using resources embedded in Aurora A-Z.
 5. **Filter bridge** applies the selected initial-character predicate to the
    visible coverflow and then returns input ownership to Aurora.
-6. **Reversible installer** deploys only Aurora A-Z-owned files and database
-   records and can remove them without touching skins.
+6. **Single-file lifecycle** initializes from Aurora's verified native-module
+   discovery path and becomes fully disabled when `AuroraAZ.xex` is removed or
+   renamed and Aurora is restarted.
 
 ## Hard constraints
 
@@ -32,6 +34,9 @@ and filter work do not begin until a reversible native loader is proven.
 - Do not rely on element IDs or resources defined by the selected skin.
 - Do not replace or restyle Aurora's RB QuickView menu.
 - Do not permanently modify the on-disk `Aurora.xex`.
+- Do not require any installed artifact other than `AuroraAZ.xex`; this
+  includes scripts, configuration files, loose assets, database records,
+  QuickViews, or boot-loader configuration changes.
 - Reject unsupported Aurora revisions instead of applying uncertain hooks.
 
 ## Legacy work
@@ -46,4 +51,5 @@ the basis of a release claim.
 - Which internal function changes the active filter and refreshes the list?
 - Is top-level XUI scene injection stable across skin changes, or is a small
   renderer-owned overlay safer?
-- Which module-loading mechanism provides the safest reversible deployment?
+- Does Rev1655's module-loading mechanism discover an independent XEX from a
+  known directory without a manifest, database entry, or boot-loader change?
