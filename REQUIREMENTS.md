@@ -23,7 +23,9 @@ functional unless it satisfies every acceptance criterion below on Aurora
 
 - The production release consists of exactly one file, `AuroraAZ.xex`. The
   installed payload is still exactly one file, but the same bytes are named
-  `Plugins\NetDbgDll.xex` because that is Rev1655's verified loader path.
+  `Plugins\NetDbgDll.xex` because that is the literal path requested by
+  Rev1655's selected optional wrapper. This becomes a supported installation
+  path only after the M1 hardware loader gate passes.
 - Executable code, compatibility signatures, default settings, shaders, and
   every font or glyph resource used by the selector must be embedded in that
   file.

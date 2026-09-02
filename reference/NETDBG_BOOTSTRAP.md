@@ -2,11 +2,11 @@
 
 Date: 2026-09-02
 
-## Decision
+## Candidate decision
 
-Aurora A-Z uses Aurora 0.7b.2 Rev1655's optional Network Debugger wrapper as
-its one-file bootstrap. The release artifact is `AuroraAZ.xex`; installation
-copies the same binary bytes to:
+Aurora A-Z is testing Aurora 0.7b.2 Rev1655's optional Network Debugger wrapper
+as its one-file bootstrap. The proposed release artifact is `AuroraAZ.xex`;
+installation would copy the same binary bytes to:
 
 ```text
 Hdd1:\Aurora\Plugins\NetDbgDll.xex
@@ -18,7 +18,8 @@ the target file is absent. An installer must never overwrite an existing
 Network Debugger module.
 
 This design intentionally supplies Aurora's expected NetDbg ABI. It does not
-claim that Rev1655 has a generic third-party plugin interface.
+claim that Rev1655 has a generic third-party plugin interface, nor that the
+candidate bootstrap is hardware-proven before M1 passes.
 
 ## Exact tested image
 
@@ -64,9 +65,42 @@ SynthXEX hashes the image, sets the absolute pointer at security-info offset
 page hash chain, and header hash. A PE-only export success cannot reach the
 hardware gate.
 
-## First hardware gate
+## First hardware result
 
-The first image remains an inert canary:
+The first canary did not pass M1. It was uploaded only to
+`Hdd1:\AuroraAZLab\Plugins\NetDbgDll.xex`; a fresh download matched the local
+SHA-256
+`B20E2F54608FE071BACBFE2FF8221158A72D7577D51D5B82E297CE35E59699BA`.
+The lab Aurora survived, but NOVA found no live thread in the reserved module
+window and `debug.log` reported exactly:
+
+```text
+Failed to load game:\Plugins\NetDbgDll.xex
+Failed to load NetDbgDll
+```
+
+The Xbox loader rejected the image before its entry point or export-resolution
+contract could run. The production `Hdd1:\Aurora\` copy and its plugin
+directory were untouched; `launch.ini` remained on the production title. The
+lab file was recoverably renamed to
+`NetDbgDll.xex.disabled-b20e2f54608f`, leaving the active target absent.
+
+Comparison with working Rev1655 XEX images identified a corrected retry shape:
+
+| Field | Failed canary | Corrected retry | Evidence boundary |
+| --- | --- | --- | --- |
+| Module flags | `0xA` (`sysdll`) | `0x9` (`titledll`) | Matches working `FtpDll.xex`; working Nova also uses `0xA`, so this is not a proven cause |
+| Image-base optional header | absent | `0x10201 = 0x91D00000` | Present in every inspected working Rev1655 XEX; strongest isolated difference, still not hardware proof |
+| TLS optional header | `0x20104`, empty SynthXEX stub | omitted | Working `FtpDll.xex` and Nova DLLs omit it; title `Aurora.xex` carries the same empty tuple, so scope rather than tuple contents is the candidate distinction |
+
+Aurora wrapper mode `9` and XEX module flags `0x9` are unrelated fields; no
+source establishes a numeric mapping between them. The retry changes all three
+XEX fields together; the correction pipeline is validator-tested, but M1
+remains pending until the resulting image loads on hardware.
+
+## Corrected hardware gate
+
+The retry remains an inert canary:
 
 1. Verify the console still runs the exact Aurora build, normal boot points to
    the known-good `Hdd1:\Aurora\Aurora.xex`, and the target path is absent in
@@ -99,7 +133,7 @@ pwsh -File scripts/verify-nova-canary.ps1 `
   -ExpectedTitlePathSuffix '\AuroraAZLab\Aurora.xex'
 ```
 
-No input hook, renderer, or filter mutation is linked into this first image.
+No input hook, renderer, or filter mutation is linked into this retry image.
 Failure at any gate stops the native rollout.
 
 ## Compatibility boundary

@@ -4,9 +4,18 @@ Date: 2026-09-02
 
 ## Result
 
-A real `AuroraAZ.xex` can be produced as one file, but a complete compiler is
-not available on this workstation yet. The XEX packager stage is installed and
-verified. The remaining blocker is the PowerPC/Xbox-360 PE compiler and linker.
+A complete pinned OpenXeChain toolchain now builds in GitHub Actions and
+produces a real one-file `AuroraAZ.xex`. Workflow run `33583339065` completed
+the compiler, linker, SynthXEX packaging, strict export/header validation, and
+artifact upload. Toolchain compilation is no longer the M1 blocker.
+
+The first CI XEX was nevertheless rejected by the retail console's
+`XexLoadImage` before its entry point. Successful compilation and internal XEX
+hash validation therefore remain offline gates, not hardware acceptance. The
+current retry patches pinned SynthXEX to emit a title-DLL-shaped image with
+module flags `0x9`, explicit Image Base Address header `0x10201`, and no empty
+TLS stub. That retry is not usable until it passes M1 on the isolated console
+copy.
 
 Do not treat a file renamed to `.xex`, a libXenon ELF, or a repacked existing
 binary as a plugin build.
@@ -27,10 +36,11 @@ The workstation was checked for the normal Xbox 360 XDK integration:
   `C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe`, but it is not
   useful without the XDK's Xbox 360 platform files and libraries.
 
-Therefore an XDK project cannot currently be compiled here. If a legitimately
-licensed XDK is supplied later, this remains the conservative production
-route. Primary project references confirm that a DashLaunch-style module is a
-dynamic/system XEX with a DLL entry point and XEX image metadata:
+Therefore an XDK project cannot currently be compiled on this workstation. CI
+uses the clean-room OpenXeChain route below instead. If a legitimately licensed
+XDK is supplied later, it remains a useful comparison route. Primary project
+references confirm that a DashLaunch-style module is a dynamic/system XEX with
+a DLL entry point and XEX image metadata:
 
 - <https://github.com/ClementDreptin/ModdingResources/blob/main/GettingStarted/getting-started.md>
 - <https://github.com/xeghosted/xbox360-xex-vs2026-tutorial/blob/main/README.md>
@@ -54,8 +64,10 @@ The audited buildscript commit is
 
 Evidence relevant to AuroraAZ:
 
-- SynthXEX `v0.0.6` accepts `-t sysdll`, the required container class for a
-  system/DashLaunch-style plugin.
+- SynthXEX `v0.0.6` accepts both `-t sysdll` (module flags `0xA`) and
+  `-t titledll` (module flags `0x9`). The first AuroraAZ attempt used
+  `sysdll`; the corrected loader retry uses `titledll`. This is a compatibility
+  candidate, not a claim that Aurora wrapper mode `9` maps to XEX flags `0x9`.
 - xecorelib supplies ordinal import libraries for `xboxkrnl.exe` and
   `xam.xex`; its definitions include `DbgPrint`, module-loading APIs,
   `XamInputGetState`, and `XamInputGetKeystrokeEx`.
@@ -68,6 +80,29 @@ Primary sources:
 - <https://github.com/OpenXeChain/buildscript>
 - <https://github.com/OpenXeChain/SynthXEX>
 - <https://github.com/OpenXeChain/xecorelib>
+
+## Reproducible CI build
+
+The workflow pins the buildscript and component commits above, applies the
+repository's Newlib preprocessor correction, builds the full cross-toolchain,
+and caches it for later canary retries. The successful first run used source
+commit `f9258376a5c5ad8c8ee3182b1e982b4e34778c97` and produced:
+
+| Item | Value |
+| --- | --- |
+| Workflow run | `33583339065` |
+| Artifact ID | `9830578978` |
+| Artifact ZIP SHA-256 | `15B580178F0857571B23035E0852C2660D83FFEBB81DEA2273ED8C0542890BCC` |
+| First XEX SHA-256 | `B20E2F54608FE071BACBFE2FF8221158A72D7577D51D5B82E297CE35E59699BA` |
+| Image base / entry point | `0x91D00000` / `0x91D01000` |
+| Exports | ordinal-only 2, 3, 4, 5 |
+
+That XEX passed the repository's export table, code-page, page-hash-chain, and
+header-hash validators, then failed the hardware load described in
+`NETDBG_BOOTSTRAP.md`. The corrected pipeline additionally requires XEX module
+flags `0x9`, optional header `0x10201` equal to the PE/security image base, and
+absence of the synthetic empty TLS header. These checks prevent a known-bad
+header shape from reaching the next hardware attempt; they cannot replace it.
 
 ## Local packager proof
 
@@ -162,35 +197,24 @@ Installing the WSL prerequisites changed the WSL root filesystem from roughly
 1.5 GiB used to 3.23 GB used. `/usr/lib/llvm-18` occupies about 657 MiB and the
 APT archive cache about 241 MiB at the time of measurement.
 
-## What unblocks a real canary
+## Current gate
 
-Use one of these two evidence-backed paths:
+The compiler and packager are operational. The remaining M1 question is
+whether the corrected XEX header shape is accepted by retail hardware through
+Aurora's literal Network Debugger wrapper. The next build must remain a no-hook
+canary and must be tested only through `Hdd1:\AuroraAZLab\`.
 
-1. Install a legitimately obtained Xbox 360 XDK and its legacy Xbox 360
-   MSBuild platform integration, then build a dynamic/system XEX.
-2. Give the OpenXeChain build at least 20-25 GiB of safe free workspace (or a
-   disposable CI runner), build the pinned toolchain, and hardware-test its
-   `sysdll` output before writing any hooks.
+Before calling the artifact usable:
 
-The OpenXeChain source build starts with:
+1. inspect it offline and require module flags `0x9`, Image Base Address header
+   `0x10201 = 0x91D00000`, no `0x20104`, and exports 2-5;
+2. upload it to the absent lab `Plugins\NetDbgDll.xex` target and require a
+   round-trip SHA-256 match;
+3. launch the lab, require the failure log lines to be absent, and prove the
+   canary thread with NOVA;
+4. disable it by recoverable rename, relaunch the lab, and prove the thread is
+   gone;
+5. leave production Aurora and `launch.ini` untouched throughout.
 
-```bash
-git clone https://github.com/OpenXeChain/buildscript.git openxechain-build
-cd openxechain-build
-
-# The repository records SSH submodule URLs. Override them on machines without
-# GitHub SSH credentials.
-git config submodule.llvm.url https://github.com/OpenXeChain/llvm.git
-git config submodule.newlib.url https://github.com/OpenXeChain/newlib.git
-git config submodule.synthxex.url https://github.com/OpenXeChain/SynthXEX.git
-git config submodule.xecorelib.url https://github.com/OpenXeChain/xecorelib.git
-git submodule update --init --recursive
-
-PREFIX=/opt/openxechain PARALLEL=2 ./build-toolchain.sh
-```
-
-Before calling the result usable, build a no-hook canary that only writes an
-`AuroraAZ` load/unload line through `DbgPrint`, wrap it with
-`synthxex -t sysdll`, inspect it with `tools/jeff.exe xex info`, and load it
-only through the isolated hardware test path. Until that succeeds, the answer
-to “can a real canary be built here?” is **not yet**.
+Until these checks succeed, the correct statement is: a real XEX can be built,
+but the one-file Aurora bootstrap has not passed hardware acceptance.

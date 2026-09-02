@@ -23,8 +23,14 @@
   and exact Rev1655 compatibility probes.
 - Document the Rev1655 native input, render, filter, and module-loader paths.
 - Prove that Aurora does not discover arbitrary `Plugins/*.xex` files; retain
-  the strict loader gate pending an explicit bootstrap decision.
+  the strict loader gate around the key-7 Network Debugger candidate.
 - Add repeatable NOVA screenshot capture and hardware-baseline documentation.
+- Record the first isolated hardware canary failure: `XexLoadImage` rejected
+  the image before entry, production Aurora remained untouched, and the lab
+  payload was recoverably disabled.
+- Correct the retry XEX shape from module flags `0xA` to `0x9`, add Image Base
+  Address optional header `0x10201`, and omit SynthXEX's empty TLS stub. M1
+  remains pending until this bundle passes hardware.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

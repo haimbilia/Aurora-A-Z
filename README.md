@@ -29,19 +29,35 @@ There is no compliant functional release yet. The native C99 selector core is
 now implemented and host-tested: it models the R3/Left/Right/A state machine,
 maps `#` and `A` through `Z` to Aurora's built-in name filters, carries the
 mockup's measured 1280x720 layout, and rejects binaries that do not match the
-exact Rev1655 code probes. The first Xbox build is an inert compatibility
+exact Rev1655 code probes. The Xbox build is still an inert compatibility
 canary; input hooks, overlay drawing, and filter mutation remain gated hardware
 work.
 
-Offline analysis also resolved the loader question: Rev1655 constructs exactly
-seven hard-coded module wrappers and does not enumerate arbitrary files under
-`Plugins`. Its optional Network Debugger wrapper does, however, provide a
-usable one-file entry contract on the tested console. The release binary remains
-`AuroraAZ.xex`; installation copies those same bytes as
-`Plugins\NetDbgDll.xex`, the filename Aurora requests. The image exports the
-required ordinals 2-5 as compatible inert functions and does not require a
-DashLaunch slot, `launch.ini` change, skin change, or companion file. This path
-is valid only when no real `NetDbgDll.xex` is installed. See
+Offline analysis resolved the static loader contract: Rev1655 constructs
+exactly seven hard-coded module wrappers and does not enumerate arbitrary
+files under `Plugins`. Its optional Network Debugger wrapper requests the
+literal `game:\Plugins\NetDbgDll.xex` path and resolves ordinals 2-5. The
+release binary remains `AuroraAZ.xex`; the candidate one-file installation
+copies those same bytes under that literal filename. It requires no
+DashLaunch slot, `launch.ini` change, skin change, or companion file, and it
+is valid only when no real `NetDbgDll.xex` is installed.
+
+The first hardware loader canary did **not** pass M1. Aurora survived in the
+isolated `Hdd1:\AuroraAZLab\` copy, but its log reported exactly:
+
+```text
+Failed to load game:\Plugins\NetDbgDll.xex
+Failed to load NetDbgDll
+```
+
+The canary entry point never ran. The test file was recoverably renamed in the
+lab and the production `Hdd1:\Aurora\` installation was untouched. Comparison
+with stock title DLLs found that the failed OpenXeChain image used module flags
+`0xA`, omitted optional header `0x10201` (Image Base Address), and emitted an
+empty TLS header. The corrected retry uses title-DLL flags `0x9`, emits
+`0x10201 = 0x91D00000`, and omits the empty TLS header. That correction pipeline
+is validator-tested offline but is **not yet hardware-proven**, so M1 remains
+open. See
 `reference/NETDBG_BOOTSTRAP.md` and `reference/NATIVE_LOADER.md`.
 
 Functional test r3 is retained only as a hardware research build. It requires a
@@ -74,10 +90,10 @@ Read in this order:
 The production implementation must be a version-gated runtime extension for
 Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
 its own selector overlay above the active skin, and bridge A-button selection
-to Aurora's coverflow filtering. It must not write to `Skins`. Aurora's native
-Network Debugger wrapper and the local XEX toolchain must be proven before the
-first canary is installed; failure of either gate is reported rather than
-worked around with extra installed files.
+to Aurora's coverflow filtering. It must not write to `Skins`. The XEX
+toolchain is operational; Aurora's Network Debugger bootstrap must still pass
+the corrected M1 hardware canary before any hooks are linked. Failure of that
+gate is reported rather than worked around with extra installed files.
 
 ## Project layout
 

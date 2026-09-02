@@ -5,21 +5,22 @@ Date: 2026-09-02
 ## Bottom line
 
 Rev1655 does not load `game:\Plugins\AuroraAZ.xex`, but its unused optional
-Network Debugger wrapper provides a satisfiable one-file contract. The release
-binary is `AuroraAZ.xex`; the same bytes are installed under the literal name
-Aurora requests, `game:\Plugins\NetDbgDll.xex`. Exact tracing proved its
-ordinal 2-5 ABI, and the tested release package and console contain no existing
-file at that path.
+Network Debugger wrapper provides a complete static candidate contract. The
+release binary is `AuroraAZ.xex`; the same bytes would be installed under the
+literal name Aurora requests, `game:\Plugins\NetDbgDll.xex`. Exact tracing
+proved its ordinal 2-5 ABI, and the tested release package and console contain
+no existing file at that path. The first hardware XEX was rejected by
+`XexLoadImage`, so this is not yet a proven one-file bootstrap.
 
 `Default.xzp` and the 2015 RealModScene "Aurora plugin patches" do not provide
 a hidden bootstrap. They are UI-resource mechanisms, not native-module
 discovery mechanisms.
 
-The Network Debugger path is now the selected least-invasive bootstrap. It is
-skin agnostic and needs no DashLaunch configuration. It does occupy a reserved
-optional identity, so installation must refuse to overwrite a real
-`NetDbgDll.xex`; the two features cannot coexist. The exact contract is in
-`NETDBG_BOOTSTRAP.md`.
+The Network Debugger path remains the selected least-invasive bootstrap
+candidate. It is skin agnostic and needs no DashLaunch configuration. It does
+occupy a reserved optional identity, so installation must refuse to overwrite
+a real `NetDbgDll.xex`; the two features cannot coexist. The exact contract,
+failed canary evidence, and corrected retry are in `NETDBG_BOOTSTRAP.md`.
 
 ## Evidence baseline
 
@@ -157,7 +158,7 @@ through their hardcoded native wrappers.
 | Add a custom XUI `ClassOverride` | No; native class must already exist | No | No | Replaces a skin | **Reject** |
 | Add a User Lua utility/content script | No documented arbitrary XEX load API; also requires a companion script and user/script lifecycle | UI portion can vary | No | Adds script state | **Reject** |
 | Launch the XEX as a title from File Manager/Nova | Runs as a different title, not as an in-process Aurora module | Yes | Yes | Manual launch; leaves Aurora | **Not a bootstrap** |
-| Use `NetDbgDll.xex` with the exact recovered key-7 ABI | Yes on exact Rev1655 | Yes | **Yes** | Occupies an absent optional wrapper identity | **Selected; hardware canary pending** |
+| Use `NetDbgDll.xex` with the exact recovered key-7 ABI | Static candidate on exact Rev1655; first hardware image rejected | Yes | **Yes** | Occupies an absent optional wrapper identity | **Selected candidate; corrected canary pending** |
 | Use another reserved wrapper filename blindly | Potentially | Varies | One renamed file | Replaces functionality with an unproven ABI | **Unsafe; reject** |
 | Replace or proxy `Nova.xex`/`FtpDll.xex` | Yes in principle | Yes | Not an independent named file | Replaces stock functionality | **Unsafe; reject** |
 | Patch `Aurora.xex` on disk | Yes | Yes | No | Replaces dashboard executable | **Reject** |
@@ -201,7 +202,10 @@ add a second binary.
 - **High confidence:** the key-7 logger's complete calls to ordinals 2-4 and
   lack of an ordinal-5 call are recovered from the exact image; all returns are
   ignored.
-- **Not hardware-tested yet:** the compatible inert XEX canary.
+- **Hardware-tested failure:** the first compatible-ABI XEX was rejected by
+  `XexLoadImage` before its entry point. A corrected image changes `0xA` to
+  `0x9`, adds Image Base Address header `0x10201`, and omits the empty TLS
+  stub; it is not yet hardware-tested.
 
 ## Decision gate
 

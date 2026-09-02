@@ -8,8 +8,10 @@ mode with R3, accepts D-pad and left-stick Left/Right, and applies the selected
 letter with A. It must leave every skin, the on-disk `Aurora.xex`, and Aurora's
 normal RB QuickView menu unchanged. The production release and installed
 payload must be exactly one self-contained binary. It is released as
-`AuroraAZ.xex` and installed as `Plugins\NetDbgDll.xex`, the verified literal
-path used by Aurora's optional Network Debugger wrapper.
+`AuroraAZ.xex` and, if M1 succeeds, installed as `Plugins\NetDbgDll.xex`, the
+literal path used by Aurora's optional Network Debugger wrapper. Static
+analysis proves the path and ordinal contract; hardware acceptance of the
+one-file bootstrap is still pending.
 
 `REQUIREMENTS.md` is the product contract. `ARCHITECTURE.md` is the architecture
 decision. This file defines the order in which the risky parts must be proven.
@@ -47,6 +49,12 @@ decision. This file defines the order in which the risky parts must be proven.
 
 Failure at a gate stops dependent work. A partial success must not be labelled a
 functional release.
+
+Current gate status: M0 is safe and reproducible. M1 is still open. The first
+inert hardware canary was byte-verified after FTP upload and Aurora survived
+the isolated lab launch, but `XexLoadImage` rejected the image before its entry
+point ran. The corrected retry is described under M1 below; M2 and later work
+must not be linked or deployed until that retry passes.
 
 ## M0 — Stabilize and measure
 
@@ -145,6 +153,44 @@ DashLaunch plugin, `launch.ini` edit, patched executable, helper loader, or
 companion manifest may be investigated to understand the platform but is not a
 compliant fallback. If the gate fails, stop and present the evidence before
 revisiting the one-file requirement.
+
+### M1 hardware attempt and corrected retry
+
+The first hardware attempt failed safely in `Hdd1:\AuroraAZLab\`. Its
+round-tripped SHA-256 matched the uploaded build, the lab dashboard remained
+usable, and the first two relevant `debug.log` lines were exactly:
+
+```text
+Failed to load game:\Plugins\NetDbgDll.xex
+Failed to load NetDbgDll
+```
+
+NOVA reported no thread in the reserved `0x91D00000-0x91DFFFFF` window, so
+the failure occurred before the canary entry point, module-handle recovery, or
+export resolution. The lab file was renamed to a SHA-derived disabled filename
+and the production `Hdd1:\Aurora\` tree, its plugin directory, and `launch.ini`
+were untouched.
+
+The failed XEX used system-DLL module flags `0xA`, lacked optional header
+`0x10201` (Image Base Address), and carried a synthesized empty TLS header. The
+current retry changes all three together:
+
+- package as a title DLL with module flags `0x9`;
+- emit `0x10201 = 0x91D00000`, matching both the PE and XEX security image
+  base;
+- omit optional header `0x20104` because AuroraAZ has no TLS data.
+
+These are corrected compatibility candidates, not a proven diagnosis. Aurora's
+private wrapper mode `9` is not known to mean XEX module flags `0x9`; stock
+Nova loads with flags `0xA`. The working `FtpDll.xex` and Nova DLLs omit the
+TLS header, while stock Aurora itself carries the same empty TLS tuple as the
+failed image. The absent `0x10201` is the strongest isolated difference because
+all three inspected working Rev1655 XEX images carry it, but only a hardware
+retry can establish whether the corrected bundle loads.
+
+Repeat the isolated upload, round-trip hash, lab launch, debug-log,
+NOVA-thread, and rollback checks. M1 passes only after the corrected image
+loads on hardware.
 
 ## M2 — Input bridge
 
@@ -299,22 +345,17 @@ editing the skin.
 
 ## Immediate next work session
 
-Two tracks can proceed in parallel after this plan is accepted:
+1. Build the corrected inert canary in CI with the pinned, cached OpenXeChain
+   toolchain and patched SynthXEX.
+2. Require the strict validator and `jeff.exe` inspection to show module flags
+   `0x9`, load address `0x91D00000`, optional header `0x10201`, no empty TLS
+   header, and ordinal-only exports 2-5.
+3. Upload only that verified image to the isolated lab, download it again, and
+   require an exact SHA-256 match before launch.
+4. Launch the lab through NOVA, inspect `debug.log`, and require a live canary
+   thread in `0x91D00000-0x91DFFFFF`.
+5. Return to production, disable the lab file by recoverable rename, relaunch
+   the lab once, and prove that the canary thread disappears.
 
-### Console track
-
-1. Run the fixed uninstaller and verify the seven-row database baseline.
-2. Create and launch `AuroraAZLab` without changing the default boot path.
-3. Run the same-sort QuickView timing experiment and save the logs.
-4. Pull read-only copies of `FtpDll.xex` and `Nova.xex` for analysis.
-
-### Offline track
-
-1. Hash and catalogue Rev1655 binaries.
-2. Create the Jeff/Ghidra analysis project.
-3. Trace `PluginManager` and recover the module entry contract.
-4. Set up the PowerPC/XEX compiler toolchain.
-5. Build the no-op, version-gated logging module.
-
-No input hook, overlay, or production deployment begins until the no-op module
-passes M1 in the isolated lab copy.
+No input hook, overlay, or production deployment begins until the corrected
+no-op module passes M1 in the isolated lab copy.

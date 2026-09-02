@@ -6,7 +6,10 @@ Aurora A-Z will be implemented as a runtime extension for Aurora 0.7b.2
 Rev1655, not as an Aurora skin. Users keep their existing stock or third-party
 skin unchanged. The extension is distributed and installed as one
 self-contained binary. Its release name is `AuroraAZ.xex`; its required
-Rev1655 installed name is `Plugins\NetDbgDll.xex`.
+Rev1655 candidate installed name is `Plugins\NetDbgDll.xex`, the literal path
+owned by the optional key-7 wrapper. That wrapper contract is established by
+static analysis; the one-file bootstrap is not accepted until M1 passes on
+hardware.
 
 Implementation must proceed through the safety and feasibility gates in
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). In particular, rendering
@@ -24,9 +27,10 @@ and filter work do not begin until a reversible native loader is proven.
    the active skin using resources embedded in Aurora A-Z.
 5. **Filter bridge** applies the selected initial-character predicate to the
    visible coverflow and then returns input ownership to Aurora.
-6. **Single-file lifecycle** initializes through Aurora's verified optional
-   Network Debugger wrapper and becomes fully disabled when the installed
-   `Plugins\NetDbgDll.xex` is removed or renamed and Aurora is restarted.
+6. **Single-file lifecycle** initializes through Aurora's optional Network
+   Debugger wrapper after its hardware gate passes, and becomes fully disabled
+   when the installed `Plugins\NetDbgDll.xex` is removed or renamed and Aurora
+   is restarted.
 
 ## Hard constraints
 
@@ -54,4 +58,6 @@ the basis of a release claim.
 - Is top-level XUI scene injection stable across skin changes, or is a small
   renderer-owned overlay safer?
 - Can the export-capable XEX canary satisfy the key-7 Network Debugger wrapper
-  on hardware and roll back cleanly before any hook is enabled?
+  on hardware and roll back cleanly before any hook is enabled? The first
+  attempt was rejected by `XexLoadImage`; a corrected title-DLL image is
+  awaiting the M1 retry.

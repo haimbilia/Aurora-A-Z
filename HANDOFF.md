@@ -14,7 +14,11 @@ of the live `settings.db` on 2026-09-02 confirmed the stock 7 QuickViews, zero
 `AURORA_AZ` rows, zero one-character `NameFilter` rows, and no `AuroraAZ*`
 settings. The fixed uninstaller completed the cleanup described in §7.
 
-The console currently runs skin `CleanNXE.xzp`. Nothing we built is active.
+The console currently runs the production Aurora copy. Nothing we built is
+active there. The inert canary was tested only in `Hdd1:\AuroraAZLab\` and was
+then recoverably renamed to
+`Plugins\NetDbgDll.xex.disabled-b20e2f54608f`; the active lab target path is
+absent again.
 
 ### Current console state
 
@@ -22,6 +26,8 @@ The console currently runs skin `CleanNXE.xzp`. Nothing we built is active.
 QuickViews                                        stock 7 rows
 User/Scripts/*                                    no Aurora A-Z scripts
 Skins/*                                           no Aurora A-Z test skins
+Production Plugins/NetDbgDll.xex                  absent
+AuroraAZLab Plugins/NetDbgDll.xex                 absent (failed canary disabled)
 ```
 
 Original skins were never modified. Untouched local references are in the
@@ -296,13 +302,48 @@ letter highlighted, responding to the D-pad.
   Built and uploaded; **never tested on hardware**.
 - **The real thing:** needs native code in Aurora's process. Rev1655 creates
   exactly seven hard-coded wrappers and does not discover arbitrary
-  `Plugins/*.xex` files. The optional key-7 Network Debugger wrapper is now the
-  chosen bootstrap: it loads `Plugins\NetDbgDll.xex`, resolves ordinals 2-5,
-  and the recovered logger calls only 2-4 with ignored returns. The release
-  archive and live console contain no stock `NetDbgDll.xex`, so this occupies
-  an unused optional path rather than replacing an installed feature. It keeps
-  the product skin agnostic and one-file with no `launch.ini` change. See
-  `reference/NETDBG_BOOTSTRAP.md`.
+  `Plugins/*.xex` files. The optional key-7 Network Debugger wrapper is the
+  current bootstrap candidate: it requests the literal
+  `Plugins\NetDbgDll.xex` path, resolves ordinals 2-5, and the recovered logger
+  calls only 2-4 with ignored returns. The release archive and live console
+  contain no stock `NetDbgDll.xex`, so the candidate occupies an unused
+  optional path rather than replacing an installed feature. It would keep the
+  product skin agnostic and one-file with no `launch.ini` change, but the first
+  hardware canary was rejected by the Xbox image loader and M1 is still open.
+  See `reference/NETDBG_BOOTSTRAP.md`.
+
+### First native loader canary: failed safely
+
+The first OpenXeChain XEX was produced by successful CI, validated offline,
+uploaded only to `Hdd1:\AuroraAZLab\Plugins\NetDbgDll.xex`, and downloaded
+again with the same SHA-256:
+
+```text
+B20E2F54608FE071BACBFE2FF8221158A72D7577D51D5B82E297CE35E59699BA
+```
+
+The lab Aurora survived and remained usable, but NOVA found no thread in the
+canary's reserved `0x91D00000-0x91DFFFFF` window. The pulled lab log begins:
+
+```text
+Failed to load game:\Plugins\NetDbgDll.xex
+Failed to load NetDbgDll
+```
+
+This locates the failure before `DllMain`, module-handle recovery, or ordinal
+resolution. Production Aurora was never given this image, the default
+`launch.ini` target remained `Hdd:\Aurora\Aurora.xex`, and the failed lab file
+was disabled by the recoverable rename recorded in §1.
+
+Raw XEX comparison found three fields changed for the retry: module flags move
+from `0xA` (`sysdll`) to `0x9` (`titledll`), optional header `0x10201` now
+records image base `0x91D00000`, and the synthesized empty `0x20104` TLS header
+is omitted. Do not turn those facts into a proven cause: stock Nova loads with
+flags `0xA`, stock Aurora carries an empty TLS tuple, and Aurora wrapper mode
+`9` is not the same field as XEX module flags `0x9`. The missing Image Base
+Address header is the strongest difference because every inspected working
+Rev1655 XEX has it, but M1 remains pending until the corrected bundle passes
+the same hardware test.
 
 The user rejected the popup-list fallback and does not want a 27-QuickView
 carousel. If the mockup is non-negotiable, the honest next step is reverse

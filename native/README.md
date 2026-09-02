@@ -2,9 +2,11 @@
 
 This directory contains the platform-independent selector core and the native
 Xbox 360 canary. The release payload remains one file, `AuroraAZ.xex`. Aurora
-Rev1655 loads those same bytes from its reserved optional path, so the installed
-filename is `Plugins\NetDbgDll.xex`. No companion file or DashLaunch slot is
-used.
+Rev1655's reserved optional wrapper requests those same bytes under the
+installed filename `Plugins\NetDbgDll.xex`. No companion file or DashLaunch
+slot is used. This is still a candidate loader path: the first hardware image
+was rejected before its entry point, and the corrected retry has not yet passed
+M1.
 
 ## Host tests
 
@@ -39,15 +41,30 @@ pwsh -File scripts/verify-nova-canary.ps1
 The check is read-only and fails unless Aurora is the running title and NOVA
 reports a live thread starting inside the canary's reserved module window.
 
+The first hardware attempt failed safely in the isolated lab. Aurora logged:
+
+```text
+Failed to load game:\Plugins\NetDbgDll.xex
+Failed to load NetDbgDll
+```
+
+No canary thread appeared. The production installation was untouched and the
+lab file was recoverably disabled. The current retry packages as a title DLL
+(`0x9` rather than `0xA`), includes Image Base Address optional header
+`0x10201 = 0x91D00000`, and omits SynthXEX's empty TLS header. Those bundled
+changes are validator-tested compatibility candidates, not a hardware-proven
+image; M1 remains open.
+
 `src/netdbg_exports.c` supplies the four ordinal-only exports required by the
 Rev1655 Network Debugger wrapper. They immediately return and ordinal 4 never
 logs, avoiding recursion through Aurora's log sink. The cross-build validates
 that the PE export table is exactly ordinals 2, 3, 4, and 5. Because stock
 SynthXEX does not generate the Xbox export fields itself, the pipeline embeds
 the big-endian export-address table before packaging, sets the security-info
-pointer afterward, and then validates the table, code-page descriptor, page
-hash chain, and header hash before producing the SHA-256 file. A PE-only export
-success cannot reach deployment.
+pointer afterward, and then validates the module flags, explicit image-base
+header, absence of the synthetic TLS header, export table, code-page
+descriptor, page hash chain, and header hash before producing the SHA-256
+file. A PE-only export success cannot reach deployment.
 
 The cross-build entry point is `scripts/build-openxechain.sh`. It requires a
 complete OpenXeChain prefix; SynthXEX alone is not a compiler. See

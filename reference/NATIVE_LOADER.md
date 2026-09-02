@@ -14,10 +14,12 @@ Consequently, copying a new file to
 file will remain unopened because no Rev1655 object refers to that path.
 
 This was initially a loader blocker rather than a compiler blocker. Further
-analysis proved that the unused Network Debugger wrapper (key 7, mode 9,
-policy 1) is a satisfiable one-file bootstrap on the tested console when the
-payload provides its exact ordinal ABI. Aurora loads it from
-`game:\Plugins\NetDbgDll.xex`; see `NETDBG_BOOTSTRAP.md`.
+analysis recovered a complete candidate contract for the unused Network
+Debugger wrapper (key 7, mode 9, policy 1): it requests
+`game:\Plugins\NetDbgDll.xex` and resolves ordinals 2-5. Static analysis does
+not prove that a newly built XEX satisfies the Xbox image loader. The first
+hardware canary was rejected before its entry point ran, so the one-file
+bootstrap remains unproven; see `NETDBG_BOOTSTRAP.md`.
 
 ## Analysis baseline
 
@@ -174,17 +176,76 @@ resolved, and every observed call is compatible with inert immediate-return
 stubs. It still occupies a reserved identity and therefore must refuse to
 install over an existing `NetDbgDll.xex`.
 
+## First hardware canary and retry diagnosis
+
+The first inert OpenXeChain image was uploaded only to the isolated
+`Hdd1:\AuroraAZLab\` copy. Its downloaded round-trip hash matched the local
+XEX, and the lab Aurora remained usable, but NOVA found no thread in the
+reserved module window. The first two relevant `debug.log` lines were exactly:
+
+```text
+Failed to load game:\Plugins\NetDbgDll.xex
+Failed to load NetDbgDll
+```
+
+This failure occurs in `XexLoadImage`, before Aurora can recover a module
+handle, resolve ordinals 2-5, or execute the canary entry point. The failed lab
+file was recoverably disabled, production Aurora was restored, and no file was
+installed in the production plugin directory. `launch.ini` remained unchanged.
+
+The failed canary's optional-header list did not contain `0x10201`, the XEX
+Image Base Address header, even though its security information did contain
+the base. All three locally inspected working Rev1655 XEX images contain
+`0x10201`. This is the strongest isolated compatibility difference, not a
+proven loader requirement: Xenia's loader, for example, falls back to the
+security-information load address when the optional header is absent.
+
+The corrected retry is packaged by SynthXEX as `titledll`, changing XEX module
+flags from `0xA` to `0x9`; emits `0x10201 = 0x91D00000`; and omits the
+synthesized empty TLS optional header `0x20104`. These three changes are bundled
+in the next image, so a successful retry will validate the bundle rather than
+identify one field as the sole cause. In particular:
+
+- Aurora's wrapper mode `9` is a private constructor/load-path value and is not
+  known to map to XEX module flags `0x9`.
+- Stock Nova loads with module flags `0xA`, so `0xA` is not generally rejected
+  by Aurora or the Xbox loader.
+- The working `FtpDll.xex` and `Nova.xex` DLLs omit TLS header `0x20104`, while
+  the title `Aurora.xex` contains the same empty tuple as the failed canary.
+  SynthXEX labels that tuple a stub and does not support real PE TLS. Omitting
+  the title-like stub is therefore a strong DLL-shape A/B candidate, but it is
+  still not independently proven as the cause.
+
+M1 therefore remains pending until the corrected image survives the same
+isolated hardware load, NOVA thread, regression, and rollback checks.
+
+Primary format evidence for this retry:
+
+- SynthXEX v0.0.6 maps `titledll` to `TITLE | DLL` (`0x9`) and `sysdll` to
+  `EXPORTS | DLL` (`0xA`) in
+  [`src/main.c`](https://github.com/OpenXeChain/SynthXEX/blob/v0.0.6/src/main.c).
+- Unpatched v0.0.6 neither defines nor emits `0x10201`, and its TLS writer is
+  explicitly a stub, in
+  [`datastorage.h`](https://github.com/OpenXeChain/SynthXEX/blob/v0.0.6/src/common/datastorage.h)
+  and
+  [`optheaders.c`](https://github.com/OpenXeChain/SynthXEX/blob/v0.0.6/src/setdata/optheaders.c).
+- Xenia names `0x10201` `XEX_HEADER_IMAGE_BASE_ADDRESS` in
+  [`xex2_info.h`](https://github.com/xenia-project/xenia/blob/master/src/xenia/kernel/util/xex2_info.h),
+  while its module loader also documents a fallback to the security load
+  address when that optional header is absent. This is why the header is a
+  compatibility candidate rather than a claimed universal requirement.
+
 ## Implication for the implementation plan
 
-M1 now advances to hardware-canary testing through the key-7 Network Debugger
-wrapper. Input, rendering, and filtering hooks remain disabled until that
-inert load/unload test passes.
+M1 remains at hardware-canary testing through the key-7 Network Debugger
+wrapper. Input, rendering, and filtering hooks remain disabled until a
+corrected inert load/unload test passes.
 
 The available directions change at least one current constraint:
 
 | Direction | Technically plausible | Requirement impact |
 | --- | --- | --- |
-| Install the one release binary as `Plugins\NetDbgDll.xex` | Yes for exact Rev1655 with ordinal-only exports 2-5 | Occupies an otherwise absent optional Network Debugger identity; no skin or configuration change |
+| Install the one release binary as `Plugins\NetDbgDll.xex` | Candidate for exact Rev1655 with ordinal-only exports 2-5; hardware retry pending | Occupies an otherwise absent optional Network Debugger identity; no skin or configuration change |
 | Configure `AuroraAZ.xex` as a DashLaunch system plugin | Yes; requires a hardware canary and title-lifecycle handling | Adds or changes boot-loader configuration, so installation is not literally one untouched-file drop |
 | Patch Aurora's manager to add an eighth wrapper/path | Yes for this exact hash, with substantial reverse engineering | Modifies Aurora code in memory or on disk; an external bootstrap is still needed for an in-memory patch |
 | Ship a patched `Aurora.xex` | Technically direct | Violates the no-on-disk-patch constraint and is unsuitable for distribution |
@@ -205,4 +266,6 @@ that is the only literal path the selected wrapper loads.
   Xbox API calling patterns.
 - **Recovered for NetDbg:** ordinals 2-5, all key-7 call sites, their arguments,
   and ignored-return behavior. Ordinal 5 is resolved but not called.
-- **Not yet tested:** loading the experimental compatible canary on the console.
+- **Hardware result:** the first compatible-ABI canary reached
+  `XexLoadImage` but was rejected before its entry point. The corrected
+  title-DLL/header-shape retry is not yet tested.
