@@ -44,6 +44,8 @@ static char g_m1_marker_path[] =
 static char g_m1_worker_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M1-worker.bin";
 static uint32_t g_m1_start_claimed = 0u;
+static uint32_t g_m1_identity_ready = 0u;
+static uint32_t g_m1_worker_recorded = 0u;
 static AzM1Record g_m1_identity;
 
 static void write_m1_record(
@@ -95,12 +97,39 @@ static void update_m1_record(
     write_m1_record(path, &record);
 }
 
+static void record_worker_entry_from_logger(void)
+{
+    uint32_t expected = 0u;
+    const AzCanaryStartSnapshot entered = {
+        AZ_CANARY_START_WORKER_ENTERED,
+        AZ_CANARY_MONITOR_RUNNING,
+        0u,
+        0u
+    };
+
+    if (__atomic_load_n(
+            &g_m1_identity_ready,
+            __ATOMIC_ACQUIRE) == 0u ||
+        AuroraAZCanaryGetWorkerEntered() == 0u ||
+        !__atomic_compare_exchange_n(
+            &g_m1_worker_recorded,
+            &expected,
+            1u,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        return;
+    }
+
+    update_m1_record(&entered, &g_m1_identity);
+}
+
 static void try_start_m1(uint32_t source_ordinal)
 {
     uint32_t expected = 0u;
     const AzM1Record marker = {
         {'A', 'Z', 'M', '1'},
-        3u,
+        4u,
         (uint32_t)sizeof(AzM1Record),
         1u,
         source_ordinal,
@@ -121,6 +150,7 @@ static void try_start_m1(uint32_t source_ordinal)
             0,
             __ATOMIC_ACQ_REL,
             __ATOMIC_ACQUIRE)) {
+        record_worker_entry_from_logger();
         return;
     }
 
@@ -132,10 +162,15 @@ static void try_start_m1(uint32_t source_ordinal)
     (void)DeleteFileA(g_m1_worker_marker_path);
     g_m1_identity = marker;
     g_m1_identity.state = AuroraAZCanaryGetMonitorState();
+    __atomic_store_n(
+        &g_m1_identity_ready,
+        1u,
+        __ATOMIC_RELEASE);
     write_m1_record(g_m1_marker_path, &g_m1_identity);
     (void)AuroraAZCanaryStartMonitor(
         update_m1_record,
         &g_m1_identity);
+    record_worker_entry_from_logger();
 }
 
 /*
