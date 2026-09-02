@@ -99,8 +99,9 @@ def make_xex(prepared_pe: bytes) -> bytes:
     descriptors = security + 0x184
     data = bytearray(basefile + len(mapped))
     data[:4] = b"XEX2"
-    struct.pack_into(">IIIII", data, 4, 0xA, basefile, 0, security, 1)
+    struct.pack_into(">IIIII", data, 4, 0x9, basefile, 0, security, 2)
     struct.pack_into(">II", data, 24, 0x3FF, bff)
+    struct.pack_into(">II", data, 32, 0x10201, IMAGE_BASE)
     struct.pack_into(">II", data, security, 0x184 + page_count * 0x18, len(mapped))
     data[security + 8 : security + 8 + 16] = b"Synthetic test\0\0"
     struct.pack_into(">I", data, security + 0x108, 0x174)
@@ -200,6 +201,36 @@ class XexExportTests(unittest.TestCase):
             xex_exports.ExportFormatError, "image-flags/page-geometry mismatch"
         ):
             xex_exports.validate_xex_bytes(finalized, self.pe, ORDINALS)
+
+    def test_validator_requires_matching_image_base_optional_header(self) -> None:
+        finalized = bytearray(
+            xex_exports.finalize_xex_bytes(make_xex(self.pe), self.pe, ORDINALS)
+        )
+        struct.pack_into(">I", finalized, 32 + 4, IMAGE_BASE + 0x10000)
+        with self.assertRaisesRegex(
+            xex_exports.ExportFormatError,
+            "optional-header/security mismatch",
+        ):
+            xex_exports.validate_xex_bytes(finalized, self.pe, ORDINALS)
+
+    def test_validator_rejects_absent_image_base_optional_header(self) -> None:
+        malformed = bytearray(make_xex(self.pe))
+        struct.pack_into(">I", malformed, 20, 1)
+        with self.assertRaisesRegex(
+            xex_exports.ExportFormatError,
+            "Image Base Address optional header is absent",
+        ):
+            xex_exports.finalize_xex_bytes(malformed, self.pe, ORDINALS)
+
+    def test_validator_rejects_synthetic_tls_optional_header(self) -> None:
+        malformed = bytearray(make_xex(self.pe))
+        struct.pack_into(">I", malformed, 20, 3)
+        struct.pack_into(">II", malformed, 40, 0x20104, 0x300)
+        with self.assertRaisesRegex(
+            xex_exports.ExportFormatError,
+            "must not contain a TLS optional header",
+        ):
+            xex_exports.finalize_xex_bytes(malformed, self.pe, ORDINALS)
 
     def test_validator_rejects_function_on_non_code_page(self) -> None:
         finalized = bytearray(

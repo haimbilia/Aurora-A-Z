@@ -4,7 +4,10 @@
 SynthXEX v0.0.6 notices PE exports but does not emit the Xbox 360's
 ``HvImageExportTable`` or its security-header pointer.  This tool fills a
 dedicated, already-mapped ``.xexexp`` PE section before SynthXEX hashes the
-image, then sets only the security-header pointer after packaging.
+image, then sets only the security-header pointer after packaging.  It also
+requires the patched packager's explicit Image Base Address optional header;
+the hardware loader rejected our otherwise internally consistent image that
+omitted that header before its entry point ran.
 
 The implementation intentionally supports one narrow contract: a PE32 Xbox
 360 DLL, a contiguous set of ordinal-only function exports, an executable
@@ -28,7 +31,7 @@ XEX_EXPORT_MAGIC = (0x48000000, 0x00485645, 0x48000000)
 XEX_EXPORT_FIXED_WORDS = 11
 XEX_EXPORT_FIXED_SIZE = XEX_EXPORT_FIXED_WORDS * 4
 DEFAULT_SECTION_NAME = ".xexexp"
-DEFAULT_MODULE_FLAGS = 0x0000000A  # system DLL: exports-to-title | DLL
+DEFAULT_MODULE_FLAGS = 0x00000009  # title DLL: title-module | DLL
 PE_MACHINE_POWERPCBE = 0x01F2
 PE_MAGIC_32 = 0x010B
 PE_SECTION_INITIALIZED_DATA = 0x00000040
@@ -36,6 +39,8 @@ PE_SECTION_EXECUTE = 0x20000000
 PE_SECTION_READ = 0x40000000
 PE_SECTION_WRITE = 0x80000000
 XEX_BASEFILE_FORMAT_ID = 0x000003FF
+XEX_IMAGE_BASE_ID = 0x00010201
+XEX_TLS_INFO_ID = 0x00020104
 XEX_IMAGE_PAGE_SIZE_4K = 0x10000000
 XEX_SECTION_CODE = 1
 
@@ -382,6 +387,12 @@ def _parse_xex(
         previous_id = header_id
     if XEX_BASEFILE_FORMAT_ID not in optional_entries:
         raise ExportFormatError("XEX basefile-format optional header is absent")
+    if XEX_IMAGE_BASE_ID not in optional_entries:
+        raise ExportFormatError("XEX Image Base Address optional header is absent")
+    if XEX_TLS_INFO_ID in optional_entries:
+        raise ExportFormatError(
+            "TLS-free AuroraAZ image must not contain a TLS optional header"
+        )
 
     bff = optional_entries[XEX_BASEFILE_FORMAT_ID]
     _need(data, bff, 16, "XEX basefile-format header")
@@ -414,6 +425,12 @@ def _parse_xex(
         raise ExportFormatError(
             f"XEX/PE image-base mismatch: 0x{image_base:08X} != "
             f"0x{prepared.image_base:08X}"
+        )
+    optional_image_base = optional_entries[XEX_IMAGE_BASE_ID]
+    if optional_image_base != image_base:
+        raise ExportFormatError(
+            "XEX Image Base Address optional-header/security mismatch: "
+            f"0x{optional_image_base:08X} != 0x{image_base:08X}"
         )
     if page_count == 0 or image_size % page_count:
         raise ExportFormatError(
