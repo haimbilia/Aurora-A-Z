@@ -53,7 +53,11 @@ if ([string]::IsNullOrWhiteSpace([string]$title.path) -or
         "expected *$ExpectedTitlePathSuffix, got $($title.path)")
 }
 
-$threads = @(Invoke-RestMethod -Headers $headers -Uri "$baseUri/thread")
+$threadResponse = Invoke-RestMethod -Headers $headers -Uri "$baseUri/thread"
+# Invoke-RestMethod returns a JSON top-level array as Object[]. Placing the
+# command itself inside @() wraps that array as one nested element in pwsh 7,
+# which prevents address matching. Assign first, then enumerate the value.
+$threads = @($threadResponse)
 $moduleEnd = $ModuleBase + $ModuleWindow
 $matches = @($threads | Where-Object {
     $addressText = [string]$_.address
