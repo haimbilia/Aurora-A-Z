@@ -13,6 +13,8 @@ on:
       - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
       - scripts/decode-m2a-input.py
+      - scripts/analyze-live-image.py
+      - scripts/tests/test_analyze_live_image.py
       - scripts/tests/test_decode_m2a_input.py
       - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
@@ -25,6 +27,8 @@ on:
       - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
       - scripts/decode-m2a-input.py
+      - scripts/analyze-live-image.py
+      - scripts/tests/test_analyze_live_image.py
       - scripts/tests/test_decode_m2a_input.py
       - scripts/tests/test_xex_exports.py
       - .github/workflows/native-canary.yml
