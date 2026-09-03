@@ -55,9 +55,28 @@ Current gate status: M0 is safe and reproducible, and M1 is complete. Commit
 artifact with SHA-256
 `87894F41A89F4F3CAAFA8A1864AB8F8A91A2ED011882EEEF36E4D3FAEF58596C`;
 its FTP round-trip hash matched. Primary phase `5` and worker phase `7` markers
-prove automatic ordinal-4 dispatch and worker entry. M2a observe-only work is
-underway. No input consumption, overlay, or filter behavior has passed a
-hardware gate.
+prove automatic ordinal-4 dispatch and worker entry.
+
+M2a remains open. The first observe-only runtime reached a compatibility-gate
+problem before input-hook installation: Aurora's loader resolves the final 350
+`.text` import thunks, so the live section cannot equal the extracted image's
+static complete-section hash. The clean v2 CPU-visible hardware capture now
+proves that the immutable `.text` prefix matches exactly and that every change
+is confined to those thunks. It also proves real hardware emits
+`lis r11`/`addi r11,r11` targets, and exposes two non-stock target redirections.
+The exact capture hashes, ranges, and proven/inferred boundary are recorded in
+`reference/HARDWARE_BASELINE.md`.
+
+A loader-aware, fail-closed gate and its tests are in progress. Commit
+`4a8c6ee` adds the v3 IAT diagnostic needed to settle the remaining live import
+semantics. CI run `33724035200` succeeded and its downloaded artifact hash was
+verified, but its hardware capture is still pending. The scene/render
+telemetry in `604b3b3` is host-tested scaffolding only and is not evidence of a
+hardware overlay or selector. At that checkpoint, all 19 CTest targets and all
+35 Python tests passed. No input observation or consumption, overlay, or filter
+behavior has passed a hardware gate. All probes have stayed inside
+`Hdd1:\AuroraAZLab`; the production `Hdd1:\Aurora` files, skins, database, and
+`launch.ini` remain untouched.
 
 ## M0 — Stabilize and measure
 
@@ -239,9 +258,11 @@ Develop in two steps:
    states pass through unchanged.
 
 M2a is the current work. Its ordinal-4 bootstrap starts only
-`AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE`. Passing M1 does not establish that
-this input hook works on hardware, and M2a must not silently widen into M2b,
-rendering, or filtering.
+`AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE`. The current sub-gate is to validate a
+loader-resolved Rev1655 image without trusting loader-controlled thunk bytes,
+then install the unchanged observe-only input hook. Passing M1 and completing
+the v2 image capture do not establish that this input hook works on hardware,
+and M2a must not silently widen into M2b, rendering, or filtering.
 
 The bridge needs edge detection, left-stick dead-zone/hysteresis, and controlled
 repeat for held directions. It must ignore R3 outside the main coverflow and
@@ -382,16 +403,24 @@ editing the skin.
 
 ## Immediate next work session
 
-1. Build and record the exact M2a observe-only artifact, CI run, and SHA-256;
+1. After the requested cold reboot, use production Aurora's FTP service to
+   rename the still-isolated v2 lab probe to its SHA-derived disabled name;
+   verify production Aurora and its plugin directory remain unchanged.
+2. Deploy the verified v3 IAT probe from commit `4a8c6ee` only to
+   `AuroraAZLab`, verify its FTP round-trip hash, and capture/validate its v3
+   marker, header, `.text`, IAT, and NOVA screenshot.
+3. Finalize the loader-aware hook gate only from the v2/v3 hardware evidence,
+   including an independent policy for the two observed redirected imports;
+   fail closed if an exact target cannot be established.
+4. Build and record the exact M2a observe-only artifact, CI run, and SHA-256;
    confirm its runtime entry selects only input observation and its link
-   manifest excludes renderer and filter-consumer sources.
-2. Repeat the isolated-lab preflight, upload, FTP round-trip hash, launch, and
-   recoverable rollback procedure without changing `launch.ini`.
-3. Require the M2a bootstrap marker and log-backed evidence that the Rev1655
-   input hook observes the required buttons while leaving RB, coverflow motion,
-   and other scenes unchanged.
-4. Keep M2b input ownership, M3 overlay work, and M4 filtering gated until the
-   M2a hardware evidence is reviewed.
+   manifest excludes input consumption, renderer, and filter-consumer sources.
+5. Repeat the isolated-lab preflight, upload, FTP round-trip hash, launch, and
+   recoverable rollback procedure without changing `launch.ini`. Require the
+   M2a marker and log-backed evidence that the required controls are observed
+   while RB, coverflow motion, and other scenes remain unchanged.
+6. Keep M2b input ownership, M3 overlay integration, and M4 filtering gated
+   until the M2a hardware evidence is reviewed.
 
 M1 is closed. The project is not yet a functional selector: input consumption,
 the mockup-faithful overlay, and filter application remain later milestones.
