@@ -50,17 +50,21 @@ hook verification. It calls the original first, records successful raw keys in
 a fixed 32-entry single-producer/single-consumer queue, and never clears
 Aurora's key buffer.
 
-`CONSUME` is refused unless all of these have been published:
+`CONSUME` selector ownership is refused unless all of these have been
+published:
 
 1. exact Aurora image identity passed;
 2. exact input and RenderMenu hook signatures passed and both hooks are live;
 3. A, R3, D-pad Left/Right, and left-stick Left/Right were each confirmed from
    hardware observations;
-4. a non-render/non-input worker implementing the verified filter queue is
-   ready;
-5. at event time, the dynamic Aurora scene/modal probe allows capture;
-6. a successful RenderMenu report belongs to the immediately preceding input
+4. at event time, the dynamic Aurora scene/modal probe allows capture;
+5. a successful RenderMenu report belongs to the immediately preceding input
    frame.
+
+The filter-consumer gate is independent. Until its worker completes the
+read-only runtime probe, A is consumed while the selector is active but leaves
+the selector open and queues no work. This permits a bounded interaction
+canary without impersonating filter readiness or leaking A into title launch.
 
 Failure of any dynamic gate preserves new input. A release/repeat belonging to
 a key already consumed remains consumed until release, preventing half of a

@@ -253,10 +253,13 @@ int main(void)
         !close_enough(g_draw_vertices[1][0].y, 569.0f) ||
         g_draw_vertices[1][0].u != 0 ||
         g_draw_vertices[1][0].v != 20 ||
-        g_draw_vertices[1][3].u != 922 ||
+        g_draw_vertices[1][2].u != 922 ||
+        g_draw_vertices[1][2].v != 53 ||
+        g_draw_vertices[1][3].u != 0 ||
         g_draw_vertices[1][3].v != 53 ||
         g_draw_vertices[2][0].u != 0 ||
-        g_draw_vertices[2][3].u != 25) {
+        g_draw_vertices[2][2].u != 25 ||
+        g_draw_vertices[2][3].u != 0) {
         return EXIT_FAILURE;
     }
 
@@ -319,7 +322,8 @@ int main(void)
         !close_enough(g_draw_vertices[1][0].x, 89.5f) ||
         !close_enough(g_draw_vertices[1][0].y, 344.5f) ||
         g_draw_vertices[1][0].u != 0 ||
-        g_draw_vertices[1][3].u != 922) {
+        g_draw_vertices[1][2].u != 922 ||
+        g_draw_vertices[1][3].u != 0) {
         return EXIT_FAILURE;
     }
 

@@ -160,7 +160,7 @@ static uint8_t address_range_is_valid(const void *address, size_t size)
     return 1u;
 }
 
-static uint8_t consume_prerequisites_are_verified(void)
+static uint8_t selector_prerequisites_are_verified(void)
 {
     const uint32_t controls = load_u32(&g_input_bridge.verified_controls);
 
@@ -168,7 +168,6 @@ static uint8_t consume_prerequisites_are_verified(void)
         bool_from_atomic(&g_input_bridge.image_verified) == 0u ||
         bool_from_atomic(&g_input_bridge.input_hook_verified) == 0u ||
         bool_from_atomic(&g_input_bridge.render_hook_verified) == 0u ||
-        bool_from_atomic(&g_input_bridge.filter_consumer_verified) == 0u ||
         (controls & AZ_INPUT_VERIFIED_REQUIRED) !=
             AZ_INPUT_VERIFIED_REQUIRED) {
         return 0u;
@@ -253,7 +252,7 @@ static AzInputStage select_effective_stage(AzInputDetourStage requested)
     }
 
     if (requested == AZ_INPUT_DETOUR_CONSUME &&
-        consume_prerequisites_are_verified() != 0u) {
+        selector_prerequisites_are_verified() != 0u) {
         return AZ_INPUT_STAGE_CONSUME_VERIFIED;
     }
 
@@ -480,7 +479,7 @@ AzInputDetourResult az_rev1655_input_detour_request_stage(
     }
 
     if (stage == AZ_INPUT_DETOUR_CONSUME &&
-        consume_prerequisites_are_verified() == 0u) {
+        selector_prerequisites_are_verified() == 0u) {
         const uint8_t observe_verified =
             (bool_from_atomic(&g_input_bridge.image_verified) != 0u &&
              bool_from_atomic(&g_input_bridge.input_hook_verified) != 0u) ?
@@ -553,6 +552,10 @@ void az_rev1655_input_detour_note_render(
 {
     uint32_t expected = 0u;
     uint32_t serial;
+
+    /* A new render token invalidates the previous frame's scene decision.
+     * The exact final Font::End callback republishes the matching decision. */
+    store_u32(&g_input_bridge.scene_allows_capture, 0u);
 
     if (shutdown_is_requested() != 0u ||
         !__atomic_compare_exchange_n(
@@ -797,7 +800,7 @@ uint32_t az_rev1655_input_detour_c(
     }
     capture_prerequisites =
         (requested_stage == AZ_INPUT_DETOUR_CONSUME &&
-         consume_prerequisites_are_verified() != 0u) ? 1u : 0u;
+         selector_prerequisites_are_verified() != 0u) ? 1u : 0u;
     effective_stage = select_effective_stage(requested_stage);
     if (g_input_bridge.runtime.stage != effective_stage) {
         az_input_set_stage(&g_input_bridge.runtime, effective_stage);
@@ -835,7 +838,17 @@ uint32_t az_rev1655_input_detour_c(
         uint32_t filter_index =
             (uint32_t)decision.selector_result.filter_index;
 
-        if (load_u32(&g_input_bridge.filter_in_flight) == 0u &&
+        if (bool_from_atomic(
+                &g_input_bridge.filter_consumer_verified) == 0u) {
+            /* Selector ownership is independently useful on hardware, but an
+             * A press must never queue work until the worker has completed
+             * its read-only runtime probe. Keep the selector open and consume
+             * the press so it cannot launch the highlighted title. */
+            g_input_bridge.runtime.selector = selector_before;
+            decision.selector_result.request_filter = 0u;
+            decision.selector_result.filter_index = AZ_NO_GLYPH;
+        }
+        else if (load_u32(&g_input_bridge.filter_in_flight) == 0u &&
             filter_index < AZ_GLYPH_COUNT &&
             __atomic_compare_exchange_n(
                 &g_input_bridge.pending_filter,

@@ -326,9 +326,13 @@ For the full atlas quad, submit vertices in triangle-strip order:
 ```text
 top-left      screen (179, 549),  texel (   0,  0)
 top-right     screen (1203,549),  texel (1024,  0)
-bottom-left   screen (179, 613),  texel (   0, 64)
 bottom-right  screen (1203,613),  texel (1024, 64)
+bottom-left   screen (179, 613),  texel (   0, 64)
 ```
+
+This clockwise perimeter order is copied from Aurora's native
+`(5, 4, vertices, 16)` quad caller at `0x822D5944..0x822D59F8`. The alternate
+`TL, TR, BL, BR` ordering renders only one triangular half in this path.
 
 Before drawing, bind the atlas and set the two recovered shader constants:
 

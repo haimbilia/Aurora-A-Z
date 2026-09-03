@@ -644,15 +644,15 @@ static AzOverlayRendererResult draw_quad(
     vertices[1].v = source_top;
     vertices[1].channel_selector = 0u;
 
-    vertices[2].x = left;
+    vertices[2].x = right;
     vertices[2].y = bottom;
-    vertices[2].u = source_left;
+    vertices[2].u = source_right;
     vertices[2].v = source_bottom;
     vertices[2].channel_selector = 0u;
 
-    vertices[3].x = right;
+    vertices[3].x = left;
     vertices[3].y = bottom;
-    vertices[3].u = source_right;
+    vertices[3].u = source_left;
     vertices[3].v = source_bottom;
     vertices[3].channel_selector = 0u;
 

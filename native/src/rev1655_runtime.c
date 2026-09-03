@@ -329,13 +329,16 @@ static int32_t overlay_system_ui_is_active(void)
 static void snapshot_input_with_current_scene(AzInputDetourStatus *status)
 {
     AzSceneGateDecision decision;
+    uint8_t allowed;
 
     if (status == NULL) {
         return;
     }
+    allowed = az_rev1655_scene_gate_probe(&decision) != 0u ? 1u : 0u;
+    /* Publish the same final-coverflow decision used for drawing so the next
+     * correlated input frame can own selector controls. */
+    az_rev1655_input_detour_set_scene_allows_capture(allowed);
     az_rev1655_input_detour_snapshot_status(status);
-    status->scene_allows_capture =
-        az_rev1655_scene_gate_probe(&decision) != 0u ? 1u : 0u;
 }
 
 static void flush_render_telemetry(uint8_t force)
@@ -932,7 +935,7 @@ static uint32_t input_observe_worker(void *context)
     if (state == (uint32_t)AZ_REV1655_RUNTIME_RUNNING) {
         DbgPrint(
             "AuroraAZ: runtime active stage=%u input=%08X "
-            "consume=disabled\n",
+            "selector-consume=enabled filter=disabled\n",
             (unsigned int)load_u32(&g_runtime.stage),
             (unsigned int)AZ_M2A_INPUT_TARGET_ADDRESS);
         flush_input_telemetry(1u);
@@ -1233,11 +1236,13 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
     }
 
-    /* The visible canary proves rendering only. Input remains OBSERVE and
-     * filter-consumer verification remains false, so no control is owned. */
+    /* M2a hardware telemetry already proved every requested virtual key. The
+     * selector may now own only R3, horizontal navigation, and an inert A
+     * while the independently gated filter worker remains disabled. */
     az_rev1655_input_detour_publish_verification(1u, 1u, 1u, 0u);
+    az_rev1655_input_detour_confirm_controls(AZ_INPUT_VERIFIED_REQUIRED);
     input_result = az_rev1655_input_detour_request_stage(
-        AZ_INPUT_DETOUR_OBSERVE);
+        AZ_INPUT_DETOUR_CONSUME);
     if (input_result != AZ_INPUT_DETOUR_OK) {
         retain_published_hooks_fail_closed(1u);
         return AZ_REV1655_RUNTIME_DETOUR_STAGE_FAILED;

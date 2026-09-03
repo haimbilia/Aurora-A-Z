@@ -10,6 +10,9 @@
 static int failures = 0;
 static uint32_t original_result = AZ_REV1655_INPUT_RESULT_SUCCESS;
 
+static uint32_t dispatch_main(AzInputKeystroke *key);
+static void release_main(uint16_t virtual_key);
+
 #define CHECK(condition) \
     do { \
         if (!(condition)) { \
@@ -50,6 +53,53 @@ static AzInputKeystroke make_key(uint16_t virtual_key, uint16_t flags)
 static void arm_next_input(void)
 {
     az_rev1655_input_detour_note_render((uintptr_t)0x82345678u, 0);
+    /* Models the exact final Font::End scene probe after RenderMenu. */
+    az_rev1655_input_detour_set_scene_allows_capture(1u);
+}
+
+static void test_selector_without_filter_worker(void)
+{
+    AzInputKeystroke key;
+    AzSelectorState selector;
+    AzInputDetourStatus status;
+    uint8_t filter_index = AZ_NO_GLYPH;
+
+    az_rev1655_input_detour_reset();
+    az_rev1655_input_detour_publish_verification(1u, 1u, 1u, 0u);
+    az_rev1655_input_detour_confirm_controls(AZ_INPUT_VERIFIED_REQUIRED);
+    CHECK(az_rev1655_input_detour_request_stage(
+        AZ_INPUT_DETOUR_CONSUME) == AZ_INPUT_DETOUR_OK);
+
+    arm_next_input();
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
+    (void)dispatch_main(&key);
+    CHECK(key.virtual_key == 0u);
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
+
+    arm_next_input();
+    key = make_key(AZ_VK_PAD_LTHUMB_RIGHT, AZ_KEYSTROKE_KEYDOWN);
+    (void)dispatch_main(&key);
+    CHECK(key.virtual_key == 0u);
+    release_main(AZ_VK_PAD_LTHUMB_RIGHT);
+    az_rev1655_input_detour_snapshot_selector(&selector);
+    CHECK(selector.mode == AZ_MODE_SELECTING);
+    CHECK(selector.selected_index == 1u);
+
+    arm_next_input();
+    key = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
+    (void)dispatch_main(&key);
+    CHECK(key.virtual_key == 0u);
+    release_main(AZ_VK_PAD_A);
+    az_rev1655_input_detour_snapshot_selector(&selector);
+    CHECK(selector.mode == AZ_MODE_SELECTING);
+    CHECK(selector.selected_index == 1u);
+    CHECK(az_rev1655_input_detour_take_filter_request(&filter_index) ==
+        AZ_INPUT_DETOUR_NO_FILTER);
+
+    az_rev1655_input_detour_snapshot_status(&status);
+    CHECK(status.filter_consumer_verified == 0u);
+    CHECK(status.pending_filter == AZ_INPUT_DETOUR_NO_FILTER_REQUEST);
+    CHECK(status.filter_in_flight == 0u);
 }
 
 static uint32_t dispatch_main(AzInputKeystroke *key)
@@ -361,6 +411,7 @@ int main(void)
 {
     test_stage_gates_and_observe();
     test_verified_flow_and_filter_queue();
+    test_selector_without_filter_worker();
     test_rb_and_shutdown_drain();
     test_revoked_verification_only_drains();
     test_invalid_pointer_range_fails_closed();

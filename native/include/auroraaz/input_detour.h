@@ -106,9 +106,11 @@ typedef struct AzInputDetourStatus {
 void az_rev1655_input_detour_reset(void);
 
 /*
- * Publish verification/liveness gates. A false gate always prevents new
- * selector input from being consumed. Only the exact Rev1655 validators and
- * successfully installed hooks may set the first three gates to true.
+ * Publish verification/liveness gates. The first three gates plus confirmed
+ * controls admit selector ownership. filter_consumer_verified independently
+ * admits A/filter requests; while false, A is consumed without leaving the
+ * selector or launching a title. Only exact validators and successfully
+ * installed hooks may publish their corresponding gates.
  */
 void az_rev1655_input_detour_publish_verification(
     uint8_t image_verified,

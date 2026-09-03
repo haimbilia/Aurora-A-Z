@@ -42,6 +42,12 @@
   font shader actually receives the overlay constants.
 - Match the ATG font pipeline's disabled viewport transform by submitting raw
   screen-pixel vertex positions instead of clip-space-normalized coordinates.
+- Match Aurora's native four-vertex quad order (`TL, TR, BR, BL`) to prevent
+  the alphabet row from being diagonally clipped to one triangle.
+- Enable the bounded selector interaction canary: publish the live scene gate,
+  enter with R3, move with D-pad/left-stick Left/Right, and visibly highlight
+  the selected glyph. Filter application remains independently fail-closed;
+  A is consumed and keeps the selector open until that worker is verified.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 
