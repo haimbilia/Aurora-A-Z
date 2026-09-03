@@ -64,7 +64,9 @@ if(BUILD_TESTING)
     target_include_directories(auroraaz_hook_runtime_tests
         PRIVATE tests/stubs)
     target_compile_definitions(auroraaz_hook_runtime_tests
-        PRIVATE AURORAAZ_XBOX360=1)
+        PRIVATE
+            AURORAAZ_XBOX360=1
+            AURORAAZ_HOOK_RUNTIME_TEST_ALLOCATOR=1)
 
     add_executable(auroraaz_rev1655_runtime_tests
         tests/rev1655_runtime_tests.c

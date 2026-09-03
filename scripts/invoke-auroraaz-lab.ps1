@@ -299,7 +299,9 @@ function Test-RemoteNameInListing {
     )
 
     Assert-SafeEvidenceName -Name $Name
-    $pattern = '(?im)(?:^|[ \t])' + [regex]::Escape($Name) + '[ \t]*$'
+    # WinSCP returns CRLF text. In .NET multiline mode, `$` matches before LF
+    # but leaves CR as a literal character, so include it in trailing space.
+    $pattern = '(?im)(?:^|[ \t])' + [regex]::Escape($Name) + '[ \t\r]*$'
     return [regex]::IsMatch($Listing, $pattern)
 }
 

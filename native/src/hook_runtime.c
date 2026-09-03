@@ -10,7 +10,6 @@
 #include <auroraaz/hook_plan.h>
 #include <auroraaz/hook_runtime.h>
 
-#define AZ_ALLOCATION_GRANULARITY 0x10000u
 #define AZ_ADMITTED_RELAY_WORDS 21u
 #define AZ_RESIDENT_EXIT_WORDS 7u
 
@@ -22,10 +21,10 @@
  * so its lifetime is the title lifetime required by the resident-return ABI.
  */
 #if defined(_MSC_VER)
-#pragma section(".hookarena", read, write, execute)
-__declspec(allocate(".hookarena")) __declspec(align(4096))
+#pragma section(".azhook", read, write, execute)
+__declspec(allocate(".azhook")) __declspec(align(4096))
 #elif defined(__clang__) || defined(__GNUC__)
-__attribute__((section(".hookarena"), used, aligned(4096)))
+__attribute__((section(".azhook"), used, aligned(4096)))
 #endif
 static uint8_t g_auroraaz_hook_arena_storage[AZ_HOOK_ARENA_SIZE] = {0};
 
@@ -107,7 +106,11 @@ static uint8_t embedded_arena_is_usable(void)
     return 1u;
 }
 
-static void release_allocation(void *base)
+#if defined(AURORAAZ_HOOK_RUNTIME_TEST_ALLOCATOR)
+
+#define AZ_ALLOCATION_GRANULARITY 0x10000u
+
+static void release_test_allocation(void *base)
 {
     void *release_base = base;
     uint32_t release_size = 0u;
@@ -123,6 +126,8 @@ static void release_allocation(void *base)
             REGION_AUTO);
     }
 }
+
+#endif
 
 static void flush_code(void *address, uint32_t size)
 {
@@ -243,7 +248,6 @@ static void build_resident_exit(
 
 AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
 {
-    uint32_t candidate;
     const uintptr_t resident_base = embedded_arena_base();
 
     if (arena == NULL) {
@@ -252,47 +256,56 @@ AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
     clear_arena(arena);
 
     if (embedded_arena_is_usable() != 0u) {
+        uint32_t protection;
+
         MmSetAddressProtect(
             (void *)resident_base,
             AZ_HOOK_ARENA_SIZE,
             PAGE_EXECUTE_READWRITE);
+        protection = MmQueryAddressProtect((void *)resident_base);
+        if ((protection & 0xFFu) != PAGE_EXECUTE_READWRITE) {
+            return AZ_HOOK_RUNTIME_NO_NEAR_MEMORY;
+        }
         arena->base = resident_base;
         arena->size = AZ_HOOK_ARENA_SIZE;
         arena->used = 0u;
         return AZ_HOOK_RUNTIME_OK;
     }
 
-    /* Retain the allocator path for host fault-injection tests and compatible
-     * development kernels.  The final ABI argument is DebugMemory, despite
-     * xecorelib declaring it as REGION, and therefore must be FALSE. */
-    for (candidate = AZ_REV1655_HOOK_ARENA_START;
-         candidate <= AZ_REV1655_HOOK_ARENA_END - AZ_HOOK_ARENA_SIZE;
-         candidate += AZ_ALLOCATION_GRANULARITY) {
-        void *requested = (void *)(uintptr_t)candidate;
-        uint32_t requested_size = AZ_HOOK_ARENA_SIZE;
-        NTSTATUS status = NtAllocateVirtualMemory(
-            &requested,
-            &requested_size,
-            MEM_RESERVE | MEM_COMMIT,
-            PAGE_EXECUTE_READWRITE,
-            /* See release_allocation: this is the DebugMemory boolean. */
-            REGION_AUTO);
+#if defined(AURORAAZ_HOOK_RUNTIME_TEST_ALLOCATOR)
+    /* Host-only fallback retained for allocator fault-injection coverage. */
+    {
+        uint32_t candidate;
+        for (candidate = AZ_REV1655_HOOK_ARENA_START;
+             candidate <= AZ_REV1655_HOOK_ARENA_END - AZ_HOOK_ARENA_SIZE;
+             candidate += AZ_ALLOCATION_GRANULARITY) {
+            void *requested = (void *)(uintptr_t)candidate;
+            uint32_t requested_size = AZ_HOOK_ARENA_SIZE;
+            NTSTATUS status = NtAllocateVirtualMemory(
+                &requested,
+                &requested_size,
+                MEM_RESERVE | MEM_COMMIT,
+                PAGE_EXECUTE_READWRITE,
+                /* Final ABI argument is DebugMemory=FALSE. */
+                REGION_AUTO);
 
-        if (FAILED(status)) {
-            continue;
+            if (FAILED(status)) {
+                continue;
+            }
+
+            if ((uintptr_t)requested != (uintptr_t)candidate ||
+                requested_size < AZ_HOOK_ARENA_SIZE) {
+                release_test_allocation(requested);
+                continue;
+            }
+
+            arena->base = (uintptr_t)requested;
+            arena->size = requested_size;
+            arena->used = 0u;
+            return AZ_HOOK_RUNTIME_OK;
         }
-
-        if ((uintptr_t)requested != (uintptr_t)candidate ||
-            requested_size < AZ_HOOK_ARENA_SIZE) {
-            release_allocation(requested);
-            continue;
-        }
-
-        arena->base = (uintptr_t)requested;
-        arena->size = requested_size;
-        arena->used = 0u;
-        return AZ_HOOK_RUNTIME_OK;
     }
+#endif
 
     return AZ_HOOK_RUNTIME_NO_NEAR_MEMORY;
 }
@@ -314,9 +327,13 @@ AzHookRuntimeResult az_hook_arena_release_uninstalled(AzHookArena *arena)
         return AZ_HOOK_RUNTIME_OK;
     }
 
-    release_allocation((void *)arena->base);
+#if defined(AURORAAZ_HOOK_RUNTIME_TEST_ALLOCATOR)
+    release_test_allocation((void *)arena->base);
     clear_arena(arena);
     return AZ_HOOK_RUNTIME_OK;
+#else
+    return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+#endif
 }
 
 AzHookRuntimeResult az_live_hook_install(
