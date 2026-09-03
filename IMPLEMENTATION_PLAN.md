@@ -66,14 +66,16 @@ repeats, and 5 releases. Telemetry reported the recovered main caller,
 zero invalid events, zero drops, zero consumed controls, and zero filter
 requests. Aurora remained stable.
 
-The current work is the first M3 renderer-owned overlay canary. It adds direct
-RenderMenu and Font::End hooks only after the exact Rev1655 gate passes, draws
-the centered inactive row and shadow only on the focused main scene, and keeps
-the input runtime in OBSERVE with filter verification false. It is a
-cold-restart-only lab build and is not evidence of a functional selector until
-hardware rendering passes. All probes remain confined to
-`Hdd1:\AuroraAZLab`; production Aurora, skins, database, and `launch.ini`
-remain untouched.
+The M3a renderer-owned overlay and interaction canary passed on hardware with
+commit `c86ad0c`, run `33747222158`, and SHA-256
+`94F32460DBC5A76153F63BB9B23158E7CFE690277D792DBB7822666B93B09CF8`.
+The complete centered row rendered without diagonal clipping. R3 entered at
+`#`; D-pad and left-stick Left/Right moved the visible highlight; RB retained
+Aurora's stock menu. A was safely consumed and inert because filter
+verification remained false. M3b now adds pre-hook filter binding and a
+read-only registry/snapshot probe; it must not enable live apply. All probes
+remain confined to `Hdd1:\AuroraAZLab`; production Aurora, skins, databases,
+and `launch.ini` remain untouched.
 
 ## M0 — Stabilize and measure
 

@@ -19,8 +19,9 @@ extern "C" {
 #define AZ_REV1655_FILTER_MAX_TEXT 4096u
 #define AZ_REV1655_FILTER_MAX_VECTOR_ITEMS 128u
 
-typedef struct AzRev1655AuroraString {
+typedef union AzRev1655AuroraString {
     uint8_t storage[AZ_REV1655_AURORA_STRING_SIZE];
+    uint32_t alignment;
 } AzRev1655AuroraString;
 
 typedef struct AzRev1655AuroraStringVector {
@@ -206,6 +207,10 @@ typedef struct AzRev1655FilterConsumer {
 
 void az_rev1655_filter_consumer_exact_entrypoints(
     AzRev1655FilterEntrypoints *entrypoints);
+
+/* Copies the immutable Rev1655 XEX/PE digests required by bind(). */
+void az_rev1655_filter_consumer_exact_provenance(
+    AzRev1655FilterProvenance *provenance);
 
 AzRev1655FilterConsumerResult az_rev1655_filter_consumer_bind(
     AzRev1655FilterConsumer *consumer,

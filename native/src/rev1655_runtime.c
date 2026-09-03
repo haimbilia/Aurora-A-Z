@@ -10,6 +10,9 @@
 #include <xecore/xboxkrnl.h>
 
 #include <auroraaz/compatibility.h>
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+#include <auroraaz/filter_consumer_xbox360.h>
+#endif
 #include <auroraaz/hook_runtime.h>
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
@@ -43,6 +46,24 @@
 #define AZ_LIFETIME_PINNED 2u
 #define AZ_LIFETIME_FAILED 3u
 #define AZ_REV1655_IMPORT_LIBRARY_COUNT 2u
+#define AZ_FILTER_THREAD_WAIT_TICKS 2000u
+
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+#define AZ_FILTER_GCM_SINGLETON_ADDRESS 0x82223060u
+#define AZ_FILTER_COPY_ACTIVE_ADDRESS 0x8222B3E8u
+#define AZ_FILTER_DESTROY_ACTIVE_ADDRESS 0x8222B6C8u
+#define AZ_FILTER_STRING_CONSTRUCT_ADDRESS 0x82212CE8u
+#define AZ_FILTER_STRING_ASSIGN_ADDRESS 0x82212DB0u
+#define AZ_FILTER_STRING_LIFECYCLE_ADDRESS 0x82213580u
+#define AZ_FILTER_VECTOR_PUSH_ADDRESS 0x822A6228u
+#define AZ_FILTER_REGISTRY_SINGLETON_ADDRESS 0x82271000u
+#define AZ_FILTER_REGISTRY_LOOKUP_ADDRESS 0x82324C60u
+#define AZ_FILTER_SCHEDULER_ADDRESS 0x82343628u
+#define AZ_FILTER_QUEUE_BEGIN_OFFSET 0x28u
+#define AZ_FILTER_QUEUE_END_OFFSET 0x2Cu
+#define AZ_FILTER_QUEUE_CAPACITY_OFFSET 0x30u
+#define AZ_FILTER_WORKER_BUSY_OFFSET 0x2D8u
+#endif
 
 typedef char AzM2aInputContinuationMustMatch[
     AZ_M2A_INPUT_TARGET_ADDRESS + 4u ==
@@ -60,6 +81,12 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t observations_logged;
     volatile uint32_t lifetime_state;
     volatile uint32_t pinned_ordinal4_export;
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+    volatile uint32_t worker_thread_id;
+    volatile uint32_t filter_bind_result;
+    volatile uint32_t filter_probe_result;
+    AzRev1655FilterConsumer filter_consumer;
+#endif
     AzM2aInputTelemetry telemetry;
     uint32_t telemetry_flush_ticks;
     uint32_t render_telemetry_flush_ticks;
@@ -89,6 +116,23 @@ typedef struct AzM2bRenderMarker {
 typedef char AzM2bRenderMarkerMustBe72Bytes[
     (sizeof(AzM2bRenderMarker) == 72u) ? 1 : -1];
 
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+typedef struct AzM3bFilterMarker {
+    uint8_t magic[4];
+    uint32_t version;
+    uint32_t record_size;
+    uint32_t worker_thread_id;
+    uint32_t bind_result;
+    uint32_t probe_result;
+    uint32_t probe_count;
+    uint32_t runtime_verified;
+    uint32_t disabled;
+} AzM3bFilterMarker;
+
+typedef char AzM3bFilterMarkerMustBe36Bytes[
+    (sizeof(AzM3bFilterMarker) == 36u) ? 1 : -1];
+#endif
+
 static AzRev1655Runtime g_runtime;
 static char g_input_telemetry_slot_a_path[] =
     AZ_M2A_INPUT_TELEMETRY_SLOT_A_PATH;
@@ -97,9 +141,13 @@ static char g_input_telemetry_slot_b_path[] =
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
 static char g_render_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M2b.bin";
+static char g_filter_marker_path[] =
+    "game:\\Data\\Logs\\AuroraAZ-M3b-filter.bin";
 
 /* xecorelib exports ordinal 748 but does not yet declare the prototype. */
 extern int32_t XamIsUIActive(void);
+/* xecorelib exports ordinal 1040 but does not yet declare the prototype. */
+extern uint32_t GetCurrentThreadId(void);
 #endif
 
 static uint32_t load_u32(const volatile uint32_t *value)
@@ -393,6 +441,33 @@ static void flush_render_telemetry(uint8_t force)
         (const uint8_t *)&marker,
         (uint32_t)sizeof(marker));
 }
+
+static void flush_filter_probe_telemetry(void)
+{
+    AzRev1655FilterConsumerStatus status;
+    AzM3bFilterMarker marker;
+
+    memset(&status, 0, sizeof(status));
+    memset(&marker, 0, sizeof(marker));
+    az_rev1655_filter_consumer_snapshot_status(
+        &g_runtime.filter_consumer, &status);
+    marker.magic[0] = 'A';
+    marker.magic[1] = 'Z';
+    marker.magic[2] = 'F';
+    marker.magic[3] = '3';
+    marker.version = 1u;
+    marker.record_size = (uint32_t)sizeof(marker);
+    marker.worker_thread_id = load_u32(&g_runtime.worker_thread_id);
+    marker.bind_result = load_u32(&g_runtime.filter_bind_result);
+    marker.probe_result = load_u32(&g_runtime.filter_probe_result);
+    marker.probe_count = status.probe_count;
+    marker.runtime_verified = status.runtime_verified;
+    marker.disabled = status.disabled;
+    (void)write_complete_file(
+        g_filter_marker_path,
+        (const uint8_t *)&marker,
+        (uint32_t)sizeof(marker));
+}
 #endif
 
 #if defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
@@ -548,6 +623,345 @@ static int resolve_runtime_import_target(
     *out_target = (uint32_t)target;
     return 1;
 }
+
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+typedef void *(*AzFilterSingletonFn)(void);
+typedef void *(*AzFilterCopyFn)(
+    AzRev1655ActiveAggregateD0 *, const void *, uint32_t);
+typedef void (*AzFilterDestroyFn)(AzRev1655ActiveAggregateD0 *);
+typedef void *(*AzFilterStringConstructFn)(
+    AzRev1655AuroraString *, const char *);
+typedef void *(*AzFilterStringAssignFn)(
+    AzRev1655AuroraString *, const char *, uint32_t);
+typedef void (*AzFilterStringLifecycleFn)(
+    AzRev1655AuroraString *, uint32_t, uint32_t);
+typedef void (*AzFilterVectorPushFn)(
+    AzRev1655AuroraStringVector *, const AzRev1655AuroraString *);
+typedef int32_t (*AzFilterRegistryLookupFn)(
+    void *, uint32_t, const char *);
+typedef int32_t (*AzFilterScheduleFn)(
+    void *, const AzRev1655FilterContext38 *,
+    const AzRev1655FilterWork74 *, uint32_t);
+
+static uint8_t filter_address_range_is_valid(
+    void *context,
+    const void *address,
+    size_t size)
+{
+    const uint8_t *bytes = (const uint8_t *)address;
+    const uintptr_t start = (uintptr_t)address;
+    size_t offset;
+
+    (void)context;
+    if (bytes == NULL || size == 0u ||
+        start > UINTPTR_MAX - (size - 1u)) {
+        return 0u;
+    }
+    for (offset = 0u; offset < size; offset += AZ_IMAGE_VALIDATION_STRIDE) {
+        if (!MmIsAddressValid((void *)(bytes + offset))) {
+            return 0u;
+        }
+    }
+    return MmIsAddressValid((void *)(bytes + size - 1u)) ? 1u : 0u;
+}
+
+static void *filter_gcm_singleton(void *context)
+{
+    (void)context;
+    return ((AzFilterSingletonFn)(uintptr_t)
+        AZ_FILTER_GCM_SINGLETON_ADDRESS)();
+}
+
+static void *filter_registry_singleton(void *context)
+{
+    (void)context;
+    return ((AzFilterSingletonFn)(uintptr_t)
+        AZ_FILTER_REGISTRY_SINGLETON_ADDRESS)();
+}
+
+static uint32_t filter_current_thread_id(void *context)
+{
+    (void)context;
+    return GetCurrentThreadId();
+}
+
+static uint8_t filter_worker_affinity_verified(
+    void *context,
+    uint32_t worker_thread_id)
+{
+    (void)context;
+    return worker_thread_id != 0u &&
+        GetCurrentThreadId() == worker_thread_id ? 1u : 0u;
+}
+
+static uint8_t filter_coverflow_is_interactive(void *context)
+{
+    AzInputDetourStatus status;
+
+    (void)context;
+    az_rev1655_input_detour_snapshot_status(&status);
+    return status.scene_allows_capture != 0u && XamIsUIActive() == 0 ? 1u : 0u;
+}
+
+static uint8_t filter_queue_is_demonstrably_idle(void *context)
+{
+    const uint8_t *gcm = (const uint8_t *)filter_gcm_singleton(context);
+    uint32_t begin;
+    uint32_t end;
+    uint32_t capacity;
+
+    if (filter_address_range_is_valid(
+            context, gcm, AZ_FILTER_WORKER_BUSY_OFFSET + 1u) == 0u) {
+        return 0u;
+    }
+    memcpy(&begin, gcm + AZ_FILTER_QUEUE_BEGIN_OFFSET, sizeof(begin));
+    memcpy(&end, gcm + AZ_FILTER_QUEUE_END_OFFSET, sizeof(end));
+    memcpy(&capacity, gcm + AZ_FILTER_QUEUE_CAPACITY_OFFSET, sizeof(capacity));
+    if (begin > end || end > capacity ||
+        ((begin | end | capacity) & 3u) != 0u ||
+        gcm[AZ_FILTER_WORKER_BUSY_OFFSET] != 0u) {
+        return 0u;
+    }
+    return begin == end ? 1u : 0u;
+}
+
+static AzInputDetourResult filter_take_request(
+    void *context,
+    uint8_t *filter_index)
+{
+    (void)context;
+    return az_rev1655_input_detour_take_filter_request(filter_index);
+}
+
+static void filter_finish_request(void *context)
+{
+    (void)context;
+    az_rev1655_input_detour_finish_filter_request();
+}
+
+static uint8_t filter_registry_lookup(
+    void *context,
+    void *registry,
+    uint32_t registry_type,
+    const char *identifier)
+{
+    (void)context;
+    if (registry == NULL || identifier == NULL) {
+        return 0u;
+    }
+    return ((AzFilterRegistryLookupFn)(uintptr_t)
+        AZ_FILTER_REGISTRY_LOOKUP_ADDRESS)(
+            registry, registry_type, identifier) != 0 ? 1u : 0u;
+}
+
+static uint8_t filter_copy_active(
+    void *context,
+    AzRev1655ActiveAggregateD0 *destination,
+    const void *gcm_plus_60,
+    uint32_t staging_selector)
+{
+    void *result;
+
+    (void)context;
+    if (destination == NULL || gcm_plus_60 == NULL) {
+        return 0u;
+    }
+    result = ((AzFilterCopyFn)(uintptr_t)AZ_FILTER_COPY_ACTIVE_ADDRESS)(
+        destination, gcm_plus_60, staging_selector);
+    return result == destination ? 1u : 0u;
+}
+
+static void filter_destroy_active(
+    void *context,
+    AzRev1655ActiveAggregateD0 *aggregate)
+{
+    (void)context;
+    ((AzFilterDestroyFn)(uintptr_t)
+        AZ_FILTER_DESTROY_ACTIVE_ADDRESS)(aggregate);
+}
+
+static uint8_t filter_string_view(
+    void *context,
+    const AzRev1655AuroraString *value,
+    const char **characters,
+    uint32_t *length,
+    uint32_t *capacity)
+{
+    uint32_t pointer_address;
+
+    if (value == NULL || characters == NULL || length == NULL ||
+        capacity == NULL || filter_address_range_is_valid(
+            context, value, sizeof(*value)) == 0u) {
+        return 0u;
+    }
+    memcpy(length, value->storage + 0x10u, sizeof(*length));
+    memcpy(capacity, value->storage + 0x14u, sizeof(*capacity));
+    if (*capacity < 0x10u) {
+        *characters = (const char *)value->storage;
+    }
+    else {
+        memcpy(&pointer_address, value->storage, sizeof(pointer_address));
+        *characters = (const char *)(uintptr_t)pointer_address;
+    }
+    return 1u;
+}
+
+static uint8_t filter_string_construct(
+    void *context,
+    AzRev1655AuroraString *destination,
+    const char *source)
+{
+    (void)context;
+    return ((AzFilterStringConstructFn)(uintptr_t)
+        AZ_FILTER_STRING_CONSTRUCT_ADDRESS)(destination, source) ==
+            destination ? 1u : 0u;
+}
+
+static uint8_t filter_string_assign(
+    void *context,
+    AzRev1655AuroraString *destination,
+    const char *source,
+    uint32_t length)
+{
+    (void)context;
+    return ((AzFilterStringAssignFn)(uintptr_t)
+        AZ_FILTER_STRING_ASSIGN_ADDRESS)(destination, source, length) ==
+            destination ? 1u : 0u;
+}
+
+static void filter_string_destroy(
+    void *context,
+    AzRev1655AuroraString *value)
+{
+    (void)context;
+    ((AzFilterStringLifecycleFn)(uintptr_t)
+        AZ_FILTER_STRING_LIFECYCLE_ADDRESS)(value, 1u, 0u);
+}
+
+static uint8_t filter_vector_count(
+    void *context,
+    const AzRev1655AuroraStringVector *vector,
+    uint32_t *count)
+{
+    uint32_t span;
+
+    (void)context;
+    if (vector == NULL || count == NULL ||
+        vector->begin_address > vector->end_address ||
+        vector->end_address > vector->capacity_address ||
+        ((vector->begin_address | vector->end_address |
+          vector->capacity_address) & 3u) != 0u) {
+        return 0u;
+    }
+    span = vector->end_address - vector->begin_address;
+    if (span % AZ_REV1655_AURORA_STRING_SIZE != 0u ||
+        span / AZ_REV1655_AURORA_STRING_SIZE >
+            AZ_REV1655_FILTER_MAX_VECTOR_ITEMS) {
+        return 0u;
+    }
+    *count = span / AZ_REV1655_AURORA_STRING_SIZE;
+    return 1u;
+}
+
+static AzRev1655AuroraString *filter_vector_at(
+    void *context,
+    AzRev1655AuroraStringVector *vector,
+    uint32_t index)
+{
+    uint32_t count;
+    uintptr_t address;
+
+    if (filter_vector_count(context, vector, &count) == 0u || index >= count) {
+        return NULL;
+    }
+    address = (uintptr_t)vector->begin_address +
+        (uintptr_t)index * AZ_REV1655_AURORA_STRING_SIZE;
+    return filter_address_range_is_valid(
+        context, (void *)address, AZ_REV1655_AURORA_STRING_SIZE) != 0u ?
+            (AzRev1655AuroraString *)address : NULL;
+}
+
+static uint8_t filter_vector_push(
+    void *context,
+    AzRev1655AuroraStringVector *vector,
+    const AzRev1655AuroraString *value)
+{
+    uint32_t before;
+    uint32_t after;
+
+    if (filter_vector_count(context, vector, &before) == 0u ||
+        value == NULL || before >= AZ_REV1655_FILTER_MAX_VECTOR_ITEMS) {
+        return 0u;
+    }
+    ((AzFilterVectorPushFn)(uintptr_t)AZ_FILTER_VECTOR_PUSH_ADDRESS)(
+        vector, value);
+    return filter_vector_count(context, vector, &after) != 0u &&
+        after == before + 1u ? 1u : 0u;
+}
+
+static int32_t filter_schedule(
+    void *context,
+    void *gcm_plus_8,
+    const AzRev1655FilterContext38 *filter_context,
+    const AzRev1655FilterWork74 *work,
+    uint32_t flags)
+{
+    (void)context;
+    return ((AzFilterScheduleFn)(uintptr_t)AZ_FILTER_SCHEDULER_ADDRESS)(
+        gcm_plus_8, filter_context, work, flags);
+}
+
+static void initialize_filter_host(AzRev1655FilterHostOps *host)
+{
+    memset(host, 0, sizeof(*host));
+    az_rev1655_filter_consumer_exact_entrypoints(&host->entrypoints);
+    host->current_thread_id = &filter_current_thread_id;
+    host->worker_affinity_verified = &filter_worker_affinity_verified;
+    host->coverflow_is_interactive = &filter_coverflow_is_interactive;
+    host->filter_queue_is_demonstrably_idle =
+        &filter_queue_is_demonstrably_idle;
+    host->address_range_is_valid = &filter_address_range_is_valid;
+    host->take_filter_request = &filter_take_request;
+    host->finish_filter_request = &filter_finish_request;
+    host->gcm_singleton = &filter_gcm_singleton;
+    host->registry_singleton = &filter_registry_singleton;
+    host->registry_lookup = &filter_registry_lookup;
+    host->copy_active_aggregate = &filter_copy_active;
+    host->destroy_active_aggregate = &filter_destroy_active;
+    host->string_view = &filter_string_view;
+    host->string_construct_cstring = &filter_string_construct;
+    host->string_assign_bytes = &filter_string_assign;
+    host->string_destroy = &filter_string_destroy;
+    host->vector_count = &filter_vector_count;
+    host->vector_at = &filter_vector_at;
+    host->vector_push_back = &filter_vector_push;
+    host->schedule_filter = &filter_schedule;
+}
+
+static AzRev1655FilterConsumerResult bind_filter_consumer_pristine(
+    const AzRev1655LoadedImage *image,
+    uint32_t worker_thread_id)
+{
+    AzRev1655RuntimeImportResolverContext resolver_context = {
+        {NULL, NULL}, {0u, 0u}
+    };
+    const AzRev1655ImportResolver import_resolver = {
+        resolve_runtime_import_target, &resolver_context
+    };
+    AzRev1655FilterProvenance provenance;
+    AzRev1655FilterHostOps host;
+
+    az_rev1655_filter_consumer_exact_provenance(&provenance);
+    initialize_filter_host(&host);
+    return az_rev1655_filter_consumer_bind_with_import_resolver(
+        &g_runtime.filter_consumer,
+        image,
+        &import_resolver,
+        &provenance,
+        worker_thread_id,
+        &host);
+}
+#endif
 
 static AzRev1655RuntimeResult validate_input_site(
     AzRev1655LoadedImage *image,
@@ -919,6 +1333,9 @@ static uint32_t input_observe_worker(void *context)
     uint32_t state;
 
     (void)context;
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+    store_u32(&g_runtime.worker_thread_id, GetCurrentThreadId());
+#endif
 
     do {
         state = load_u32(&g_runtime.state);
@@ -941,6 +1358,7 @@ static uint32_t input_observe_worker(void *context)
         flush_input_telemetry(1u);
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
         flush_render_telemetry(1u);
+        flush_filter_probe_telemetry();
 #endif
     }
 
@@ -949,6 +1367,20 @@ static uint32_t input_observe_worker(void *context)
         (void)drain_observation_pass();
         flush_input_telemetry(0u);
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        if (load_u32(&g_runtime.filter_bind_result) ==
+                (uint32_t)AZ_REV1655_FILTER_CONSUMER_IDLE &&
+            (load_u32(&g_runtime.filter_probe_result) ==
+                 (uint32_t)AZ_REV1655_FILTER_CONSUMER_NOT_BOUND ||
+             load_u32(&g_runtime.filter_probe_result) ==
+                 (uint32_t)AZ_REV1655_FILTER_CONSUMER_DEFERRED)) {
+            const AzRev1655FilterConsumerResult probe_result =
+                az_rev1655_filter_consumer_worker_probe(
+                    &g_runtime.filter_consumer);
+            store_u32(
+                &g_runtime.filter_probe_result,
+                (uint32_t)probe_result);
+            flush_filter_probe_telemetry();
+        }
         flush_render_telemetry(0u);
 #endif
         wait_for_input();
@@ -1127,6 +1559,8 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     AzHookRuntimeResult hook_result;
     AzInputDetourResult input_result;
     AzRev1655ThreadCreateResult create_result;
+    AzRev1655FilterConsumerResult filter_bind_result;
+    uint32_t wait_tick;
     HANDLE worker_thread = NULL;
 
     validation = validate_input_site(&image, &input_site, 1u);
@@ -1203,6 +1637,25 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
                 AZ_REV1655_RUNTIME_THREAD_CREATE_FAILED;
     }
     g_runtime.worker_thread = worker_thread;
+
+    /* bind() hashes canonical .text, so this handshake and bind must complete
+     * before the first direct hook changes an Aurora instruction. */
+    for (wait_tick = 0u; wait_tick < AZ_FILTER_THREAD_WAIT_TICKS; ++wait_tick) {
+        if (load_u32(&g_runtime.worker_thread_id) != 0u) {
+            break;
+        }
+        wait_for_control();
+    }
+    if (load_u32(&g_runtime.worker_thread_id) == 0u) {
+        filter_bind_result = AZ_REV1655_FILTER_CONSUMER_NOT_WORKER;
+    }
+    else {
+        filter_bind_result = bind_filter_consumer_pristine(
+            &image, load_u32(&g_runtime.worker_thread_id));
+    }
+    store_u32(
+        &g_runtime.filter_bind_result,
+        (uint32_t)filter_bind_result);
 
     hook_result = az_live_hook_install_direct(
         input_site.target_address,
@@ -1294,6 +1747,16 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     }
 
     store_u32(&g_runtime.observations_logged, 0u);
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+    store_u32(&g_runtime.worker_thread_id, 0u);
+    store_u32(
+        &g_runtime.filter_bind_result,
+        (uint32_t)AZ_REV1655_FILTER_CONSUMER_NOT_BOUND);
+    store_u32(
+        &g_runtime.filter_probe_result,
+        (uint32_t)AZ_REV1655_FILTER_CONSUMER_NOT_BOUND);
+    memset(&g_runtime.filter_consumer, 0, sizeof(g_runtime.filter_consumer));
+#endif
     az_m2a_input_telemetry_init(&g_runtime.telemetry);
     g_runtime.telemetry_flush_ticks = 0u;
     g_runtime.render_telemetry_flush_ticks = 0u;

@@ -13,6 +13,8 @@ m2a_sources=(
     "${repo_root}/native/src/netdbg_m2a_exports.c"
     "${repo_root}/native/src/netdbg_lifetime_rev1655.c"
     "${repo_root}/native/src/image.c"
+    "${repo_root}/native/src/filters.c"
+    "${repo_root}/native/src/filter_consumer_xbox360.c"
     "${repo_root}/native/src/sha256.c"
     "${repo_root}/native/src/rev1655_hook_gate.c"
     "${repo_root}/native/src/ppc.c"

@@ -1010,6 +1010,22 @@ void az_rev1655_filter_consumer_exact_entrypoints(
     entrypoints->scheduler = AZ_REV1655_SCHEDULER_ADDRESS;
 }
 
+void az_rev1655_filter_consumer_exact_provenance(
+    AzRev1655FilterProvenance *provenance)
+{
+    if (provenance == NULL) {
+        return;
+    }
+    memcpy(
+        provenance->aurora_xex_sha256,
+        k_rev1655_xex_sha256,
+        sizeof(k_rev1655_xex_sha256));
+    memcpy(
+        provenance->extracted_pe_sha256,
+        k_rev1655_pe_sha256,
+        sizeof(k_rev1655_pe_sha256));
+}
+
 static AzRev1655FilterConsumerResult bind_with_import_resolver(
     AzRev1655FilterConsumer *consumer,
     const AzRev1655LoadedImage *image,

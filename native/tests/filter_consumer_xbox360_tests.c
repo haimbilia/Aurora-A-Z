@@ -331,10 +331,11 @@ static int prepare_loaded_image_and_resolver(uint8_t *image)
 
 static void fill_provenance(AzRev1655FilterProvenance *provenance)
 {
-    memcpy(provenance->aurora_xex_sha256,
-        k_xex_sha256, sizeof(k_xex_sha256));
-    memcpy(provenance->extracted_pe_sha256,
-        k_pe_sha256, sizeof(k_pe_sha256));
+    az_rev1655_filter_consumer_exact_provenance(provenance);
+    CHECK(memcmp(provenance->aurora_xex_sha256,
+        k_xex_sha256, sizeof(k_xex_sha256)) == 0);
+    CHECK(memcmp(provenance->extracted_pe_sha256,
+        k_pe_sha256, sizeof(k_pe_sha256)) == 0);
 }
 
 static void test_host_init(TestHost *host)

@@ -25,7 +25,7 @@ in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
 
 ## Current status
 
-There is no compliant functional release yet. The native C99 selector core is
+There is no compliant filtering release yet. The native C99 selector core is
 implemented and host-tested: it models the R3/Left/Right/A state machine, maps
 `#` and `A` through `Z` to Aurora's built-in name filters, carries the mockup's
 measured 1280x720 layout, and rejects binaries that do not match the exact
@@ -33,8 +33,12 @@ Rev1655 code probes. M1, the one-file native bootstrap and worker-entry gate, is
 complete on hardware. M2a is also complete on hardware: the direct observe-only
 input hook saw every required control, including stick holds/repeats, while
 recording zero invalid events, drops, consumed keys, or filter requests. M3's
-first renderer-owned overlay canary is now being integrated. It deliberately
-keeps input observe-only and filtering disabled.
+renderer-owned overlay and selector interaction passed on hardware with commit
+`c86ad0c`, GitHub Actions run `33747222158`, and artifact SHA-256
+`94F32460DBC5A76153F63BB9B23158E7CFE690277D792DBB7822666B93B09CF8`.
+The complete row rendered without diagonal clipping; R3, D-pad Left/Right,
+left-stick Left/Right, and RB behaved as required. A remains deliberately
+inert until the independently gated filter bridge passes its hardware probes.
 
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary

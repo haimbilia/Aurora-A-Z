@@ -48,6 +48,9 @@
   enter with R3, move with D-pad/left-stick Left/Right, and visibly highlight
   the selected glyph. Filter application remains independently fail-closed;
   A is consumed and keeps the selector open until that worker is verified.
+- Record the successful M3a hardware interaction test and add the M3b
+  fail-closed filter foundation: aligned host object layouts, exact provenance,
+  pristine pre-hook binding, and a read-only registry/snapshot probe marker.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

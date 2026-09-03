@@ -22,6 +22,16 @@ The test did not modify the production Aurora tree or `launch.ini`. Before the
 next lab deployment, enumerate the lab plugin directory rather than relying on
 this document to assert whether a later session left the active target present.
 
+M3a interaction passed on hardware on 2026-09-03 with commit `c86ad0c`, run
+`33747222158`, and SHA-256
+`94F32460DBC5A76153F63BB9B23158E7CFE690277D792DBB7822666B93B09CF8`.
+The full centered row rendered without diagonal clipping. R3 selected `#`,
+D-pad and left-stick Left/Right moved the highlight, and RB remained stock.
+A was deliberately consumed but inert because the filter gate stayed false.
+The next gate is M3b pre-hook bind plus a read-only all-27 registry and active
+aggregate copy/validate/destroy probe; do not enable live apply before it
+passes.
+
 ### Current console state
 
 ```
