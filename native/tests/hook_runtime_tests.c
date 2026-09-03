@@ -935,16 +935,14 @@ static void test_direct_install_and_remove_need_no_arena(void)
     CHECK(hook.target_restored == 1u);
     CHECK(hook.direct == 1u);
     CHECK(az_live_hook_can_unload(&hook) == 1u);
-    CHECK(event_count == 5u);
+    CHECK(event_count == 4u);
     check_event(0u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), PAGE_EXECUTE_READWRITE);
-    check_event(1u, TEST_EVENT_QUERY_PROTECT, TEST_TARGET_ADDRESS,
-        0u, PAGE_EXECUTE_READWRITE);
-    check_event(2u, TEST_EVENT_SWEEP_DCACHE, TEST_TARGET_ADDRESS,
+    check_event(1u, TEST_EVENT_SWEEP_DCACHE, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), 0u);
-    check_event(3u, TEST_EVENT_SWEEP_ICACHE, TEST_TARGET_ADDRESS,
+    check_event(2u, TEST_EVENT_SWEEP_ICACHE, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), 0u);
-    check_event(4u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
+    check_event(3u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), TEST_OLD_PROTECT);
 }
 

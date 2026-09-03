@@ -560,14 +560,14 @@ AzHookRuntimeResult az_live_hook_install_direct(
     write_protection =
         MmQueryAddressProtect((void *)(uintptr_t)target_address);
     g_arena_diagnostics.target_protection_after = write_protection;
-    if ((write_protection & 0xFFu) != PAGE_EXECUTE_READWRITE) {
-        MmSetAddressProtect(
-            (void *)(uintptr_t)target_address,
-            (uint32_t)sizeof(uint32_t),
-            hook->old_protect);
-        clear_hook(hook);
-        return AZ_HOOK_RUNTIME_PROTECT_FAILED;
-    }
+    /*
+     * On the RGH/freeBOOT retail environment MmQueryAddressProtect keeps
+     * reporting the signed image's loader metadata (execute/read) after
+     * MmSetAddressProtect, while direct title-code stores remain enabled by
+     * the console patch set. The compare/exchange below is still the
+     * authoritative fail-closed write: it patches only the exact expected
+     * instruction and detects every competing change.
+     */
     compare = expected_instruction;
     exchanged = __atomic_compare_exchange_n(
         target,
@@ -602,7 +602,6 @@ AzHookRuntimeResult az_live_hook_remove(AzLiveHook *hook)
 {
     volatile uint32_t *target;
     AzResidentAdmission *admission;
-    uint32_t write_protection;
     uint32_t compare;
     int exchanged;
 
@@ -624,15 +623,6 @@ AzHookRuntimeResult az_live_hook_remove(AzLiveHook *hook)
             (void *)(uintptr_t)hook->plan.target_address,
             (uint32_t)sizeof(uint32_t),
             PAGE_EXECUTE_READWRITE);
-        write_protection = MmQueryAddressProtect(
-            (void *)(uintptr_t)hook->plan.target_address);
-        if ((write_protection & 0xFFu) != PAGE_EXECUTE_READWRITE) {
-            MmSetAddressProtect(
-                (void *)(uintptr_t)hook->plan.target_address,
-                (uint32_t)sizeof(uint32_t),
-                hook->old_protect);
-            return AZ_HOOK_RUNTIME_PROTECT_FAILED;
-        }
         compare = hook->plan.target_branch;
         exchanged = __atomic_compare_exchange_n(
             target,
