@@ -53,11 +53,12 @@ export CPLUS_INCLUDE_PATH=""
     -Wl,/dll \
     -Wl,/entry:DllMain \
     -Wl,/def:"${repo_root}/native/netdbg_exports.def" \
-    -Wl,/base:0x91D00000 \
+    -Wl,/base:0x82D50000 \
     -Wl,/filealign:128 \
     -Wl,/align:4096 \
     -Wl,/opt:ref \
     -Xlinker "/section:.xexexp,ER" \
+    -Xlinker "/section:.hookarena,ERW" \
     -o "${output_dir}/AuroraAZ.dll"
 
 python3 "${repo_root}/scripts/xex_exports.py" prepare-pe \

@@ -14,6 +14,21 @@
 #define AZ_ADMITTED_RELAY_WORDS 21u
 #define AZ_RESIDENT_EXIT_WORDS 7u
 
+/*
+ * NtAllocateVirtualMemory cannot create pages in the loader-owned 0x8xxxxxxx
+ * XEX range on retail kernels.  The release image is therefore linked at the
+ * first free 64-KiB boundary after Aurora Rev1655 and carries its own page for
+ * relays and trampolines.  DllMain pins the module before this page is used,
+ * so its lifetime is the title lifetime required by the resident-return ABI.
+ */
+#if defined(_MSC_VER)
+#pragma section(".hookarena", read, write, execute)
+__declspec(allocate(".hookarena")) __declspec(align(4096))
+#elif defined(__clang__) || defined(__GNUC__)
+__attribute__((section(".hookarena"), used, aligned(4096)))
+#endif
+static uint8_t g_auroraaz_hook_arena_storage[AZ_HOOK_ARENA_SIZE] = {0};
+
 typedef struct AzResidentAdmission {
     volatile uint32_t active_entries;
     volatile uint32_t accepting;
@@ -69,6 +84,29 @@ static void clear_hook(AzLiveHook *hook)
     hook->target_restored = 0u;
 }
 
+static uintptr_t embedded_arena_base(void)
+{
+    return (uintptr_t)&g_auroraaz_hook_arena_storage[0];
+}
+
+static uint8_t embedded_arena_is_usable(void)
+{
+    const uintptr_t base = embedded_arena_base();
+
+    if (base > (uintptr_t)UINT32_MAX ||
+        (base & (AZ_HOOK_ARENA_SIZE - 1u)) != 0u ||
+        base < (uintptr_t)AZ_REV1655_HOOK_ARENA_START ||
+        base > (uintptr_t)(
+            AZ_REV1655_HOOK_ARENA_END - AZ_HOOK_ARENA_SIZE)) {
+        return 0u;
+    }
+    if (!MmIsAddressValid((void *)base) ||
+        !MmIsAddressValid((void *)(base + AZ_HOOK_ARENA_SIZE - 1u))) {
+        return 0u;
+    }
+    return 1u;
+}
+
 static void release_allocation(void *base)
 {
     void *release_base = base;
@@ -79,7 +117,10 @@ static void release_allocation(void *base)
             &release_base,
             &release_size,
             MEM_RELEASE,
-            REGION_TITLE);
+            /* The final kernel ABI argument is DebugMemory, despite the
+             * REGION type used by xecorelib's declaration.  Retail title
+             * allocations must pass FALSE (REGION_AUTO == 0). */
+            REGION_AUTO);
     }
 }
 
@@ -203,12 +244,27 @@ static void build_resident_exit(
 AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
 {
     uint32_t candidate;
+    const uintptr_t resident_base = embedded_arena_base();
 
     if (arena == NULL) {
         return AZ_HOOK_RUNTIME_NULL;
     }
     clear_arena(arena);
 
+    if (embedded_arena_is_usable() != 0u) {
+        MmSetAddressProtect(
+            (void *)resident_base,
+            AZ_HOOK_ARENA_SIZE,
+            PAGE_EXECUTE_READWRITE);
+        arena->base = resident_base;
+        arena->size = AZ_HOOK_ARENA_SIZE;
+        arena->used = 0u;
+        return AZ_HOOK_RUNTIME_OK;
+    }
+
+    /* Retain the allocator path for host fault-injection tests and compatible
+     * development kernels.  The final ABI argument is DebugMemory, despite
+     * xecorelib declaring it as REGION, and therefore must be FALSE. */
     for (candidate = AZ_REV1655_HOOK_ARENA_START;
          candidate <= AZ_REV1655_HOOK_ARENA_END - AZ_HOOK_ARENA_SIZE;
          candidate += AZ_ALLOCATION_GRANULARITY) {
@@ -219,7 +275,8 @@ AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
             &requested_size,
             MEM_RESERVE | MEM_COMMIT,
             PAGE_EXECUTE_READWRITE,
-            REGION_TITLE);
+            /* See release_allocation: this is the DebugMemory boolean. */
+            REGION_AUTO);
 
         if (FAILED(status)) {
             continue;
@@ -250,6 +307,11 @@ AzHookRuntimeResult az_hook_arena_release_uninstalled(AzHookArena *arena)
     }
     if (arena->used != 0u) {
         return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+    }
+
+    if (arena->base == embedded_arena_base()) {
+        clear_arena(arena);
+        return AZ_HOOK_RUNTIME_OK;
     }
 
     release_allocation((void *)arena->base);

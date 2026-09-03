@@ -7,8 +7,9 @@
 #define AZ_HOOK_SLOT_SIZE 0xA0
 
 /*
- * Resident slot layout. The admission state remains in REGION_TITLE memory
- * after a live hook is removed; never free or reuse a live slot. The assembly
+ * Resident slot layout. The admission state remains in the title-pinned
+ * module's embedded hook-arena page after a live hook is removed; never free
+ * or reuse a live slot. The assembly
  * detour entry receives the admission-state address in volatile r0. Before
  * leaving module text, its assembly shim must restore its stack, put that
  * state address in r11 and Aurora's original return LR in r12, preserve the

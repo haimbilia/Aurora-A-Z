@@ -35,7 +35,7 @@
 #define TEST_ALLOCATION_GRANULARITY 0x00010000u
 #define TEST_STATUS_SUCCESS 0x00000000u
 #define TEST_STATUS_UNSUCCESSFUL 0xC0000001u
-#define TEST_REGION_TITLE 1
+#define TEST_DEBUG_MEMORY_FALSE 0
 #define TEST_EVENT_CAPACITY 2048u
 #define TEST_MAPPING_CAPACITY 64u
 #define TEST_ALLOCATION_STEP_CAPACITY 16u
@@ -298,7 +298,7 @@ uint32_t NtAllocateVirtualMemory(
         region);
     CHECK(alloc_type == (MEM_RESERVE | MEM_COMMIT));
     CHECK(protect_bits == PAGE_EXECUTE_READWRITE);
-    CHECK(region == TEST_REGION_TITLE);
+    CHECK(region == TEST_DEBUG_MEMORY_FALSE);
 
     outcome = next_allocation_outcome();
     if (outcome == TEST_ALLOCATE_FAIL) {
@@ -349,7 +349,7 @@ uint32_t NtFreeVirtualMemory(
         region);
     CHECK(*region_size_ptr == 0u);
     CHECK(free_type == MEM_RELEASE);
-    CHECK(region == TEST_REGION_TITLE);
+    CHECK(region == TEST_DEBUG_MEMORY_FALSE);
 
     if (free_status != TEST_STATUS_SUCCESS) {
         return free_status;
