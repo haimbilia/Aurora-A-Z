@@ -231,6 +231,18 @@ static void test_verified_selector_flow(void)
     CHECK(key.user_index == 0u);
     CHECK(key.hid_code == 0u);
 
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYUP);
+    decision = az_input_process(&runtime, &key, &gate);
+    CHECK(decision.consume == 1u);
+    CHECK(decision.selector_result.request_filter == 0u);
+    CHECK(runtime.selector.mode == AZ_MODE_COVERFLOW);
+    CHECK(runtime.selector.applied_index == AZ_NO_GLYPH);
+
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
+    decision = az_input_process(&runtime, &key, &gate);
+    CHECK(decision.consume == 1u);
+    CHECK(runtime.selector.mode == AZ_MODE_SELECTING);
+
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
     decision = az_input_process(&runtime, &key, &gate);
     CHECK(decision.consume == 1u);

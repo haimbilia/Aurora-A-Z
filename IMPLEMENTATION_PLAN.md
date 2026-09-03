@@ -81,7 +81,11 @@ one scheduled job with zero rejections. Its second A press was deliberately
 blocked by the one-shot safety gate. The repeatable lab candidate now revokes
 the filter gate after every successful enqueue, waits at least eight seconds,
 requires Aurora's queue and worker-busy state to remain idle for one continuous
-second, and only then re-arms the selector for the next letter. All probes remain confined to
+second, and only then re-arms the selector for the next letter. The hardware
+vertical slice later showed this fixed delay was unnecessarily visible; the
+follow-up re-arms after observed queue activity ends and remains stably idle,
+retaining the original timeout only as a fallback when activity cannot be
+observed. All probes remain confined to
 `Hdd1:\AuroraAZLab`; production Aurora, skins, databases, and `launch.ini`
 remain untouched.
 
@@ -354,6 +358,7 @@ Required transitions:
 Coverflow --R3 press/hold--> Selector(#)
 Selector --Left/Right--> Selector(previous/next letter)
 Selector --R3 release--> Apply filter --> Coverflow
+Selector(no movement) --R3 release--> Coverflow (no-op)
 ```
 
 While `Selector` is active, letter navigation must never move the coverflow.

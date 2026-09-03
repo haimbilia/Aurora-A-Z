@@ -69,6 +69,11 @@
   selector. The row is hidden normally, appears at `#` while R3 is held,
   accepts D-pad or left-stick Left/Right during the hold, and applies on R3
   release. Aurora A-Z no longer consumes or assigns any action to A.
+- Treat an R3 press/release with no actual highlight movement as a cancel/no-op
+  instead of applying `#`.
+- Re-arm after Aurora's observed queue/busy activity ends and stays idle for
+  200 ms, removing the visible fixed lockout while retaining the conservative
+  timeout as a fallback when activity is not observed.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

@@ -57,7 +57,13 @@ The controller contract changed on 2026-09-04 after an unarmed build allowed A
 to reach Aurora and launch the highlighted game. The row is now hidden during
 normal coverflow use. Press and hold R3 to show it at `#`, navigate with D-pad
 or left-stick Left/Right while continuing to hold R3, and release R3 to apply
-and hide it. Aurora A-Z no longer assigns, consumes, or clears A at all.
+and hide it. A press/release of R3 without any actual highlight movement is a
+cancel/no-op and must not apply `#`. Aurora A-Z no longer assigns, consumes, or
+clears A at all. Hardware confirmed the first hold/release build filtered
+correctly, but its fixed 8-second plus 1-second-idle re-arm window was visibly
+slow. The next build uses observed queue/busy activity followed by 200 ms of
+stable idle; the old 8-second timeout remains only as a missed-activity safety
+fallback.
 
 ### Current console state
 

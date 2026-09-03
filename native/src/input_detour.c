@@ -662,6 +662,7 @@ void az_rev1655_input_detour_snapshot_selector(AzSelectorState *selector)
     selector->mode = (AzSelectorMode)(packed & 0xFFu);
     selector->selected_index = (uint8_t)((packed >> 8u) & 0xFFu);
     selector->applied_index = (uint8_t)((packed >> 16u) & 0xFFu);
+    selector->selection_changed = 0u;
     if (requested_stage_from_lifecycle() !=
         AZ_INPUT_DETOUR_CONSUME) {
         selector->mode = AZ_MODE_COVERFLOW;

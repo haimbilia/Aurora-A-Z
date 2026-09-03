@@ -107,11 +107,24 @@ static void test_selector_flow(void)
     CHECK(result.handled == 1u);
     CHECK(state.mode == AZ_MODE_SELECTING);
     CHECK(state.selected_index == 0u);
+    CHECK(state.selection_changed == 0u);
+
+    result = az_selector_dispatch(
+        &state, AZ_COMMAND_APPLY, AZ_EDGE_CLAMP, 1u);
+    CHECK(result.handled == 1u);
+    CHECK(result.request_filter == 0u);
+    CHECK(state.mode == AZ_MODE_COVERFLOW);
+    CHECK(state.applied_index == AZ_NO_GLYPH);
+
+    result = az_selector_dispatch(
+        &state, AZ_COMMAND_ENTER, AZ_EDGE_CLAMP, 1u);
+    CHECK(result.handled == 1u);
 
     result = az_selector_dispatch(
         &state, AZ_COMMAND_NEXT, AZ_EDGE_CLAMP, 1u);
     CHECK(result.handled == 1u);
     CHECK(state.selected_index == 1u);
+    CHECK(state.selection_changed == 1u);
 
     result = az_selector_dispatch(
         &state, AZ_COMMAND_APPLY, AZ_EDGE_CLAMP, 1u);
@@ -120,6 +133,7 @@ static void test_selector_flow(void)
     CHECK(result.filter_index == 1u);
     CHECK(state.mode == AZ_MODE_COVERFLOW);
     CHECK(state.applied_index == 1u);
+    CHECK(state.selection_changed == 0u);
 
     result = az_selector_dispatch(
         &state, AZ_COMMAND_ENTER, AZ_EDGE_CLAMP, 0u);

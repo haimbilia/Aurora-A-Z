@@ -23,6 +23,7 @@ void az_selector_init(AzSelectorState *state)
     state->mode = AZ_MODE_COVERFLOW;
     state->selected_index = 0u;
     state->applied_index = AZ_NO_GLYPH;
+    state->selection_changed = 0u;
 }
 
 void az_selector_leave_coverflow(AzSelectorState *state)
@@ -33,6 +34,7 @@ void az_selector_leave_coverflow(AzSelectorState *state)
 
     state->mode = AZ_MODE_COVERFLOW;
     state->selected_index = 0u;
+    state->selection_changed = 0u;
 }
 
 AzSelectorResult az_selector_dispatch(
@@ -64,6 +66,7 @@ AzSelectorResult az_selector_dispatch(
 
         state->mode = AZ_MODE_SELECTING;
         state->selected_index = 0u;
+        state->selection_changed = 0u;
         return handled_result();
     }
 
@@ -75,25 +78,33 @@ AzSelectorResult az_selector_dispatch(
     case AZ_COMMAND_PREVIOUS:
         if (state->selected_index > 0u) {
             --state->selected_index;
+            state->selection_changed = 1u;
         }
         else if (edge_behavior == AZ_EDGE_WRAP) {
             state->selected_index = (uint8_t)(AZ_GLYPH_COUNT - 1u);
+            state->selection_changed = 1u;
         }
         return handled_result();
 
     case AZ_COMMAND_NEXT:
         if (state->selected_index + 1u < AZ_GLYPH_COUNT) {
             ++state->selected_index;
+            state->selection_changed = 1u;
         }
         else if (edge_behavior == AZ_EDGE_WRAP) {
             state->selected_index = 0u;
+            state->selection_changed = 1u;
         }
         return handled_result();
 
     case AZ_COMMAND_APPLY:
-        state->applied_index = state->selected_index;
         state->mode = AZ_MODE_COVERFLOW;
         result = handled_result();
+        if (state->selection_changed == 0u) {
+            return result;
+        }
+        state->selection_changed = 0u;
+        state->applied_index = state->selected_index;
         result.request_filter = 1u;
         result.filter_index = state->applied_index;
         return result;

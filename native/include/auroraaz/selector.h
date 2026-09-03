@@ -30,6 +30,7 @@ typedef struct AzSelectorState {
     AzSelectorMode mode;
     uint8_t selected_index;
     uint8_t applied_index;
+    uint8_t selection_changed;
 } AzSelectorState;
 
 typedef struct AzSelectorResult {

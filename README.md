@@ -17,7 +17,8 @@ The normative controller and filtering behavior is defined in
 [`REQUIREMENTS.md`](REQUIREMENTS.md). In short: hold R3 to reveal the
 on-coverflow selector at `#`; while holding it, D-pad Left/Right and left-stick
 Left/Right move the highlight; release R3 to filter and hide the row. Aurora
-A-Z never consumes A, and RB retains Aurora's normal QuickView menu.
+A-Z never consumes A, and RB retains Aurora's normal QuickView menu. A quick
+R3 press/release without moving the highlight cancels without filtering.
 
 The architectural constraints that follow from these requirements are recorded
 in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in

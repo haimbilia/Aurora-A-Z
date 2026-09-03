@@ -166,6 +166,18 @@ static void test_verified_flow_and_filter_queue(void)
     CHECK(selector.mode == AZ_MODE_SELECTING);
     CHECK(selector.selected_index == 0u);
 
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
+    az_rev1655_input_detour_snapshot_selector(&selector);
+    CHECK(selector.mode == AZ_MODE_COVERFLOW);
+    CHECK(selector.applied_index == AZ_NO_GLYPH);
+    CHECK(az_rev1655_input_detour_take_filter_request(&filter_index) ==
+        AZ_INPUT_DETOUR_NO_FILTER);
+
+    arm_next_input();
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
+    (void)dispatch_main(&key);
+    CHECK(key.virtual_key == 0u);
+
     arm_next_input();
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);

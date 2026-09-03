@@ -51,8 +51,8 @@
 #define AZ_FILTER_APPLY_ARMED 1u
 #define AZ_FILTER_APPLY_COOLDOWN 2u
 #define AZ_FILTER_APPLY_FAILED 3u
-#define AZ_FILTER_COOLDOWN_TICKS 160u
-#define AZ_FILTER_IDLE_STABLE_TICKS 20u
+#define AZ_FILTER_FALLBACK_COOLDOWN_TICKS 160u
+#define AZ_FILTER_IDLE_STABLE_TICKS 4u
 
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
 #define AZ_FILTER_GCM_SINGLETON_ADDRESS 0x82223060u
@@ -95,6 +95,7 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t filter_apply_state;
     uint32_t filter_cooldown_ticks;
     uint32_t filter_idle_ticks;
+    uint32_t filter_activity_seen;
     AzRev1655FilterConsumer filter_consumer;
 #endif
     AzM2aInputTelemetry telemetry;
@@ -145,10 +146,11 @@ typedef struct AzM3bFilterMarker {
     uint32_t filter_gate_published;
     uint32_t cooldown_ticks;
     uint32_t idle_ticks;
+    uint32_t activity_seen;
 } AzM3bFilterMarker;
 
-typedef char AzM3bFilterMarkerMustBe68Bytes[
-    (sizeof(AzM3bFilterMarker) == 68u) ? 1 : -1];
+typedef char AzM3bFilterMarkerMustBe72Bytes[
+    (sizeof(AzM3bFilterMarker) == 72u) ? 1 : -1];
 #endif
 
 static AzRev1655Runtime g_runtime;
@@ -473,7 +475,7 @@ static void flush_filter_probe_telemetry(void)
     marker.magic[1] = 'Z';
     marker.magic[2] = 'F';
     marker.magic[3] = '3';
-    marker.version = 3u;
+    marker.version = 4u;
     marker.record_size = (uint32_t)sizeof(marker);
     marker.worker_thread_id = load_u32(&g_runtime.worker_thread_id);
     marker.bind_result = load_u32(&g_runtime.filter_bind_result);
@@ -490,6 +492,7 @@ static void flush_filter_probe_telemetry(void)
         marker.apply_state == AZ_FILTER_APPLY_ARMED ? 1u : 0u;
     marker.cooldown_ticks = g_runtime.filter_cooldown_ticks;
     marker.idle_ticks = g_runtime.filter_idle_ticks;
+    marker.activity_seen = g_runtime.filter_activity_seen;
     (void)write_complete_file(
         g_filter_marker_path,
         (const uint8_t *)&marker,
@@ -1425,6 +1428,7 @@ static uint32_t input_observe_worker(void *context)
                         AZ_FILTER_APPLY_ARMED);
                     g_runtime.filter_cooldown_ticks = 0u;
                     g_runtime.filter_idle_ticks = 0u;
+                    g_runtime.filter_activity_seen = 0u;
                 }
             }
             flush_filter_probe_telemetry();
@@ -1453,6 +1457,7 @@ static uint32_t input_observe_worker(void *context)
                     AZ_FILTER_APPLY_COOLDOWN);
                 g_runtime.filter_cooldown_ticks = 0u;
                 g_runtime.filter_idle_ticks = 0u;
+                g_runtime.filter_activity_seen = 0u;
                 flush_filter_probe_telemetry();
             }
             else if (step_result != AZ_REV1655_FILTER_CONSUMER_IDLE &&
@@ -1472,15 +1477,23 @@ static uint32_t input_observe_worker(void *context)
         }
         else if (load_u32(&g_runtime.filter_apply_state) ==
                  AZ_FILTER_APPLY_COOLDOWN) {
+            uint8_t queue_idle;
+
             if (g_runtime.filter_cooldown_ticks <
-                AZ_FILTER_COOLDOWN_TICKS) {
+                AZ_FILTER_FALLBACK_COOLDOWN_TICKS) {
                 ++g_runtime.filter_cooldown_ticks;
             }
-            if (g_runtime.filter_cooldown_ticks <
-                AZ_FILTER_COOLDOWN_TICKS) {
+            queue_idle = filter_queue_is_demonstrably_idle(NULL);
+            if (queue_idle == 0u) {
+                if (g_runtime.filter_activity_seen == 0u) {
+                    g_runtime.filter_activity_seen = 1u;
+                    flush_filter_probe_telemetry();
+                }
                 g_runtime.filter_idle_ticks = 0u;
             }
-            else if (filter_queue_is_demonstrably_idle(NULL) != 0u) {
+            else if (g_runtime.filter_activity_seen != 0u ||
+                     g_runtime.filter_cooldown_ticks >=
+                        AZ_FILTER_FALLBACK_COOLDOWN_TICKS) {
                 if (g_runtime.filter_idle_ticks <
                     AZ_FILTER_IDLE_STABLE_TICKS) {
                     ++g_runtime.filter_idle_ticks;
@@ -1489,8 +1502,9 @@ static uint32_t input_observe_worker(void *context)
             else {
                 g_runtime.filter_idle_ticks = 0u;
             }
-            if (g_runtime.filter_cooldown_ticks >=
-                    AZ_FILTER_COOLDOWN_TICKS &&
+            if ((g_runtime.filter_cooldown_ticks >=
+                     AZ_FILTER_FALLBACK_COOLDOWN_TICKS ||
+                 g_runtime.filter_activity_seen != 0u) &&
                 g_runtime.filter_idle_ticks >=
                     AZ_FILTER_IDLE_STABLE_TICKS) {
                 az_rev1655_input_detour_publish_verification(
@@ -1507,6 +1521,7 @@ static uint32_t input_observe_worker(void *context)
                         AZ_FILTER_APPLY_ARMED);
                     g_runtime.filter_cooldown_ticks = 0u;
                     g_runtime.filter_idle_ticks = 0u;
+                    g_runtime.filter_activity_seen = 0u;
                 }
                 flush_filter_probe_telemetry();
             }
@@ -1900,6 +1915,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
         AZ_FILTER_APPLY_UNARMED);
     g_runtime.filter_cooldown_ticks = 0u;
     g_runtime.filter_idle_ticks = 0u;
+    g_runtime.filter_activity_seen = 0u;
     memset(&g_runtime.filter_consumer, 0, sizeof(g_runtime.filter_consumer));
 #endif
     az_m2a_input_telemetry_init(&g_runtime.telemetry);

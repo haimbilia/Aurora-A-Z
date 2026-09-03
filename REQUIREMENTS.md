@@ -56,8 +56,11 @@ functional unless it satisfies every acceptance criterion below on Aurora
 - While selector mode is active, those four inputs move only the letter
   highlight. They must not move or scroll the coverflow.
 - Exactly one letter is visibly highlighted at a time.
-- Releasing R3 applies the highlighted initial-character filter, hides the
-  alphabet, and returns normal coverflow control.
+- Releasing R3 applies the highlighted initial-character filter only if at
+  least one Left/Right navigation input changed the selection during that hold.
+  It then hides the alphabet and returns normal coverflow control.
+- Pressing and releasing R3 without changing the highlight is a no-op: it
+  hides the alphabet and must not apply `#` or rebuild the coverflow.
 - Aurora A-Z must never consume, clear, or assign any action to A.
 - RB continues to open Aurora's unmodified QuickView menu.
 
@@ -79,8 +82,9 @@ There are two distinct states:
    controls. Holding R3 enters selector mode; RB retains the normal QuickView
    action.
 2. **R3 held / selector active:** the alphabet is visible. D-pad or left-stick
-   Left/Right changes the highlighted character. Releasing R3 applies it and
-   hides the alphabet. Coverflow navigation is suspended while R3 is held.
+   Left/Right changes the highlighted character. Releasing R3 applies it only
+   after such a change, then hides the alphabet. A tap with no navigation
+   cancels. Coverflow navigation is suspended while R3 is held.
 
 Cancel behavior and whether navigation stops or wraps at `#` and `Z` are not
 specified yet. They must not be assumed by an implementation until documented.
@@ -111,6 +115,11 @@ specified yet. They must not be assumed by an implementation until documented.
     or required.
 11. Press A during normal coverflow use and verify Aurora receives it unchanged;
     Aurora A-Z must neither apply a letter nor consume the key.
+12. Press and release R3 without any Left/Right input. The row appears and
+    hides, but the active filter, title count, and coverflow remain unchanged.
+13. After a filter completes, verify R3 becomes available as soon as Aurora's
+    queue has returned to a stable idle state; it must not impose a fixed
+    multi-second delay when completion is already observable.
 
 ## Explicitly non-compliant implementations
 
