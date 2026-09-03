@@ -28,6 +28,7 @@ __declspec(allocate(".azhook")) __declspec(align(4096))
 __attribute__((section(".azhook"), used, aligned(4096)))
 #endif
 static uint8_t g_auroraaz_hook_arena_storage[AZ_HOOK_ARENA_SIZE] = {0};
+static AzHookArenaDiagnostics g_arena_diagnostics = {0u, 0u, 0u, 0u};
 
 typedef struct AzResidentAdmission {
     volatile uint32_t active_entries;
@@ -94,19 +95,36 @@ static uintptr_t embedded_arena_base(void)
 static uint8_t embedded_arena_is_usable(void)
 {
     const uintptr_t base = embedded_arena_base();
+    uint32_t failures = 0u;
 
-    if (base > (uintptr_t)UINT32_MAX ||
-        (base & (AZ_HOOK_ARENA_SIZE - 1u)) != 0u ||
-        base < (uintptr_t)AZ_REV1655_HOOK_ARENA_START ||
-        base > (uintptr_t)(
+    g_arena_diagnostics.embedded_base = (uint32_t)base;
+    if (base > (uintptr_t)UINT32_MAX) {
+        failures |= AZ_HOOK_ARENA_DIAG_BASE_ABOVE_32BIT;
+    }
+    if ((base & (AZ_HOOK_ARENA_SIZE - 1u)) != 0u) {
+        failures |= AZ_HOOK_ARENA_DIAG_BASE_UNALIGNED;
+    }
+    if (base < (uintptr_t)AZ_REV1655_HOOK_ARENA_START) {
+        failures |= AZ_HOOK_ARENA_DIAG_BASE_BELOW_RANGE;
+    }
+    if (base > (uintptr_t)(
             AZ_REV1655_HOOK_ARENA_END - AZ_HOOK_ARENA_SIZE)) {
-        return 0u;
+        failures |= AZ_HOOK_ARENA_DIAG_BASE_ABOVE_RANGE;
     }
-    if (!MmIsAddressValid((void *)base) ||
-        !MmIsAddressValid((void *)(base + AZ_HOOK_ARENA_SIZE - 1u))) {
-        return 0u;
+    if (!MmIsAddressValid((void *)base)) {
+        failures |= AZ_HOOK_ARENA_DIAG_START_INVALID;
     }
-    return 1u;
+    if (!MmIsAddressValid(
+            (void *)(base + AZ_HOOK_ARENA_SIZE - 1u))) {
+        failures |= AZ_HOOK_ARENA_DIAG_END_INVALID;
+    }
+    g_arena_diagnostics.validation_failures = failures;
+    return (uint8_t)(failures == 0u);
+}
+
+AzHookArenaDiagnostics az_hook_arena_diagnostics(void)
+{
+    return g_arena_diagnostics;
 }
 
 #if defined(AURORAAZ_HOOK_RUNTIME_TEST_ALLOCATOR)
@@ -253,6 +271,11 @@ AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
 {
     const uintptr_t resident_base = embedded_arena_base();
 
+    g_arena_diagnostics.embedded_base = (uint32_t)resident_base;
+    g_arena_diagnostics.validation_failures = 0u;
+    g_arena_diagnostics.protection_before = 0u;
+    g_arena_diagnostics.protection_after = 0u;
+
     if (arena == NULL) {
         return AZ_HOOK_RUNTIME_NULL;
     }
@@ -261,6 +284,8 @@ AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
     if (embedded_arena_is_usable() != 0u) {
         uint32_t protection;
 
+        g_arena_diagnostics.protection_before =
+            MmQueryAddressProtect((void *)resident_base);
         MmSetAddressProtect(
             (void *)resident_base,
             /* Low-address XEX images use 64-KiB pages. Protect the complete
@@ -269,7 +294,10 @@ AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
             AZ_EMBEDDED_ARENA_PAGE_SIZE,
             PAGE_EXECUTE_READWRITE);
         protection = MmQueryAddressProtect((void *)resident_base);
+        g_arena_diagnostics.protection_after = protection;
         if ((protection & 0xFFu) != PAGE_EXECUTE_READWRITE) {
+            g_arena_diagnostics.validation_failures |=
+                AZ_HOOK_ARENA_DIAG_PROTECT_MISMATCH;
             return AZ_HOOK_RUNTIME_NO_NEAR_MEMORY;
         }
         arena->base = resident_base;

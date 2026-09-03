@@ -9,6 +9,7 @@
 #include <xecore/xboxkrnl.h>
 
 #include <auroraaz/netdbg_bootstrap.h>
+#include <auroraaz/hook_runtime.h>
 #include <auroraaz/rev1655_runtime.h>
 
 #include "rev1655_thread_private.h"
@@ -23,10 +24,14 @@ typedef struct AzM2aMarker {
     uint32_t record_size;
     uint32_t phase;
     uint32_t runtime_result;
+    uint32_t arena_base;
+    uint32_t arena_validation_failures;
+    uint32_t arena_protection_before;
+    uint32_t arena_protection_after;
 } AzM2aMarker;
 
-typedef char AzM2aMarkerMustBe20Bytes[
-    (sizeof(AzM2aMarker) == 20u) ? 1 : -1];
+typedef char AzM2aMarkerMustBe36Bytes[
+    (sizeof(AzM2aMarker) == 36u) ? 1 : -1];
 
 static uint32_t g_bootstrap_claimed = 0u;
 static char g_m2a_marker_path[] =
@@ -34,12 +39,18 @@ static char g_m2a_marker_path[] =
 
 static void write_m2a_marker(uint32_t phase, uint32_t runtime_result)
 {
+    const AzHookArenaDiagnostics diagnostics =
+        az_hook_arena_diagnostics();
     const AzM2aMarker marker = {
         {'A', 'Z', 'M', '2'},
-        1u,
+        2u,
         (uint32_t)sizeof(AzM2aMarker),
         phase,
-        runtime_result
+        runtime_result,
+        diagnostics.embedded_base,
+        diagnostics.validation_failures,
+        diagnostics.protection_before,
+        diagnostics.protection_after
     };
     HANDLE file;
     uint32_t bytes_written = 0u;

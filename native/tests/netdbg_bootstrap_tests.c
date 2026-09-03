@@ -8,6 +8,7 @@
 #include <xecore/xboxkrnl.h>
 
 #include <auroraaz/rev1655_runtime.h>
+#include <auroraaz/hook_runtime.h>
 
 #define CHECK(condition)                                                   \
     do {                                                                   \
@@ -26,6 +27,10 @@ typedef struct TestM2aMarker {
     uint32_t record_size;
     uint32_t phase;
     uint32_t runtime_result;
+    uint32_t arena_base;
+    uint32_t arena_validation_failures;
+    uint32_t arena_protection_before;
+    uint32_t arena_protection_after;
 } TestM2aMarker;
 
 const uint32_t g_auroraaz_test_xapi_thread_startup[8] = {
@@ -79,6 +84,17 @@ static TestWorker pending_worker;
 static void *pending_worker_context;
 static AzRev1655RuntimeStage observed_stage;
 static TestM2aMarker observed_markers[2];
+
+AzHookArenaDiagnostics az_hook_arena_diagnostics(void)
+{
+    const AzHookArenaDiagnostics diagnostics = {
+        0x82D90000u,
+        AZ_HOOK_ARENA_DIAG_PROTECT_MISMATCH,
+        0x20u,
+        0x20u
+    };
+    return diagnostics;
+}
 
 uint32_t AuroraAZNetDbgConfigure(
     uint32_t command_port,
@@ -206,7 +222,7 @@ int main(void)
     CHECK(marker_write_calls == 2u);
     CHECK(marker_close_calls == 2u);
     CHECK(memcmp(observed_markers[0].magic, "AZM2", 4u) == 0);
-    CHECK(observed_markers[0].version == 1u);
+    CHECK(observed_markers[0].version == 2u);
     CHECK(observed_markers[0].record_size ==
         (uint32_t)sizeof(TestM2aMarker));
     CHECK(observed_markers[0].phase == 1u);
@@ -214,6 +230,11 @@ int main(void)
     CHECK(observed_markers[1].phase == 2u);
     CHECK(observed_markers[1].runtime_result ==
         (uint32_t)AZ_REV1655_RUNTIME_OK);
+    CHECK(observed_markers[1].arena_base == 0x82D90000u);
+    CHECK(observed_markers[1].arena_validation_failures ==
+        AZ_HOOK_ARENA_DIAG_PROTECT_MISMATCH);
+    CHECK(observed_markers[1].arena_protection_before == 0x20u);
+    CHECK(observed_markers[1].arena_protection_after == 0x20u);
 
     CHECK(DllMain(NULL, 1u, NULL) == 1);
     CHECK(close_calls == 1u);

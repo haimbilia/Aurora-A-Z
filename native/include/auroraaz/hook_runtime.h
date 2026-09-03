@@ -61,8 +61,26 @@ typedef struct AzLiveHook {
     uint8_t target_restored;
 } AzLiveHook;
 
+typedef struct AzHookArenaDiagnostics {
+    uint32_t embedded_base;
+    uint32_t validation_failures;
+    uint32_t protection_before;
+    uint32_t protection_after;
+} AzHookArenaDiagnostics;
+
+#define AZ_HOOK_ARENA_DIAG_BASE_ABOVE_32BIT 0x00000001u
+#define AZ_HOOK_ARENA_DIAG_BASE_UNALIGNED 0x00000002u
+#define AZ_HOOK_ARENA_DIAG_BASE_BELOW_RANGE 0x00000004u
+#define AZ_HOOK_ARENA_DIAG_BASE_ABOVE_RANGE 0x00000008u
+#define AZ_HOOK_ARENA_DIAG_START_INVALID 0x00000010u
+#define AZ_HOOK_ARENA_DIAG_END_INVALID 0x00000020u
+#define AZ_HOOK_ARENA_DIAG_PROTECT_MISMATCH 0x00000040u
+
 /* Reserve one executable title-memory page in relative-branch reach. */
 AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena);
+
+/* Snapshot of the last arena-create attempt for the read-only hardware gate. */
+AzHookArenaDiagnostics az_hook_arena_diagnostics(void);
 
 /* Only call before any install attempt has reserved a resident slot. */
 AzHookRuntimeResult az_hook_arena_release_uninstalled(AzHookArena *arena);
