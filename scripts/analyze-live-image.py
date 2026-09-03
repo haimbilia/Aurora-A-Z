@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Validate an Aurora Rev1655 CPU-visible header and .text capture.
+"""Validate Aurora Rev1655 CPU-visible image and resolver evidence.
 
 Aurora's Xbox 360 loader rewrites the first two words of each import thunk at
 the very end of .text.  Everything else is immutable.  This tool verifies the
 source PE, the captured immutable bytes, and the exact loader rewrite shape,
-then reconstructs the original .text before hashing it.
+then reconstructs the original .text before hashing it.  Optional v4 IAT and
+resolver artifacts add cross-view comparisons without treating module-name or
+owner-pointer observations as proof of ownership.
 """
 
 from __future__ import annotations
@@ -32,6 +34,38 @@ PPC_LIS_R11_MASK = 0xFFFF0000
 PPC_ADDI_R11_R11 = 0x396B0000
 PPC_ADDI_R11_R11_MASK = 0xFFFF0000
 MAX_DIFF_OFFSETS = 64
+
+# The reviewed Rev1655 IAT has 365 big-endian cells.  Its two zero cells split
+# and terminate the library groups.  These 13 xboxkrnl entries have no matching
+# executable thunk and are therefore classified only as data imports; their
+# live values are retained as observations, not interpreted as code targets.
+REV1655_DATA_IMPORT_RVAS = (
+    0x670, 0x6C0, 0x770, 0x784, 0x794, 0x7CC, 0x7E4,
+    0x7E8, 0x8A0, 0x8AC, 0x8E8, 0x918, 0x928,
+)
+REV1655_IAT_SEPARATOR_RVAS = (0x660, 0x9B0)
+
+RESOLVER_MAGIC = b"AZRE"
+RESOLVER_VERSION = 4
+RESOLVER_SIZE = 160
+RESOLVER_MODULE_COUNT = 4
+RESOLVER_SLOT_COUNT = 2
+RESOLVER_MODULES_OFFSET = 24
+RESOLVER_MODULE_RECORD_SIZE = 12
+RESOLVER_SLOTS_OFFSET = 72
+RESOLVER_SLOT_RECORD_SIZE = 44
+RESOLVER_STATUS_NOT_CALLED = 0xFFFFFFFF
+RESOLVER_STATUS_CAPTURE_COMPLETE = 0x80000000
+RESOLVER_MODULE_IDENTITIES = (
+    (b"XAM ", "xam.xex"),
+    (b"KRNL", "xboxkrnl.exe"),
+    (b"LNCH", "launch.xex"),
+    (b"NOVA", "Nova.xex"),
+)
+RESOLVER_SLOT_IDENTITIES = (
+    (60, 0x0217, 0x82B661BC, 0x4F0),
+    (65, 0x01FC, 0x82B6620C, 0x504),
+)
 
 
 @dataclass(frozen=True)
@@ -236,7 +270,10 @@ def _rva_to_file_offset(
     )
 
 
-def _validate_pe(pe: bytes, profile: ImageProfile) -> tuple[bytes, bytes, list[int]]:
+def _validate_pe(
+    pe: bytes,
+    profile: ImageProfile,
+) -> tuple[bytes, bytes, list[int]]:
     _require(len(pe) == profile.pe_size, "pe_size_mismatch",
              "source PE has the wrong size", expected=profile.pe_size,
              actual=len(pe))
@@ -381,16 +418,115 @@ def _validate_pe(pe: bytes, profile: ImageProfile) -> tuple[bytes, bytes, list[i
              "source PE IAT bytes are truncated")
     _require(profile.iat_size % 4 == 0, "profile_iat_size_invalid",
              "profile IAT size is not word aligned")
-    iat_ids = [
-        _u32be(pe, iat_offset + offset) & THUNK_ID_MASK
+    iat_words = [
+        _u32be(pe, iat_offset + offset)
         for offset in range(0, profile.iat_size, 4)
     ]
-    return reference_header, reference_text, iat_ids
+    return reference_header, reference_text, iat_words
+
+
+def _decode_source_iat(
+    iat_words: Sequence[int],
+    profile: ImageProfile,
+) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
+    expected_cells = profile.iat_size // 4
+    _require(len(iat_words) == expected_cells,
+             "source_iat_cell_count_mismatch",
+             "source PE IAT has the wrong number of cells",
+             expected=expected_cells, actual=len(iat_words))
+
+    data_rvas = set(REV1655_DATA_IMPORT_RVAS)
+    separator_rvas = set(REV1655_IAT_SEPARATOR_RVAS)
+    _require(data_rvas.isdisjoint(separator_rvas),
+             "profile_iat_special_rva_overlap",
+             "reviewed data-import and separator RVAs overlap")
+    for rva in data_rvas | separator_rvas:
+        _require(
+            profile.iat_rva <= rva < profile.iat_rva + profile.iat_size and
+            (rva - profile.iat_rva) % 4 == 0,
+            "profile_iat_special_rva_invalid",
+            "reviewed special IAT RVA is outside or misaligned",
+            rva=_hex(rva),
+        )
+
+    entries: list[dict[str, Any]] = []
+    functions: dict[int, dict[str, Any]] = {}
+    data_ids: set[int] = set()
+    for index, word in enumerate(iat_words):
+        rva = profile.iat_rva + index * 4
+        if rva in separator_rvas:
+            _require(word == 0, "source_iat_separator_mismatch",
+                     "reviewed source IAT separator is not zero",
+                     iat_index=index, rva=_hex(rva), value=_hex(word))
+            entries.append({
+                "kind": "separator",
+                "index": index,
+                "rva": rva,
+                "source_word": word,
+            })
+            continue
+
+        _require(word & ~THUNK_ID_MASK == 0,
+                 "source_iat_identifier_encoding_mismatch",
+                 "source PE IAT identifier uses unexpected high bits",
+                 iat_index=index, rva=_hex(rva), value=_hex(word))
+        thunk_id = word & THUNK_ID_MASK
+        library_id = (thunk_id >> 16) & 0xFF
+        ordinal = thunk_id & 0xFFFF
+        _require(thunk_id != 0, "raw_thunk_iat_membership_mismatch",
+                 "source PE function-IAT cell has no import identifier",
+                 iat_index=index, rva=_hex(rva), iat_occurrences=0)
+        _require(library_id in LIBRARIES,
+                 "source_iat_identifier_mismatch",
+                 "source PE IAT cell has an invalid import identifier",
+                 iat_index=index, rva=_hex(rva), value=_hex(word))
+        entry = {
+            "kind": "data" if rva in data_rvas else "function",
+            "index": index,
+            "rva": rva,
+            "source_word": word,
+            "thunk_id": thunk_id,
+            "library_id": library_id,
+            "ordinal": ordinal,
+        }
+        entries.append(entry)
+        if rva in data_rvas:
+            _require(library_id == 1, "source_iat_data_library_mismatch",
+                     "reviewed data import is not in the xboxkrnl group",
+                     iat_index=index, rva=_hex(rva),
+                     library_id=library_id, ordinal=ordinal)
+            _require(thunk_id not in data_ids,
+                     "source_iat_duplicate_data_identifier",
+                     "source PE has a duplicate reviewed data-import identifier",
+                     iat_index=index, rva=_hex(rva),
+                     thunk_id=_hex(thunk_id, 6))
+            data_ids.add(thunk_id)
+        else:
+            _require(thunk_id not in functions,
+                     "source_iat_duplicate_function_identifier",
+                     "source PE has a duplicate function-import identifier",
+                     iat_index=index, rva=_hex(rva),
+                     thunk_id=_hex(thunk_id, 6))
+            functions[thunk_id] = entry
+
+    _require(len(functions) == profile.thunk_slot_count,
+             "source_iat_function_count_mismatch",
+             "source PE function-IAT count does not match the thunk table",
+             expected=profile.thunk_slot_count, actual=len(functions))
+    _require(len(data_ids) == len(REV1655_DATA_IMPORT_RVAS),
+             "source_iat_data_count_mismatch",
+             "source PE data-import count does not match Rev1655",
+             expected=len(REV1655_DATA_IMPORT_RVAS), actual=len(data_ids))
+    overlap = sorted(data_ids.intersection(functions))
+    _require(not overlap, "source_iat_data_function_identifier_overlap",
+             "source PE uses one import identifier as both data and function",
+             thunk_ids=[_hex(value, 6) for value in overlap])
+    return entries, functions
 
 
 def _decode_raw_thunks(
     reference_text: bytes,
-    iat_ids: Sequence[int],
+    source_iat_functions: dict[int, dict[str, Any]],
     profile: ImageProfile,
 ) -> list[dict[str, Any]]:
     offset = profile.thunk_text_offset
@@ -399,11 +535,6 @@ def _decode_raw_thunks(
              "the reviewed thunk table is not the exact .text suffix",
              text_size=len(reference_text), thunk_offset=_hex(offset),
              thunk_size=profile.thunk_size)
-    iat_counts: dict[int, int] = {}
-    for thunk_id in iat_ids:
-        if thunk_id != 0:
-            iat_counts[thunk_id] = iat_counts.get(thunk_id, 0) + 1
-
     seen: set[int] = set()
     thunks: list[dict[str, Any]] = []
     for index in range(profile.thunk_slot_count):
@@ -432,11 +563,13 @@ def _decode_raw_thunks(
         _require(library_id in LIBRARIES, "raw_thunk_unknown_library",
                  "source PE thunk refers to an unknown import library",
                  slot=index, library_id=library_id, ordinal=ordinal)
-        _require(iat_counts.get(thunk_id, 0) == 1,
+        iat_entry = source_iat_functions.get(thunk_id)
+        _require(iat_entry is not None,
                  "raw_thunk_iat_membership_mismatch",
-                 "source PE thunk identifier is not represented exactly once in the IAT",
+                 "source PE thunk identifier has no reviewed function-IAT cell",
                  slot=index, thunk_id=_hex(thunk_id, 6),
-                 iat_occurrences=iat_counts.get(thunk_id, 0))
+                 iat_occurrences=0)
+        assert iat_entry is not None
         seen.add(thunk_id)
         thunks.append({
             "index": index,
@@ -448,9 +581,19 @@ def _decode_raw_thunks(
             "library": LIBRARIES[library_id],
             "ordinal": ordinal,
             "thunk_id": _hex(thunk_id, 6),
+            "iat_index": int(iat_entry["index"]),
+            "iat_rva": _hex(int(iat_entry["rva"])),
             "raw_words": [_hex(word) for word in words],
             "_raw_words": words,
+            "_thunk_id": thunk_id,
+            "_iat_index": int(iat_entry["index"]),
+            "_iat_rva": int(iat_entry["rva"]),
         })
+    unused = sorted(set(source_iat_functions).difference(seen))
+    _require(not unused, "source_iat_function_without_thunk",
+             "source PE function-IAT cell has no executable thunk",
+             thunk_ids=[_hex(value, 6) for value in unused[:MAX_DIFF_OFFSETS]],
+             truncated=len(unused) > MAX_DIFF_OFFSETS)
     return thunks
 
 
@@ -475,14 +618,337 @@ def _target_policy(library_id: int) -> list[str]:
     ]
 
 
+def _analyze_live_iat(
+    live_iat: bytes,
+    source_entries: Sequence[dict[str, Any]],
+    raw_thunks: Sequence[dict[str, Any]],
+    profile: ImageProfile,
+) -> tuple[dict[str, Any], list[int]]:
+    _require(len(live_iat) == profile.iat_size,
+             "live_iat_size_mismatch", "live IAT has the wrong size",
+             expected=profile.iat_size, actual=len(live_iat))
+    live_words = [
+        _u32be(live_iat, offset)
+        for offset in range(0, len(live_iat), 4)
+    ]
+    thunks_by_id = {
+        int(thunk["_thunk_id"]): thunk
+        for thunk in raw_thunks
+    }
+    function_count = 0
+    data_imports: list[dict[str, Any]] = []
+    separators: list[dict[str, Any]] = []
+    for entry in source_entries:
+        index = int(entry["index"])
+        rva = int(entry["rva"])
+        value = live_words[index]
+        kind = str(entry["kind"])
+        if kind == "separator":
+            _require(value == 0, "live_iat_separator_mismatch",
+                     "live IAT changed a reviewed zero separator",
+                     iat_index=index, rva=_hex(rva),
+                     expected=_hex(0), actual=_hex(value))
+            separators.append({
+                "iat_index": index,
+                "rva": _hex(rva),
+                "source_value": _hex(int(entry["source_word"])),
+                "live_value": _hex(value),
+            })
+            continue
+        if kind == "data":
+            library_id = int(entry["library_id"])
+            data_imports.append({
+                "iat_index": index,
+                "rva": _hex(rva),
+                "library": LIBRARIES[library_id],
+                "ordinal": int(entry["ordinal"]),
+                "source_identifier": _hex(int(entry["thunk_id"]), 6),
+                "live_value": _hex(value),
+                "classification": "reviewed-source-data-import",
+                "live_value_interpretation": "not-inferred",
+            })
+            continue
+
+        thunk_id = int(entry["thunk_id"])
+        thunk = thunks_by_id.get(thunk_id)
+        _require(thunk is not None, "live_iat_function_mapping_missing",
+                 "function-IAT cell has no decoded live thunk",
+                 iat_index=index, rva=_hex(rva),
+                 thunk_id=_hex(thunk_id, 6))
+        assert thunk is not None
+        target = int(thunk["_live_target"])
+        _require(value == target, "live_iat_function_target_mismatch",
+                 "live function-IAT cell does not equal its decoded thunk target",
+                 iat_index=index, rva=_hex(rva),
+                 thunk_slot=int(thunk["index"]),
+                 expected=_hex(target), actual=_hex(value))
+        function_count += 1
+
+    _require(function_count == profile.thunk_slot_count,
+             "live_iat_function_count_mismatch",
+             "validated live function-IAT count does not match Rev1655",
+             expected=profile.thunk_slot_count, actual=function_count)
+    return ({
+        "size": len(live_iat),
+        "sha256": _sha256(live_iat),
+        "function_count": function_count,
+        "function_targets_match_thunks": True,
+        "data_import_count": len(data_imports),
+        "separator_count": len(separators),
+        "data_imports": data_imports,
+        "separators": separators,
+    }, live_words)
+
+
+def _resolver_module_queried_bit(index: int) -> int:
+    return 1 << index
+
+
+def _resolver_module_found_bit(index: int) -> int:
+    return 1 << (index + 4)
+
+
+def _resolver_slot_bit(index: int, field: int) -> int:
+    return 1 << (index * 5 + 8 + field)
+
+
+def _nt_success(status: int) -> bool:
+    return status & 0x80000000 == 0
+
+
+def _analyze_resolver(
+    resolver: bytes,
+    raw_thunks: Sequence[dict[str, Any]],
+    live_text: bytes,
+    live_iat_words: Sequence[int],
+    profile: ImageProfile,
+) -> dict[str, Any]:
+    _require(len(resolver) == RESOLVER_SIZE,
+             "resolver_size_mismatch", "resolver evidence has the wrong size",
+             expected=RESOLVER_SIZE, actual=len(resolver))
+    _require(resolver[:4] == RESOLVER_MAGIC,
+             "resolver_magic_mismatch", "resolver evidence has the wrong magic",
+             expected=RESOLVER_MAGIC.decode("ascii"),
+             actual=resolver[:4].hex())
+    version, record_size, status, module_count, slot_count = struct.unpack_from(
+        ">IIIII", resolver, 4)
+    _require(version == RESOLVER_VERSION,
+             "resolver_version_mismatch", "resolver evidence has the wrong version",
+             expected=RESOLVER_VERSION, actual=version)
+    _require(record_size == RESOLVER_SIZE,
+             "resolver_record_size_mismatch",
+             "resolver record_size does not match its reviewed layout",
+             expected=RESOLVER_SIZE, actual=record_size)
+    _require(module_count == RESOLVER_MODULE_COUNT and
+             slot_count == RESOLVER_SLOT_COUNT,
+             "resolver_record_count_mismatch",
+             "resolver module/slot counts do not match v4",
+             expected=[RESOLVER_MODULE_COUNT, RESOLVER_SLOT_COUNT],
+             actual=[module_count, slot_count])
+
+    known_status_mask = RESOLVER_STATUS_CAPTURE_COMPLETE
+    for index in range(RESOLVER_MODULE_COUNT):
+        known_status_mask |= _resolver_module_queried_bit(index)
+        known_status_mask |= _resolver_module_found_bit(index)
+    for index in range(RESOLVER_SLOT_COUNT):
+        for field in range(5):
+            known_status_mask |= _resolver_slot_bit(index, field)
+    _require(status & ~known_status_mask == 0,
+             "resolver_status_unknown_bits",
+             "resolver status contains undefined bits",
+             status=_hex(status), unknown=_hex(status & ~known_status_mask))
+    _require(status & RESOLVER_STATUS_CAPTURE_COMPLETE != 0,
+             "resolver_status_incomplete",
+             "resolver capture-complete status bit is not set",
+             status=_hex(status))
+
+    modules: list[dict[str, Any]] = []
+    for index, (expected_tag, requested_identity) in enumerate(
+            RESOLVER_MODULE_IDENTITIES):
+        offset = RESOLVER_MODULES_OFFSET + index * RESOLVER_MODULE_RECORD_SIZE
+        tag = resolver[offset:offset + 4]
+        query_status, handle = struct.unpack_from(">II", resolver, offset + 4)
+        _require(tag == expected_tag, "resolver_module_tag_mismatch",
+                 "resolver module record has the wrong identity tag",
+                 module_index=index,
+                 expected=expected_tag.decode("ascii"), actual=tag.hex())
+        queried = status & _resolver_module_queried_bit(index) != 0
+        found = status & _resolver_module_found_bit(index) != 0
+        _require(queried and query_status != RESOLVER_STATUS_NOT_CALLED,
+                 "resolver_module_status_mismatch",
+                 "resolver module record was not completely queried",
+                 module_index=index, status=_hex(status),
+                 query_status=_hex(query_status))
+        expected_found = _nt_success(query_status) and handle != 0
+        _require(found == expected_found,
+                 "resolver_module_found_mismatch",
+                 "resolver module-found bit disagrees with query evidence",
+                 module_index=index, found_flag=found,
+                 query_status=_hex(query_status), handle=_hex(handle))
+        modules.append({
+            "index": index,
+            "tag": tag.decode("ascii"),
+            "requested_identity": requested_identity,
+            "query_status": _hex(query_status),
+            "query_succeeded": _nt_success(query_status),
+            "handle": _hex(handle),
+            "found": found,
+        })
+    _require(modules[0]["found"], "resolver_xam_not_found",
+             "resolver evidence cannot make the required direct xam queries")
+
+    slots: list[dict[str, Any]] = []
+    direct_match_count = 0
+    for record_index, identity in enumerate(RESOLVER_SLOT_IDENTITIES):
+        thunk_index, expected_ordinal, expected_thunk_va, expected_iat_rva = identity
+        _require(thunk_index < len(raw_thunks),
+                 "resolver_profile_slot_out_of_range",
+                 "reviewed resolver slot is outside the thunk table",
+                 thunk_slot=thunk_index)
+        thunk = raw_thunks[thunk_index]
+        source_identity = (
+            int(thunk["ordinal"]),
+            profile.image_base + profile.text_rva +
+            profile.thunk_text_offset + thunk_index * profile.thunk_slot_size,
+            int(thunk["_iat_rva"]),
+        )
+        _require(source_identity == (
+                    expected_ordinal, expected_thunk_va, expected_iat_rva),
+                 "resolver_profile_slot_identity_mismatch",
+                 "reviewed source PE no longer maps the resolver slot identity",
+                 thunk_slot=thunk_index,
+                 expected=[_hex(expected_ordinal, 4),
+                           _hex(expected_thunk_va), _hex(expected_iat_rva)],
+                 actual=[_hex(source_identity[0], 4),
+                         _hex(source_identity[1]), _hex(source_identity[2])])
+
+        offset = RESOLVER_SLOTS_OFFSET + record_index * RESOLVER_SLOT_RECORD_SIZE
+        values = struct.unpack_from(">11I", resolver, offset)
+        (ordinal, thunk_va, iat_rva, thunk_word_0, thunk_word_1,
+         decoded_target, iat_value, procedure_status, procedure_target,
+         pc_header, owner_ldr) = values
+        actual_identity = (ordinal, thunk_va, iat_rva)
+        expected_identity = (
+            expected_ordinal, expected_thunk_va, expected_iat_rva)
+        _require(actual_identity == expected_identity,
+                 "resolver_slot_identity_mismatch",
+                 "resolver slot record does not identify the reviewed import",
+                 resolver_slot=record_index, thunk_slot=thunk_index,
+                 expected=[_hex(expected_ordinal, 4),
+                           _hex(expected_thunk_va), _hex(expected_iat_rva)],
+                 actual=[_hex(ordinal, 4), _hex(thunk_va), _hex(iat_rva)])
+
+        required_bits = 0
+        for field in range(5):
+            required_bits |= _resolver_slot_bit(record_index, field)
+        _require(status & required_bits == required_bits,
+                 "resolver_slot_status_incomplete",
+                 "resolver slot is missing required mapped/query evidence",
+                 resolver_slot=record_index, thunk_slot=thunk_index,
+                 required=_hex(required_bits), actual=_hex(status & required_bits))
+        _require(procedure_status != RESOLVER_STATUS_NOT_CALLED,
+                 "resolver_procedure_status_missing",
+                 "resolver direct procedure query has no result",
+                 resolver_slot=record_index, thunk_slot=thunk_index)
+
+        text_offset = profile.thunk_text_offset + (
+            thunk_index * profile.thunk_slot_size)
+        live_words = (
+            _u32be(live_text, text_offset),
+            _u32be(live_text, text_offset + 4),
+        )
+        _require((thunk_word_0, thunk_word_1) == live_words,
+                 "resolver_slot_live_thunk_mismatch",
+                 "resolver-recorded thunk words differ from the live .text capture",
+                 resolver_slot=record_index, thunk_slot=thunk_index,
+                 expected=[_hex(value) for value in live_words],
+                 actual=[_hex(thunk_word_0), _hex(thunk_word_1)])
+        live_target = int(thunk["_live_target"])
+        _require(decoded_target == _decode_target(thunk_word_0, thunk_word_1)
+                 and decoded_target == live_target,
+                 "resolver_slot_decoded_target_mismatch",
+                 "resolver decoded target differs from its words or live thunk",
+                 resolver_slot=record_index, thunk_slot=thunk_index,
+                 expected=_hex(live_target), actual=_hex(decoded_target))
+        live_iat_index = (iat_rva - profile.iat_rva) // 4
+        live_iat_value = live_iat_words[live_iat_index]
+        _require(iat_value == live_iat_value and iat_value == live_target,
+                 "resolver_slot_iat_target_mismatch",
+                 "resolver-recorded IAT value differs from live IAT or thunk",
+                 resolver_slot=record_index, thunk_slot=thunk_index,
+                 expected=_hex(live_target),
+                 recorded=_hex(iat_value), live_iat=_hex(live_iat_value))
+
+        direct_equals_live = procedure_target == live_target
+        direct_match_count += int(direct_equals_live)
+        owner_matches = [
+            {
+                "module_index": int(module["index"]),
+                "tag": str(module["tag"]),
+                "requested_identity": str(module["requested_identity"]),
+            }
+            for module in modules
+            if int(str(module["handle"]), 16) != 0 and
+            int(str(module["handle"]), 16) == owner_ldr
+        ]
+        slots.append({
+            "resolver_slot": record_index,
+            "thunk_slot": thunk_index,
+            "library": str(thunk["library"]),
+            "ordinal": ordinal,
+            "thunk_va": _hex(thunk_va),
+            "iat_rva": _hex(iat_rva),
+            "procedure_status": _hex(procedure_status),
+            "procedure_query_succeeded": _nt_success(procedure_status),
+            "targets": {
+                "recorded_decoded": _hex(decoded_target),
+                "recorded_iat": _hex(iat_value),
+                "live_thunk": _hex(live_target),
+                "live_iat": _hex(live_iat_value),
+                "direct_resolution": _hex(procedure_target),
+            },
+            "comparisons": {
+                "recorded_thunk_words_equal_live": True,
+                "recorded_decoded_equal_live_thunk": True,
+                "recorded_iat_equal_live_iat": True,
+                "live_iat_equal_live_thunk": True,
+                "direct_resolution_equal_live_thunk": direct_equals_live,
+                "direct_resolution_equal_live_iat":
+                    procedure_target == live_iat_value,
+            },
+            "owner_evidence": {
+                "pc_header": _hex(pc_header),
+                "owner_ldr": _hex(owner_ldr),
+                "owner_ldr_matches_queried_module_handles": owner_matches,
+                "attribution": "pointer-equality-evidence-only",
+            },
+        })
+
+    return {
+        "size": len(resolver),
+        "sha256": _sha256(resolver),
+        "version": version,
+        "status": _hex(status),
+        "capture_complete": True,
+        "modules": modules,
+        "slots": slots,
+        "direct_resolution_match_count": direct_match_count,
+    }
+
+
 def analyze_image(
     pe: bytes,
     live_header: bytes,
     live_text: bytes,
     profile: ImageProfile = REV1655_PROFILE,
+    live_iat: bytes | None = None,
+    resolver: bytes | None = None,
 ) -> dict[str, Any]:
-    """Analyze three in-memory artifacts and return a JSON-safe report."""
-    reference_header, reference_text, iat_ids = _validate_pe(pe, profile)
+    """Analyze required image artifacts and optional v4 evidence."""
+    _require(resolver is None or live_iat is not None,
+             "resolver_requires_live_iat",
+             "resolver evidence requires the matching live IAT artifact")
+    reference_header, reference_text, iat_words = _validate_pe(pe, profile)
     _require(len(live_header) == profile.header_size,
              "live_header_size_mismatch", "live header has the wrong size",
              expected=profile.header_size, actual=len(live_header))
@@ -495,7 +961,9 @@ def analyze_image(
              "CPU-visible header differs from the reviewed PE header",
              **header_diff)
 
-    raw_thunks = _decode_raw_thunks(reference_text, iat_ids, profile)
+    source_iat, source_iat_functions = _decode_source_iat(iat_words, profile)
+    raw_thunks = _decode_raw_thunks(
+        reference_text, source_iat_functions, profile)
     prefix_size = profile.thunk_text_offset
     reference_prefix = reference_text[:prefix_size]
     live_prefix = live_text[:prefix_size]
@@ -544,6 +1012,7 @@ def analyze_image(
                  "CPU-visible import thunk changed words outside its loader-owned pair",
                  slot=index, expected=2, actual=changed_words)
         target = _decode_target(live_words[0], live_words[1])
+        raw["_live_target"] = target
         library_id = int(raw["library_id"])
         _require(_target_is_allowed(library_id, target),
                  "live_thunk_target_out_of_range",
@@ -582,7 +1051,21 @@ def analyze_image(
              expected=profile.text_sha256, actual=canonical_digest,
              **canonical_diff)
 
-    return {
+    live_iat_report: dict[str, Any] | None = None
+    resolver_report: dict[str, Any] | None = None
+    live_iat_words: list[int] | None = None
+    if live_iat is not None:
+        live_iat_report, live_iat_words = _analyze_live_iat(
+            live_iat, source_iat, raw_thunks, profile)
+        for reported, raw in zip(reported_thunks, raw_thunks):
+            reported["live_iat_value"] = _hex(
+                live_iat_words[int(raw["_iat_index"])])
+    if resolver is not None:
+        assert live_iat_words is not None
+        resolver_report = _analyze_resolver(
+            resolver, raw_thunks, live_text, live_iat_words, profile)
+
+    report: dict[str, Any] = {
         "schema": SCHEMA,
         "compatible": True,
         "profile": profile.name,
@@ -629,11 +1112,28 @@ def analyze_image(
             },
             "slots": reported_thunks,
         },
+        "iat_mapping": {
+            "source_derived": True,
+            "function_count": len(source_iat_functions),
+            "data_import_count": len(REV1655_DATA_IMPORT_RVAS),
+            "separator_count": len(REV1655_IAT_SEPARATOR_RVAS),
+            "data_import_rvas": [
+                _hex(rva) for rva in REV1655_DATA_IMPORT_RVAS
+            ],
+            "separator_rvas": [
+                _hex(rva) for rva in REV1655_IAT_SEPARATOR_RVAS
+            ],
+        },
         "canonicalization": {
             "equal_to_reference": True,
             **canonical_diff,
         },
     }
+    if live_iat_report is not None:
+        report["live_iat"] = live_iat_report
+    if resolver_report is not None:
+        report["resolver"] = resolver_report
+    return report
 
 
 def _read_artifact(path: Path, kind: str) -> bytes:
@@ -656,6 +1156,10 @@ def _parser() -> argparse.ArgumentParser:
                         help="CPU-visible 0x400-byte header dump")
     parser.add_argument("--text", required=True, type=Path,
                         help="CPU-visible Rev1655 .text dump")
+    parser.add_argument("--iat", type=Path,
+                        help="optional CPU-visible 0x5B4-byte v4 IAT dump")
+    parser.add_argument("--resolver", type=Path,
+                        help="optional 160-byte AZRE v4 resolver evidence")
     return parser
 
 
@@ -670,6 +1174,14 @@ def main(
             _read_artifact(args.header, "header"),
             _read_artifact(args.text, "text"),
             profile,
+            live_iat=(
+                _read_artifact(args.iat, "IAT")
+                if args.iat is not None else None
+            ),
+            resolver=(
+                _read_artifact(args.resolver, "resolver")
+                if args.resolver is not None else None
+            ),
         )
     except AnalysisError as exc:
         report = {
