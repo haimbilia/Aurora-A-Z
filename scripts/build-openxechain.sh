@@ -57,6 +57,7 @@ export CPLUS_INCLUDE_PATH=""
     -fno-zero-initialized-in-bss \
     -Wall -Wextra -Werror \
     -DAURORAAZ_XBOX360=1 \
+    -DAURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN=1 \
     -I"${repo_root}/native/include" \
     "${m2a_sources[@]}" \
     -Wl,/dll \

@@ -5,7 +5,9 @@
 #include <stdint.h>
 
 #include <auroraaz/netdbg_bootstrap.h>
+#if defined(AURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN)
 #include <auroraaz/rev1655_runtime.h>
+#endif
 
 /*
  * SynthXEX v0.0.6 does not create an HvImageExportTable. Reserve the exact
@@ -42,10 +44,12 @@ uint32_t AuroraAZNetDbgConfigure(
 
 uint32_t AuroraAZNetDbgShutdown(void)
 {
+#if defined(AURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN)
     /* Aurora calls ordinal 3 while tearing down its logger for title launch.
      * Never wait on Aurora's caller: the pinned worker owns hook restoration
      * and exits asynchronously before the title process is replaced. */
     az_rev1655_runtime_request_shutdown();
+#endif
     return 0u;
 }
 

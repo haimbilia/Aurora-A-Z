@@ -91,7 +91,8 @@ if(BUILD_TESTING)
     target_compile_definitions(auroraaz_netdbg_bootstrap_tests
         PRIVATE
             AURORAAZ_XBOX360=1
-            AURORAAZ_REV1655_THREAD_TEST=1)
+            AURORAAZ_REV1655_THREAD_TEST=1
+            AURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN=1)
 
     add_executable(auroraaz_netdbg_lifetime_rev1655_tests
         tests/netdbg_lifetime_rev1655_tests.c
