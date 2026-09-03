@@ -51,7 +51,8 @@ typedef void (*AzOverlaySetVertexShaderConstantFFn)(
     void *device,
     uint32_t start_register,
     const float *vectors,
-    uint32_t vector4_count);
+    uint32_t vector4_count,
+    uint64_t dirty_block_mask);
 typedef void (*AzOverlayDrawPrimitiveUpFn)(
     void *device,
     uint32_t primitive_type,

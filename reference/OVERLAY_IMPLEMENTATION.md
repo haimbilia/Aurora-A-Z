@@ -275,7 +275,8 @@ typedef void (*AzSetTextureFn)(
 
 typedef void (*AzSetVertexShaderConstantFFn)(
     void *device, uint32_t start_register,
-    const float *vectors, uint32_t vector4_count);
+    const float *vectors, uint32_t vector4_count,
+    uint64_t dirty_block_mask);
 
 typedef void (*AzDrawPrimitiveUpFn)(
     void *device, uint32_t primitive_type, uint32_t vertex_count,
@@ -290,7 +291,7 @@ typedef uint32_t (*AzReleaseResourceFn)(void *resource);
 | `0x827722E0` | texture `LockRect` forwarding wrapper; validate its output structure, not `r3` | proven |
 | `0x827706B8` | texture `UnlockRect` forwarding wrapper; `r3` is unspecified | proven |
 | `0x82772680` | bind texture/fetch at a stage; use flags `0x80000000` | proven |
-| `0x8277ECF8` | copy `vector4_count` VS constants beginning at `start_register` | proven |
+| `0x8277ECF8` | copy `vector4_count` VS constants beginning at `start_register`; `r7` is the 64-bit dirty-block mask | proven |
 | `0x82784520` | transient `DrawPrimitiveUP` wrapper | proven |
 | `0x82779DE0` | release a D3D resource | proven |
 
@@ -336,10 +337,15 @@ Before drawing, bind the atlas and set the two recovered shader constants:
 ```c
 set_texture(device, 0, atlas_texture, 0x80000000u);
 set_vs_constant_f(device, 2,
-                  (float[4]){ 1.0f / 1024.0f, 1.0f / 64.0f, 0, 0 }, 1);
-set_vs_constant_f(device, 1, rgba, 1);
+                  (float[4]){ 1.0f / 1024.0f, 1.0f / 64.0f, 0, 0 }, 1,
+                  0x8000000000000000ull);
+set_vs_constant_f(device, 1, rgba, 1, 0x8000000000000000ull);
 draw_primitive_up(device, 5, 4, vertices, 16);
 ```
+
+Registers c1 and c2 are both in vertex-constant dirty block zero. The final
+64-bit mask is mandatory: the low-level routine copies constant memory but
+does not derive or publish the GPU dirty bit itself.
 
 The complete row needs at most three draws:
 

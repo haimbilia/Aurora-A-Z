@@ -126,11 +126,13 @@ static void set_vs_constant_f(
     void *device,
     uint32_t start_register,
     const float *vectors,
-    uint32_t count)
+    uint32_t count,
+    uint64_t dirty_block_mask)
 {
     if ((uintptr_t)device == (uintptr_t)g_device_slot &&
         (start_register == 1u || start_register == 2u) &&
-        vectors != NULL && count == 1u) {
+        vectors != NULL && count == 1u &&
+        dirty_block_mask == 0x8000000000000000ULL) {
         ++g_set_constant_count;
     }
 }

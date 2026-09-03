@@ -33,6 +33,12 @@
 - Prove that the corrected XEX loads through Aurora's key-7 wrapper and reaches
   its module-loaded notification with ordinals 2-5 resolved. M1 remains pending
   because neither the canary log nor its resident thread was observed.
+- Complete the M1 bootstrap and M2a observe-only controller gates on isolated
+  hardware without touching the production Aurora installation.
+- Add the first renderer-owned M2b row canary and correct Aurora's texture-lock
+  output contract.
+- Correct the recovered vertex-constant ABI: publish the mandatory 64-bit dirty
+  mask for c1/c2 so copied constants are actually submitted to the GPU.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

@@ -20,6 +20,7 @@
 
 #define AZ_TEXTURE_FORMAT_A8R8G8B8 0x18280086u
 #define AZ_TEXTURE_FETCH_FLAGS 0x80000000u
+#define AZ_VERTEX_CONSTANT_BLOCK_0_DIRTY 0x8000000000000000ULL
 #define AZ_TRIANGLE_STRIP 5u
 #define AZ_QUAD_VERTEX_COUNT 4u
 #define AZ_MAX_VIEWPORT_DIMENSION 8192.0f
@@ -671,8 +672,18 @@ static AzOverlayRendererResult draw_quad(
         0u,
         renderer->atlas_texture,
         AZ_TEXTURE_FETCH_FLAGS);
-    renderer->bindings.set_vs_constant_f(device, 2u, tex_scale, 1u);
-    renderer->bindings.set_vs_constant_f(device, 1u, rgba, 1u);
+    renderer->bindings.set_vs_constant_f(
+        device,
+        2u,
+        tex_scale,
+        1u,
+        AZ_VERTEX_CONSTANT_BLOCK_0_DIRTY);
+    renderer->bindings.set_vs_constant_f(
+        device,
+        1u,
+        rgba,
+        1u,
+        AZ_VERTEX_CONSTANT_BLOCK_0_DIRTY);
     renderer->bindings.draw_primitive_up(
         device,
         AZ_TRIANGLE_STRIP,
