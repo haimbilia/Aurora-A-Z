@@ -95,7 +95,7 @@ static const uint8_t k_texture_bind[] = {
     0x94u, 0x21u, 0xFFu, 0x40u, 0x39u, 0x64u, 0x0Cu, 0x9Eu
 };
 static const uint8_t k_vs_constants[] = {
-    0x39u, 0x44u, 0x01u, 0x78u, 0x7Cu, 0xABu, 0x2Bu, 0x78u,
+    0x39u, 0x44u, 0x00u, 0x78u, 0x7Cu, 0xABu, 0x2Bu, 0x78u,
     0x55u, 0x4Au, 0x20u, 0x36u, 0x7Cu, 0xC9u, 0x33u, 0x78u
 };
 static const uint8_t k_transient_draw[] = {
@@ -113,7 +113,7 @@ static const AzRequiredWindow k_required_windows[] = {
     { 0x005622E0u, k_texture_lock, sizeof(k_texture_lock) },
     { 0x00562300u, k_texture_create, sizeof(k_texture_create) },
     { 0x00562680u, k_texture_bind, sizeof(k_texture_bind) },
-    { 0x0056ECF8u, k_vs_constants, sizeof(k_vs_constants) },
+    { 0x0056EC20u, k_vs_constants, sizeof(k_vs_constants) },
     { 0x00574520u, k_transient_draw, sizeof(k_transient_draw) }
 };
 
@@ -243,7 +243,7 @@ static void bind_rev1655_functions(
     bindings->set_texture =
         (AzOverlaySetTextureFn)(uintptr_t)0x82772680u;
     bindings->set_vs_constant_f =
-        (AzOverlaySetVertexShaderConstantFFn)(uintptr_t)0x8277ECF8u;
+        (AzOverlaySetVertexShaderConstantFFn)(uintptr_t)0x8277EC20u;
     bindings->draw_primitive_up =
         (AzOverlayDrawPrimitiveUpFn)(uintptr_t)0x82784520u;
     bindings->release_resource =

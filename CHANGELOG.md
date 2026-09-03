@@ -37,8 +37,9 @@
   hardware without touching the production Aurora installation.
 - Add the first renderer-owned M2b row canary and correct Aurora's texture-lock
   output contract.
-- Correct the recovered vertex-constant ABI: publish the mandatory 64-bit dirty
-  mask for c1/c2 so copied constants are actually submitted to the GPU.
+- Correct the recovered vertex-constant ABI: target the vertex bank rather than
+  the pixel bank and publish the mandatory 64-bit dirty mask for c1/c2 so the
+  font shader actually receives the overlay constants.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

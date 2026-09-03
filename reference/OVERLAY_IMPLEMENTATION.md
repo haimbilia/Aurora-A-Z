@@ -291,7 +291,7 @@ typedef uint32_t (*AzReleaseResourceFn)(void *resource);
 | `0x827722E0` | texture `LockRect` forwarding wrapper; validate its output structure, not `r3` | proven |
 | `0x827706B8` | texture `UnlockRect` forwarding wrapper; `r3` is unspecified | proven |
 | `0x82772680` | bind texture/fetch at a stage; use flags `0x80000000` | proven |
-| `0x8277ECF8` | copy `vector4_count` VS constants beginning at `start_register`; `r7` is the 64-bit dirty-block mask | proven |
+| `0x8277EC20` | copy `vector4_count` VS constants beginning at `start_register`; `r7` is the 64-bit dirty-block mask | proven |
 | `0x82784520` | transient `DrawPrimitiveUP` wrapper | proven |
 | `0x82779DE0` | release a D3D resource | proven |
 
@@ -468,7 +468,7 @@ second line of defense before installing hooks or calling internal routines:
 | texture lock | `0x827722E0` | `7C E9 3B 78 7C C8 33 78 7C A7 2B 78 7C 86 23 78` |
 | texture create | `0x82772300` | `7D 88 02 A6 48 1F 59 AD 94 21 FF 20 7C 7C 1B 78` |
 | stage texture bind | `0x82772680` | `7D 88 02 A6 48 1F 56 25 94 21 FF 40 39 64 0C 9E` |
-| VS constants | `0x8277ECF8` | `39 44 01 78 7C AB 2B 78 55 4A 20 36 7C C9 33 78` |
+| VS constants | `0x8277EC20` | `39 44 00 78 7C AB 2B 78 55 4A 20 36 7C C9 33 78` |
 | transient draw | `0x82784520` | `7D 88 02 A6 48 1E 37 A5 94 21 FF 80 7C DC 33 78` |
 
 The 16-byte unlock prefix occurs twice in the image, so its listed 20-byte
