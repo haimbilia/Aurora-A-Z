@@ -422,16 +422,18 @@ editing the skin.
 
 ## Immediate next work session
 
-1. Cross-build the ordinal-3 lifecycle candidate and deploy it only to
-   `Hdd1:\AuroraAZLab` after a cold reboot.
+1. Cross-build the strict `ContentLauncher`-boundary lifecycle candidate and
+   deploy it only to `Hdd1:\AuroraAZLab`. The exact 16-byte entry signature at
+   `0x82294DD0` is part of the existing Rev1655 fail-closed gate.
 2. Reconfirm hold-R3 navigation, cancel-without-movement, filter application,
    and completion-based re-entry.
 3. Launch the same known-good title used by the plugin-disabled A/B control.
    Require successful title startup rather than a black screen.
 4. Return to Aurora and repeat with one XEX application. Pull the final v5
    filter marker and require `shutdown_requests >= 1` plus runtime state
-   `CLOSED` to prove the worker processed shutdown.
+   `CLOSED` to prove the launch boundary completed shutdown.
 5. Keep production untouched until both title handoffs pass.
 
 M1, M2a, overlay rendering, interaction, and native filtering are closed. The
-title-exit lifecycle gate remains open.
+title-launch lifecycle gate remains open. The ordinal-3 approach is closed as
+disproven by hardware (`shutdown_requests=0` after the black-screen test).

@@ -10,6 +10,7 @@
 #include <xecore/xboxkrnl.h>
 
 #include <auroraaz/compatibility.h>
+#include <auroraaz/content_launch_detour.h>
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
 #include <auroraaz/filter_consumer_xbox360.h>
 #endif
@@ -33,6 +34,7 @@
 #define AZ_M2A_INPUT_TARGET_ADDRESS 0x82801D90u
 #define AZ_M2B_RENDER_MENU_TARGET_ADDRESS 0x82358A08u
 #define AZ_M2B_FONT_END_TARGET_ADDRESS 0x8247E390u
+#define AZ_CONTENT_LAUNCH_TARGET_ADDRESS 0x82294DD0u
 #define AZ_INPUT_SIGNATURE_SIZE 20u
 #define AZ_RENDER_SIGNATURE_SIZE 16u
 #define AZ_OBSERVATION_DRAIN_BUDGET 8u
@@ -80,6 +82,7 @@ typedef struct AzRev1655Runtime {
     AzLiveHook input_hook;
     AzLiveHook render_menu_hook;
     AzLiveHook font_end_hook;
+    AzLiveHook content_launch_hook;
     AzOverlayRenderer renderer;
     HANDLE worker_thread;
     volatile uint32_t state;
@@ -1095,10 +1098,11 @@ static AzRev1655RuntimeResult validate_input_site(
 }
 
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
-static AzRev1655RuntimeResult validate_render_sites(
+static AzRev1655RuntimeResult validate_overlay_sites(
     const AzRev1655LoadedImage *image,
     AzRev1655ResolvedHookSite *render_menu,
-    AzRev1655ResolvedHookSite *font_end)
+    AzRev1655ResolvedHookSite *font_end,
+    AzRev1655ResolvedHookSite *content_launch)
 {
     const AzRev1655HookPermit *permit = NULL;
     const AzRev1655HookSiteDescriptor *descriptor;
@@ -1112,7 +1116,8 @@ static AzRev1655RuntimeResult validate_render_sites(
     };
     AzRev1655HookGateResult gate_result;
 
-    if (image == NULL || render_menu == NULL || font_end == NULL) {
+    if (image == NULL || render_menu == NULL || font_end == NULL ||
+        content_launch == NULL) {
         return AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED;
     }
 
@@ -1157,6 +1162,24 @@ static AzRev1655RuntimeResult validate_render_sites(
         font_end->complete_signature_size !=
             (size_t)AZ_RENDER_SIGNATURE_SIZE) {
         return AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED;
+    }
+
+    descriptor = az_rev1655_hook_gate_site(
+        permit,
+        AZ_REV1655_HOOK_SITE_CONTENT_LAUNCH);
+    if (descriptor == NULL ||
+        az_rev1655_hook_gate_resolve_site(
+            permit,
+            descriptor,
+            image,
+            content_launch) != AZ_REV1655_HOOK_GATE_OK ||
+        content_launch->target_address !=
+            AZ_CONTENT_LAUNCH_TARGET_ADDRESS ||
+        content_launch->expected_instruction !=
+            AZ_REV1655_CONTENT_LAUNCH_FIRST_INSTRUCTION ||
+        content_launch->complete_signature_size !=
+            (size_t)AZ_RENDER_SIGNATURE_SIZE) {
+        return AZ_REV1655_RUNTIME_LAUNCH_SITE_REJECTED;
     }
 
     return AZ_REV1655_RUNTIME_OK;
@@ -1578,6 +1601,8 @@ static uint32_t input_observe_worker(void *context)
         az_rev1655_input_detour_begin_shutdown();
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
         remove_overlay_hook_for_title_exit(
+            &g_runtime.content_launch_hook, "ContentLauncher");
+        remove_overlay_hook_for_title_exit(
             &g_runtime.font_end_hook, "Font::End");
         remove_overlay_hook_for_title_exit(
             &g_runtime.render_menu_hook, "RenderMenu");
@@ -1743,6 +1768,7 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     AzRev1655ResolvedHookSite input_site;
     AzRev1655ResolvedHookSite render_menu_site;
     AzRev1655ResolvedHookSite font_end_site;
+    AzRev1655ResolvedHookSite content_launch_site;
     AzRev1655RenderDetourBindings bindings;
     AzRev1655RuntimeResult validation;
     AzOverlayRendererResult renderer_result;
@@ -1761,12 +1787,13 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     if (validation != AZ_REV1655_RUNTIME_OK) {
         return validation;
     }
-    validation = validate_render_sites(
+    validation = validate_overlay_sites(
         &image,
         &render_menu_site,
-        &font_end_site);
+        &font_end_site,
+        &content_launch_site);
     if (validation != AZ_REV1655_RUNTIME_OK) {
-        DbgPrint("AuroraAZ: M2b render sites rejected\n");
+        DbgPrint("AuroraAZ: overlay integration sites rejected\n");
         return validation;
     }
 
@@ -1884,6 +1911,17 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         &g_runtime.font_end_hook);
     if (hook_result != AZ_HOOK_RUNTIME_OK) {
         retain_published_hooks_fail_closed(0u);
+        return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+    }
+
+    hook_result = az_live_hook_install_direct(
+        content_launch_site.target_address,
+        content_launch_site.expected_instruction,
+        (const void *)(uintptr_t)
+            &az_rev1655_content_launch_direct_detour_entry,
+        &g_runtime.content_launch_hook);
+    if (hook_result != AZ_HOOK_RUNTIME_OK) {
+        retain_published_hooks_fail_closed(1u);
         return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
     }
 
@@ -2106,6 +2144,8 @@ const char *az_rev1655_runtime_result_name(AzRev1655RuntimeResult result)
         return "scene-gate-failed";
     case AZ_REV1655_RUNTIME_RENDER_DETOUR_FAILED:
         return "render-detour-failed";
+    case AZ_REV1655_RUNTIME_LAUNCH_SITE_REJECTED:
+        return "launch-site-rejected";
     default:
         return "unknown";
     }

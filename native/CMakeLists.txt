@@ -133,6 +133,12 @@ if(BUILD_TESTING)
     target_link_libraries(auroraaz_render_detours_tests
         PRIVATE auroraaz_core)
 
+    add_executable(auroraaz_content_launch_detour_tests
+        tests/content_launch_detour_tests.c
+        src/content_launch_detour.c)
+    target_link_libraries(auroraaz_content_launch_detour_tests
+        PRIVATE auroraaz_core)
+
     add_executable(auroraaz_scene_gate_rev1655_tests
         tests/scene_gate_rev1655_tests.c
         src/scene_gate_rev1655.c)
@@ -175,6 +181,7 @@ if(BUILD_TESTING)
         auroraaz_input_detour_xbox_tests
         auroraaz_overlay_renderer_xbox360_tests
         auroraaz_render_detours_tests
+        auroraaz_content_launch_detour_tests
         auroraaz_scene_gate_rev1655_tests
         auroraaz_m2a_input_telemetry_tests
         auroraaz_m2b_scene_telemetry_tests
@@ -215,6 +222,8 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_overlay_renderer_xbox360_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_render_detours_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_content_launch_detour_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_scene_gate_rev1655_tests
             PRIVATE /W4 /WX)
@@ -270,6 +279,9 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_render_detours_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_content_launch_detour_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
         target_compile_options(auroraaz_scene_gate_rev1655_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
@@ -310,6 +322,8 @@ if(BUILD_TESTING)
         COMMAND auroraaz_overlay_renderer_xbox360_tests)
     add_test(NAME auroraaz_render_detours_tests
         COMMAND auroraaz_render_detours_tests)
+    add_test(NAME auroraaz_content_launch_detour_tests
+        COMMAND auroraaz_content_launch_detour_tests)
     add_test(NAME auroraaz_scene_gate_rev1655_tests
         COMMAND auroraaz_scene_gate_rev1655_tests)
     add_test(NAME auroraaz_m2a_input_telemetry_tests

@@ -19,6 +19,7 @@
 #define AZ_REV1655_INPUT_RVA 0x00801D90u
 #define AZ_REV1655_RENDER_MENU_RVA 0x00358A08u
 #define AZ_REV1655_FONT_END_RVA 0x0047E390u
+#define AZ_REV1655_CONTENT_LAUNCH_RVA 0x00294DD0u
 #define AZ_REV1655_PERMIT_SEAL 0x415A1655u
 
 struct AzRev1655HookPermit {
@@ -143,6 +144,11 @@ static const uint8_t k_font_end_signature[16] = {
     0x94, 0x21, 0xFF, 0x80, 0x81, 0x63, 0x00, 0xB4
 };
 
+static const uint8_t k_content_launch_signature[16] = {
+    0x7D, 0x88, 0x02, 0xA6, 0x48, 0x6D, 0x2E, 0xF5,
+    0x94, 0x21, 0xFF, 0x60, 0x3D, 0x60, 0x82, 0x13
+};
+
 static const struct AzRev1655HookSiteDescriptor k_sites[] = {
     {
         AZ_REV1655_HOOK_SITE_INPUT_WRAPPER,
@@ -164,6 +170,13 @@ static const struct AzRev1655HookSiteDescriptor k_sites[] = {
         k_font_end_signature,
         sizeof(k_font_end_signature),
         AZ_REV1655_HOOK_GATE_BAD_FONT_END_SIGNATURE
+    },
+    {
+        AZ_REV1655_HOOK_SITE_CONTENT_LAUNCH,
+        AZ_REV1655_CONTENT_LAUNCH_RVA,
+        k_content_launch_signature,
+        sizeof(k_content_launch_signature),
+        AZ_REV1655_HOOK_GATE_BAD_CONTENT_LAUNCH_SIGNATURE
     }
 };
 
@@ -537,6 +550,8 @@ const char *az_rev1655_hook_gate_result_name(
         return "bad-render-menu-signature";
     case AZ_REV1655_HOOK_GATE_BAD_FONT_END_SIGNATURE:
         return "bad-font-end-signature";
+    case AZ_REV1655_HOOK_GATE_BAD_CONTENT_LAUNCH_SIGNATURE:
+        return "bad-content-launch-signature";
     case AZ_REV1655_HOOK_GATE_BAD_IMAGE_HEADER_SHA256:
         return "bad-image-header-sha256";
     case AZ_REV1655_HOOK_GATE_BAD_TEXT_SHA256:

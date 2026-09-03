@@ -73,10 +73,15 @@ lab black-screened with `NetDbgDll.xex` active, while the identical lab copy
 launched it successfully after that file was disabled. The failing log reached
 `ContentLauncher: INITIALIZE`, printed the selected ContentID, closed
 `AuroraSql`, and stopped. Do not deploy `57dd888` to production. The follow-up
-candidate routes NetDbg ordinal 3 to a non-blocking runtime shutdown request;
-the pinned worker revokes input/rendering, cancels filter work, restores the
-Font::End, RenderMenu, and input hooks, then exits. That candidate still needs
-the same hardware launch A/B gate.
+candidate at `8a6dcf0` routed NetDbg ordinal 3 to a non-blocking runtime
+shutdown request, but hardware still black-screened. After reboot its v5
+marker recorded `shutdown_requests=0` and runtime state `RUNNING`, proving
+Aurora does not call ordinal 3 before the failing handoff. The next candidate
+therefore gates and intercepts the exact Rev1655 `ContentLauncher` entry at
+`0x82294DD0`. It synchronously requests shutdown, waits for the worker to
+cancel filtering and restore the ContentLauncher, Font::End, RenderMenu, and
+input hooks, then resumes the original function at `0x82294DD4`. This remains
+lab-only until the same game and XEX launch A/B gates pass.
 
 ### Current console state
 

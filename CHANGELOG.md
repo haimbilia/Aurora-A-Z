@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- Handle Aurora's NetDbg shutdown callback by asynchronously revoking input,
-  cancelling filter work, restoring all three hooks, and exiting the worker so
-  normal game and XEX launches are not blocked.
+- Add an exact-build `ContentLauncher` boundary hook that synchronously revokes
+  input, cancels filter work, restores all four hooks, and exits the worker
+  before Aurora continues a game or XEX launch. Hardware proved the earlier
+  ordinal-3 shutdown callback is not invoked before the failing handoff.
 - Redirect development to the requested on-coverflow selector.
 - Add lossless stock XUR/XUI conversion using XUIHelper and Aurora extensions.
 - Add an open PowerShell XZP builder/extractor with verified 418-file round trip.

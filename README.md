@@ -44,8 +44,12 @@ hardware-gated; A is no longer part of the Aurora A-Z interaction.
 The hold-R3 filtering interaction now works on hardware, including cancel on
 an unmoved R3 tap and completion-based re-arming. Commit `57dd888` is not a
 release candidate: an isolated A/B test proved that its still-running worker
-blocked normal title handoff. The current follow-up adds ordinal-3 title-exit
-shutdown and must pass game/XEX launch testing before any production install.
+blocked normal title handoff. Hardware then disproved ordinal 3 as a launch
+notification: the shutdown-capable follow-up still black-screened and its
+persisted marker recorded zero shutdown requests. The current lab candidate
+instead intercepts the exact Rev1655 `ContentLauncher` entry, synchronously
+restores all four hooks and exits its worker, then resumes Aurora's original
+launcher. It must pass game/XEX launch testing before any production install.
 
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary

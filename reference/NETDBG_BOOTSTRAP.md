@@ -50,7 +50,7 @@ module handle alone, so every export must be present and non-null.
 | Ordinal | Call site | Aurora arguments | Current M2a compatibility behavior |
 | ---: | --- | --- | --- |
 | 2 | `0x8232A740` | `r3=9994`, `r4=9993`, `r5=3` | Compatibility no-op; return zero |
-| 3 | `0x8232A7BC` | No deliberate argument setup | Non-blocking runtime shutdown request; return zero immediately |
+| 3 | `0x8232A7BC` | No deliberate argument setup | Non-blocking fallback shutdown request; return zero immediately |
 | 4 | `0x8232A9D8` | `r3` = NUL-terminated formatted log line | Atomically claim the one-shot bootstrap, start a worker, and return without recursive logging |
 | 5 | No key-7 call site | Resolved only | Export a valid immediate-return stub |
 
@@ -59,6 +59,13 @@ one direct construction site at `0x8232A550` and no hidden ordinal-5 call in
 its primary or secondary vtable paths. The final M1 marker identifies ordinal
 4 as the automatic startup source; this is observed hardware behavior rather
 than an inference from the static call graph.
+
+Ordinal 3 is not a usable pre-launch notification. A shutdown-capable build
+still black-screened during title handoff, and the persisted v5 runtime marker
+after reboot recorded `shutdown_requests=0` and state `RUNNING`. The active
+lifecycle experiment instead hooks the exact Rev1655 `ContentLauncher` entry
+at `0x82294DD0`, synchronously closes the runtime, restores that entry and the
+three feature hooks, and resumes original execution at `0x82294DD4`.
 
 The build requires an ordinal-only PE export table (`NONAME`) containing
 exactly ordinals 2, 3, 4, and 5. That check alone is not sufficient: pinned
