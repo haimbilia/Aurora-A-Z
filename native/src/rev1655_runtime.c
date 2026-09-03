@@ -87,6 +87,7 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t observations_logged;
     volatile uint32_t lifetime_state;
     volatile uint32_t pinned_ordinal4_export;
+    volatile uint32_t shutdown_requests;
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
     volatile uint32_t worker_thread_id;
     volatile uint32_t filter_bind_result;
@@ -147,10 +148,12 @@ typedef struct AzM3bFilterMarker {
     uint32_t cooldown_ticks;
     uint32_t idle_ticks;
     uint32_t activity_seen;
+    uint32_t shutdown_requests;
+    uint32_t runtime_state;
 } AzM3bFilterMarker;
 
-typedef char AzM3bFilterMarkerMustBe72Bytes[
-    (sizeof(AzM3bFilterMarker) == 72u) ? 1 : -1];
+typedef char AzM3bFilterMarkerMustBe80Bytes[
+    (sizeof(AzM3bFilterMarker) == 80u) ? 1 : -1];
 #endif
 
 static AzRev1655Runtime g_runtime;
@@ -475,7 +478,7 @@ static void flush_filter_probe_telemetry(void)
     marker.magic[1] = 'Z';
     marker.magic[2] = 'F';
     marker.magic[3] = '3';
-    marker.version = 4u;
+    marker.version = 5u;
     marker.record_size = (uint32_t)sizeof(marker);
     marker.worker_thread_id = load_u32(&g_runtime.worker_thread_id);
     marker.bind_result = load_u32(&g_runtime.filter_bind_result);
@@ -493,6 +496,8 @@ static void flush_filter_probe_telemetry(void)
     marker.cooldown_ticks = g_runtime.filter_cooldown_ticks;
     marker.idle_ticks = g_runtime.filter_idle_ticks;
     marker.activity_seen = g_runtime.filter_activity_seen;
+    marker.shutdown_requests = load_u32(&g_runtime.shutdown_requests);
+    marker.runtime_state = load_u32(&g_runtime.state);
     (void)write_complete_file(
         g_filter_marker_path,
         (const uint8_t *)&marker,
@@ -1330,6 +1335,30 @@ static void remove_input_hook_safely(void)
     }
 }
 
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+static void remove_overlay_hook_for_title_exit(
+    AzLiveHook *hook,
+    const char *label)
+{
+    AzHookRuntimeResult result;
+
+    if (hook == NULL || hook->installed == 0u) {
+        return;
+    }
+    result = az_live_hook_remove(hook);
+    if (result != AZ_HOOK_RUNTIME_OK &&
+        result != AZ_HOOK_RUNTIME_NOT_INSTALLED) {
+        /* The module is pinned and the title process is exiting. Never keep
+         * the worker alive indefinitely if Aurora has already changed or
+         * unmapped a hook target; closed bridges remain pass-through. */
+        DbgPrint(
+            "AuroraAZ: title-exit %s hook restore: %s\n",
+            label,
+            az_hook_runtime_result_name(result));
+    }
+}
+#endif
+
 static void rollback_installed_input_hook(void)
 {
     AzInputDetourStatus status;
@@ -1535,9 +1564,24 @@ static uint32_t input_observe_worker(void *context)
         (uint32_t)AZ_REV1655_RUNTIME_STOPPING) {
         AzInputDetourStatus status;
 
-        /* OFF and revoked gates precede target restoration.  OBSERVE never
-         * owns a key, so shutdown has no consumed release to synthesize. */
+        /* Revoke capture and rendering before restoring hook targets. The
+         * module remains title-pinned, so a direct callback already in flight
+         * can still return safely after its target is restored. */
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        if (load_u32(&g_runtime.stage) ==
+            (uint32_t)AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
+            az_overlay_renderer_begin_unload(&g_runtime.renderer);
+            (void)az_rev1655_filter_consumer_worker_cancel(
+                &g_runtime.filter_consumer);
+        }
+#endif
         az_rev1655_input_detour_begin_shutdown();
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        remove_overlay_hook_for_title_exit(
+            &g_runtime.font_end_hook, "Font::End");
+        remove_overlay_hook_for_title_exit(
+            &g_runtime.render_menu_hook, "RenderMenu");
+#endif
         remove_input_hook_safely();
         drain_all_observations();
         az_rev1655_input_detour_snapshot_status(&status);
@@ -1556,6 +1600,9 @@ static uint32_t input_observe_worker(void *context)
             &g_runtime.state,
             (uint32_t)AZ_REV1655_RUNTIME_CLOSED);
         flush_input_telemetry(1u);
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        flush_filter_probe_telemetry();
+#endif
     }
 
     return 0u;
@@ -1921,6 +1968,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     az_m2a_input_telemetry_init(&g_runtime.telemetry);
     g_runtime.telemetry_flush_ticks = 0u;
     g_runtime.render_telemetry_flush_ticks = 0u;
+    store_u32(&g_runtime.shutdown_requests, 0u);
 #if defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
     if (stage == AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
         result = AZ_REV1655_RUNTIME_BAD_STAGE;
@@ -1951,13 +1999,6 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
 
 void az_rev1655_runtime_shutdown(void)
 {
-    /* The overlay canary uses direct one-word hooks without an admission
-     * relay. It is intentionally title-lifetime-only and cold-restart-only. */
-    if (load_u32(&g_runtime.stage) ==
-        (uint32_t)AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
-        return;
-    }
-
     for (;;) {
         uint32_t state = load_u32(&g_runtime.state);
 
@@ -1965,10 +2006,12 @@ void az_rev1655_runtime_shutdown(void)
             state == (uint32_t)AZ_REV1655_RUNTIME_CLOSED) {
             return;
         }
-        if (state == (uint32_t)AZ_REV1655_RUNTIME_STARTING ||
-            state == (uint32_t)AZ_REV1655_RUNTIME_STOPPING) {
+        if (state == (uint32_t)AZ_REV1655_RUNTIME_STARTING) {
             wait_for_control();
             continue;
+        }
+        if (state == (uint32_t)AZ_REV1655_RUNTIME_STOPPING) {
+            break;
         }
         if (state == (uint32_t)AZ_REV1655_RUNTIME_RUNNING) {
             uint32_t expected =
@@ -1990,6 +2033,23 @@ void az_rev1655_runtime_shutdown(void)
     }
 
     wait_for_worker_exit();
+}
+
+void az_rev1655_runtime_request_shutdown(void)
+{
+    uint32_t expected = (uint32_t)AZ_REV1655_RUNTIME_RUNNING;
+
+    (void)__atomic_add_fetch(
+        &g_runtime.shutdown_requests,
+        1u,
+        __ATOMIC_ACQ_REL);
+    (void)__atomic_compare_exchange_n(
+        &g_runtime.state,
+        &expected,
+        (uint32_t)AZ_REV1655_RUNTIME_STOPPING,
+        0,
+        __ATOMIC_ACQ_REL,
+        __ATOMIC_ACQUIRE);
 }
 
 AzRev1655RuntimeState az_rev1655_runtime_state(void)

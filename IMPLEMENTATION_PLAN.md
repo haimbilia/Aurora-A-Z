@@ -422,17 +422,16 @@ editing the skin.
 
 ## Immediate next work session
 
-1. Cross-build and hash the explicit `OVERLAY_CANARY` artifact.
-2. Deploy it only to `Hdd1:\AuroraAZLab`, verify the FTP round-trip hash, then
-   cold reboot once so the title-pinned module is loaded fresh.
-3. Capture a 1280x720 NOVA screenshot and pull two identical M2b marker copies.
-   Require a responsive UI, centered visible row, draw result `DRAWN`, main
-   scene allowed, and continued zero consumption/filtering.
-4. If the row is absent, diagnose `last_note_result` and `last_draw_result`;
-   do not weaken the scene, caller, font, device, or System UI gates.
-5. After visual placement passes, enable selector ownership as a separate M2b
-   build, then implement filtering as M4.
+1. Cross-build the ordinal-3 lifecycle candidate and deploy it only to
+   `Hdd1:\AuroraAZLab` after a cold reboot.
+2. Reconfirm hold-R3 navigation, cancel-without-movement, filter application,
+   and completion-based re-entry.
+3. Launch the same known-good title used by the plugin-disabled A/B control.
+   Require successful title startup rather than a black screen.
+4. Return to Aurora and repeat with one XEX application. Pull the final v5
+   filter marker and require `shutdown_requests >= 1` plus runtime state
+   `CLOSED` to prove the worker processed shutdown.
+5. Keep production untouched until both title handoffs pass.
 
-M1 and M2a are closed. The project is not yet a functional selector: the
-overlay canary, input ownership, and filter application still need their
-hardware gates.
+M1, M2a, overlay rendering, interaction, and native filtering are closed. The
+title-exit lifecycle gate remains open.

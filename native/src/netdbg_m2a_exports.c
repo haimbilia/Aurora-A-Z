@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <auroraaz/netdbg_bootstrap.h>
+#include <auroraaz/rev1655_runtime.h>
 
 /*
  * SynthXEX v0.0.6 does not create an HvImageExportTable. Reserve the exact
@@ -41,8 +42,10 @@ uint32_t AuroraAZNetDbgConfigure(
 
 uint32_t AuroraAZNetDbgShutdown(void)
 {
-    /* Ordinal 3 also represents transient network loss. The title process
-     * owns module lifetime, so QuickView/network state cannot stop us. */
+    /* Aurora calls ordinal 3 while tearing down its logger for title launch.
+     * Never wait on Aurora's caller: the pinned worker owns hook restoration
+     * and exits asynchronously before the title process is replaced. */
+    az_rev1655_runtime_request_shutdown();
     return 0u;
 }
 

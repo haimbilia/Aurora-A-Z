@@ -65,6 +65,19 @@ slow. The next build uses observed queue/busy activity followed by 200 ms of
 stable idle; the old 8-second timeout remains only as a missed-activity safety
 fallback.
 
+Hardware then confirmed commit `57dd888` fixed both interaction details: an
+unmoved R3 press/release is a no-op, and the selector re-arms after Aurora's
+actual filter rebuild rather than the old visible delay. A separate A/B test
+found a release-blocking lifecycle bug: launching a known-good title from the
+lab black-screened with `NetDbgDll.xex` active, while the identical lab copy
+launched it successfully after that file was disabled. The failing log reached
+`ContentLauncher: INITIALIZE`, printed the selected ContentID, closed
+`AuroraSql`, and stopped. Do not deploy `57dd888` to production. The follow-up
+candidate routes NetDbg ordinal 3 to a non-blocking runtime shutdown request;
+the pinned worker revokes input/rendering, cancels filter work, restores the
+Font::End, RenderMenu, and input hooks, then exits. That candidate still needs
+the same hardware launch A/B gate.
+
 ### Current console state
 
 ```

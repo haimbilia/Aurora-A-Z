@@ -50,7 +50,7 @@ module handle alone, so every export must be present and non-null.
 | Ordinal | Call site | Aurora arguments | Current M2a compatibility behavior |
 | ---: | --- | --- | --- |
 | 2 | `0x8232A740` | `r3=9994`, `r4=9993`, `r5=3` | Compatibility no-op; return zero |
-| 3 | `0x8232A7BC` | No deliberate argument setup | Network-loss/final-shutdown compatibility no-op; return zero |
+| 3 | `0x8232A7BC` | No deliberate argument setup | Non-blocking runtime shutdown request; return zero immediately |
 | 4 | `0x8232A9D8` | `r3` = NUL-terminated formatted log line | Atomically claim the one-shot bootstrap, start a worker, and return without recursive logging |
 | 5 | No key-7 call site | Resolved only | Export a valid immediate-return stub |
 

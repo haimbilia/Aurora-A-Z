@@ -1118,6 +1118,8 @@ static void test_observe_only_lifecycle(void)
     CHECK(hook_install_calls == hook_install_calls_before + 1u);
 
     observations_available = 10u;
+    az_rev1655_runtime_request_shutdown();
+    CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPING);
     az_rev1655_runtime_shutdown();
     CHECK(thread_wait_calls == thread_wait_calls_before + 1u);
     CHECK(thread_close_calls == thread_close_calls_before + 1u);

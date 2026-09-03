@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Handle Aurora's NetDbg shutdown callback by asynchronously revoking input,
+  cancelling filter work, restoring all three hooks, and exiting the worker so
+  normal game and XEX launches are not blocked.
 - Redirect development to the requested on-coverflow selector.
 - Add lossless stock XUR/XUI conversion using XUIHelper and Aurora extensions.
 - Add an open PowerShell XZP builder/extractor with verified 418-file round trip.

@@ -41,6 +41,12 @@ The complete row rendered without diagonal clipping; R3, D-pad Left/Right,
 left-stick Left/Right, and RB behaved as required. The filter bridge remains
 hardware-gated; A is no longer part of the Aurora A-Z interaction.
 
+The hold-R3 filtering interaction now works on hardware, including cancel on
+an unmoved R3 tap and completion-based re-arming. Commit `57dd888` is not a
+release candidate: an isolated A/B test proved that its still-running worker
+blocked normal title handoff. The current follow-up adds ordinal-3 title-exit
+shutdown and must pass game/XEX launch testing before any production install.
+
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary
 files under `Plugins`. Its optional Network Debugger wrapper requests the

@@ -82,6 +82,7 @@ static uint32_t marker_write_calls;
 static uint32_t marker_close_calls;
 static uint32_t runtime_start_calls;
 static uint32_t runtime_pin_calls;
+static uint32_t runtime_shutdown_request_calls;
 static uint32_t observed_ordinal4_export;
 static TestWorker pending_worker;
 static void *pending_worker_context;
@@ -201,10 +202,16 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     return AZ_REV1655_RUNTIME_OK;
 }
 
+void az_rev1655_runtime_request_shutdown(void)
+{
+    ++runtime_shutdown_request_calls;
+}
+
 int main(void)
 {
     CHECK(AuroraAZNetDbgConfigure(730u, 731u, 1u) == 0u);
     CHECK(AuroraAZNetDbgShutdown() == 0u);
+    CHECK(runtime_shutdown_request_calls == 1u);
     CHECK(AuroraAZNetDbgReserved() == 0u);
     CHECK(wrapper_calls == 0u);
     CHECK(runtime_start_calls == 0u);
@@ -244,6 +251,9 @@ int main(void)
     CHECK(observed_markers[1].target_address == 0x82801D90u);
     CHECK(observed_markers[1].target_protection_before == 0x20u);
     CHECK(observed_markers[1].target_protection_after == 0x40u);
+
+    CHECK(AuroraAZNetDbgShutdown() == 0u);
+    CHECK(runtime_shutdown_request_calls == 2u);
 
     CHECK(DllMain(NULL, 1u, NULL) == 1);
     CHECK(close_calls == 1u);

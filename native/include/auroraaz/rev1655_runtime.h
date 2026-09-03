@@ -67,6 +67,13 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     AzRev1655RuntimeStage stage);
 
 /*
+ * Non-blocking title-exit signal used by Aurora's NetDbg ordinal 3 callback.
+ * The pinned module remains mapped while the worker closes selector capture,
+ * cancels pending filter work, restores every installed hook, and exits.
+ */
+void az_rev1655_runtime_request_shutdown(void);
+
+/*
  * Synchronously requests fail-closed shutdown and returns only after the
  * target instruction is restored, resident admissions and bridge calls have
  * drained, telemetry has been drained, and the worker has exited.

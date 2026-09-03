@@ -63,6 +63,9 @@ functional unless it satisfies every acceptance criterion below on Aurora
   hides the alphabet and must not apply `#` or rebuild the coverflow.
 - Aurora A-Z must never consume, clear, or assign any action to A.
 - RB continues to open Aurora's unmodified QuickView menu.
+- Launching a game or XEX must behave identically with Aurora A-Z installed or
+  absent; a black screen, delayed handoff, or required shutdown is a release
+  blocker.
 
 ## Filtering semantics
 
@@ -120,6 +123,8 @@ specified yet. They must not be assumed by an implementation until documented.
 13. After a filter completes, verify R3 becomes available as soon as Aurora's
     queue has returned to a stable idle state; it must not impose a fixed
     multi-second delay when completion is already observable.
+14. Launch a known-good game and a known-good XEX application, return to
+    Aurora, and repeat. Every title handoff must complete normally.
 
 ## Explicitly non-compliant implementations
 
