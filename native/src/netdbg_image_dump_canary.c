@@ -21,6 +21,7 @@
 #define AZ_DUMP_STATUS_TEXT_MAPPED 0x02u
 #define AZ_DUMP_STATUS_HEADER_WRITTEN 0x04u
 #define AZ_DUMP_STATUS_TEXT_WRITTEN 0x08u
+#define AZ_DUMP_FORMAT_VERSION 2u
 
 typedef struct AzImageDumpMarker {
     uint8_t magic[4];
@@ -36,6 +37,13 @@ typedef char AzImageDumpMarkerMustBe28Bytes[
     sizeof(AzImageDumpMarker) == 28u ? 1 : -1];
 
 static uint32_t g_dump_claimed;
+/*
+ * Executable pages can have a different backing-store view when a kernel
+ * write consumes their address directly.  Bounce every byte through this
+ * module's ordinary data pages so the dump records the CPU-visible view that
+ * the verifier and detours actually read.
+ */
+static uint8_t g_dump_chunk[AZ_DUMP_CHUNK_SIZE];
 static char g_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-image-dump.bin";
 static char g_header_path[] =
@@ -88,14 +96,21 @@ static uint8_t write_bytes(
     }
 
     while (offset < size) {
+        const volatile uint8_t *source;
+        uint32_t copy_index;
         uint32_t written = 0u;
         const uint32_t remaining = size - offset;
         const uint32_t chunk = remaining < AZ_DUMP_CHUNK_SIZE ?
             remaining : AZ_DUMP_CHUNK_SIZE;
 
+        source = (const volatile uint8_t *)(bytes + offset);
+        for (copy_index = 0u; copy_index < chunk; ++copy_index) {
+            g_dump_chunk[copy_index] = source[copy_index];
+        }
+
         if (WriteFile(
                 file,
-                (void *)(bytes + offset),
+                g_dump_chunk,
                 chunk,
                 &written,
                 NULL) == 0 ||
@@ -121,7 +136,7 @@ static void write_marker(
 {
     const AzImageDumpMarker marker = {
         {'A', 'Z', 'I', 'D'},
-        1u,
+        AZ_DUMP_FORMAT_VERSION,
         (uint32_t)sizeof(AzImageDumpMarker),
         phase,
         status,
