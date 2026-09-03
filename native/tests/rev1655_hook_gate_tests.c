@@ -564,6 +564,12 @@ static void test_exact_fixture(const char *path)
         free(bytes);
         return;
     }
+    CHECK(az_rev1655_hook_gate_permit_matches_image(
+        permit, &image) != 0u);
+    CHECK(az_rev1655_hook_gate_permit_matches_image(
+        NULL, &image) == 0u);
+    CHECK(az_rev1655_hook_gate_permit_matches_image(
+        permit, NULL) == 0u);
 
     check_resolved_site(permit, &image,
         AZ_REV1655_HOOK_SITE_INPUT_WRAPPER, 0x82801D90u, 20u);
@@ -589,6 +595,8 @@ static void test_exact_fixture(const char *path)
         AzRev1655LoadedImage other = image;
         memcpy(second_image, bytes, AZ_REV1655_NT_IMAGE_SIZE);
         other.bytes = second_image;
+        CHECK(az_rev1655_hook_gate_permit_matches_image(
+            permit, &other) == 0u);
         CHECK(az_rev1655_hook_gate_resolve_site(
             permit, descriptor, &other, &resolved) ==
             AZ_REV1655_HOOK_GATE_PERMIT_IMAGE_MISMATCH);

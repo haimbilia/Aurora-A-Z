@@ -874,6 +874,7 @@ static void test_binding_and_exact_gates(const AzRev1655LoadedImage *image)
     AzRev1655FilterHostOps ops;
     AzRev1655FilterProvenance provenance;
     AzRev1655LoadedImage wrong_image;
+    const AzRev1655HookPermit *permit = NULL;
     TestImportResolver bad_resolver_context;
     AzRev1655ImportResolver bad_resolver;
 
@@ -882,6 +883,14 @@ static void test_binding_and_exact_gates(const AzRev1655LoadedImage *image)
     make_host_ops(&host, &ops);
     CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
         &consumer, image, &g_test_import_resolver_api, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
+        AZ_REV1655_FILTER_CONSUMER_IDLE);
+    CHECK(az_rev1655_hook_gate_validate_with_import_resolver(
+        image, &g_test_import_resolver_api, &permit) ==
+        AZ_REV1655_HOOK_GATE_OK);
+    CHECK(permit != NULL);
+    CHECK(az_rev1655_filter_consumer_bind_with_validated_permit(
+        &consumer, image, permit, &provenance,
         TEST_WORKER_THREAD, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_IDLE);
 
@@ -929,6 +938,10 @@ static void test_binding_and_exact_gates(const AzRev1655LoadedImage *image)
 
     wrong_image = *image;
     wrong_image.virtual_address += 4u;
+    CHECK(az_rev1655_filter_consumer_bind_with_validated_permit(
+        &consumer, &wrong_image, permit, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
+        AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE);
     CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
         &consumer, &wrong_image, &g_test_import_resolver_api, &provenance,
         TEST_WORKER_THREAD, &ops) ==

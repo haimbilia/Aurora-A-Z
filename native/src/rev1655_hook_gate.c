@@ -446,6 +446,18 @@ AzRev1655HookGateResult az_rev1655_hook_gate_validate_with_import_resolver(
     return validate_with_resolver(image, resolver, out_permit);
 }
 
+uint8_t az_rev1655_hook_gate_permit_matches_image(
+    const AzRev1655HookPermit *permit,
+    const AzRev1655LoadedImage *image)
+{
+    if (!permit_is_live(permit) || image == NULL) {
+        return 0u;
+    }
+    return image->bytes == permit->image_bytes &&
+        image->size == permit->image_size &&
+        image->virtual_address == permit->image_virtual_address ? 1u : 0u;
+}
+
 const AzRev1655HookSiteDescriptor *az_rev1655_hook_gate_site(
     const AzRev1655HookPermit *permit,
     AzRev1655HookSiteId site_id)

@@ -42,6 +42,17 @@ after a successful schedule and one continuous second with Aurora's queue
 empty and worker-busy byte clear. It remains lab-only until two sequential
 letter changes pass on hardware.
 
+The first repeatable candidate, commit `ffceb8f`, exposed a startup race rather
+than an apply failure. Hardware marker `AZF3` v3 reported `bind_result=9`
+(`bad-image`), `probe_result=4` (`not-bound`), and zero requests, so A correctly
+remained fail-closed. The initial whole-image revision gate had already passed
+(the hooks and overlay started), but the filter binder redundantly hashed all
+live Aurora text again after its worker-thread handshake. Aurora changed an
+unrelated text byte during that gap. The follow-up reuses the opaque permit
+from the successful initial exact-revision gate, verifies that it belongs to
+the same loaded image, and still rechecks every filter helper signature before
+installing this plugin's first hook.
+
 ### Current console state
 
 ```

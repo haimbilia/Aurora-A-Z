@@ -90,6 +90,12 @@ AzRev1655HookGateResult az_rev1655_hook_gate_validate_with_import_resolver(
     const AzRev1655ImportResolver *resolver,
     const AzRev1655HookPermit **out_permit);
 
+/* Confirms that an opaque permit came from a successful exact gate for this
+ * same loaded image. This does not re-hash mutable live text. */
+uint8_t az_rev1655_hook_gate_permit_matches_image(
+    const AzRev1655HookPermit *permit,
+    const AzRev1655LoadedImage *image);
+
 /* Returns an opaque, reviewed descriptor only for a live validated permit. */
 const AzRev1655HookSiteDescriptor *az_rev1655_hook_gate_site(
     const AzRev1655HookPermit *permit,

@@ -233,6 +233,19 @@ az_rev1655_filter_consumer_bind_with_import_resolver(
     uint32_t worker_thread_id,
     const AzRev1655FilterHostOps *host);
 
+/* Uses the exact-revision permit issued by the runtime's initial whole-image
+ * gate. Every filter helper window is still checked at bind time, but an
+ * unrelated later Aurora text mutation cannot invalidate the admission that
+ * already succeeded before plugin initialization. */
+AzRev1655FilterConsumerResult
+az_rev1655_filter_consumer_bind_with_validated_permit(
+    AzRev1655FilterConsumer *consumer,
+    const AzRev1655LoadedImage *image,
+    const AzRev1655HookPermit *permit,
+    const AzRev1655FilterProvenance *provenance,
+    uint32_t worker_thread_id,
+    const AzRev1655FilterHostOps *host);
+
 /*
  * Stage-1 read-only canary. Call from the dedicated worker before publishing
  * input_detour's filter_consumer_verified gate. It validates all 27 registry

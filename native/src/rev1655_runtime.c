@@ -967,23 +967,18 @@ static void initialize_filter_host(AzRev1655FilterHostOps *host)
 
 static AzRev1655FilterConsumerResult bind_filter_consumer_pristine(
     const AzRev1655LoadedImage *image,
+    const AzRev1655HookPermit *permit,
     uint32_t worker_thread_id)
 {
-    AzRev1655RuntimeImportResolverContext resolver_context = {
-        {NULL, NULL}, {0u, 0u}
-    };
-    const AzRev1655ImportResolver import_resolver = {
-        resolve_runtime_import_target, &resolver_context
-    };
     AzRev1655FilterProvenance provenance;
     AzRev1655FilterHostOps host;
 
     az_rev1655_filter_consumer_exact_provenance(&provenance);
     initialize_filter_host(&host);
-    return az_rev1655_filter_consumer_bind_with_import_resolver(
+    return az_rev1655_filter_consumer_bind_with_validated_permit(
         &g_runtime.filter_consumer,
         image,
-        &import_resolver,
+        permit,
         &provenance,
         worker_thread_id,
         &host);
@@ -993,7 +988,8 @@ static AzRev1655FilterConsumerResult bind_filter_consumer_pristine(
 static AzRev1655RuntimeResult validate_input_site(
     AzRev1655LoadedImage *image,
     AzRev1655ResolvedHookSite *resolved,
-    uint8_t log_failures)
+    uint8_t log_failures,
+    const AzRev1655HookPermit **out_permit)
 {
     const AzRev1655HookPermit *permit = NULL;
     const AzRev1655HookSiteDescriptor *descriptor;
@@ -1006,6 +1002,10 @@ static AzRev1655RuntimeResult validate_input_site(
         &resolver_context
     };
     AzRev1655HookGateResult gate_result;
+
+    if (out_permit != NULL) {
+        *out_permit = NULL;
+    }
 
     image->bytes = (const uint8_t *)(uintptr_t)AZ_REV1655_IMAGE_BASE;
     image->size = (size_t)AZ_REV1655_NT_IMAGE_SIZE;
@@ -1077,6 +1077,10 @@ static AzRev1655RuntimeResult validate_input_site(
                 (unsigned int)resolved->complete_signature_size);
         }
         return AZ_REV1655_RUNTIME_WRONG_INPUT_SITE;
+    }
+
+    if (out_permit != NULL) {
+        *out_permit = permit;
     }
 
     return AZ_REV1655_RUNTIME_OK;
@@ -1197,7 +1201,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
     /* The ordinal-4 callback performs this complete read-only revision gate
      * synchronously. Aurora cannot regain control and unload key 7 before the
      * subsequent policy CAS has made this image title-resident. */
-    validation = validate_input_site(&image, &resolved, 0u);
+    validation = validate_input_site(&image, &resolved, 0u, NULL);
     if (validation != AZ_REV1655_RUNTIME_OK) {
         store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_FAILED);
         return validation;
@@ -1580,7 +1584,7 @@ static AzRev1655RuntimeResult start_input_observe(void)
     AzRev1655ThreadCreateResult create_result;
     HANDLE worker_thread = NULL;
 
-    validation = validate_input_site(&image, &resolved, 1u);
+    validation = validate_input_site(&image, &resolved, 1u, NULL);
     if (validation != AZ_REV1655_RUNTIME_OK) {
         return validation;
     }
@@ -1686,10 +1690,12 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     AzInputDetourResult input_result;
     AzRev1655ThreadCreateResult create_result;
     AzRev1655FilterConsumerResult filter_bind_result;
+    const AzRev1655HookPermit *revision_permit = NULL;
     uint32_t wait_tick;
     HANDLE worker_thread = NULL;
 
-    validation = validate_input_site(&image, &input_site, 1u);
+    validation = validate_input_site(
+        &image, &input_site, 1u, &revision_permit);
     if (validation != AZ_REV1655_RUNTIME_OK) {
         return validation;
     }
@@ -1764,8 +1770,10 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     }
     g_runtime.worker_thread = worker_thread;
 
-    /* bind() hashes canonical .text, so this handshake and bind must complete
-     * before the first direct hook changes an Aurora instruction. */
+    /* The initial whole-image gate issued revision_permit before setup began.
+     * Bind reuses that exact-image permit and rechecks all filter helper
+     * windows, avoiding a racy redundant whole-text hash while Aurora's own
+     * startup workers are active. This still precedes our first direct hook. */
     for (wait_tick = 0u; wait_tick < AZ_FILTER_THREAD_WAIT_TICKS; ++wait_tick) {
         if (load_u32(&g_runtime.worker_thread_id) != 0u) {
             break;
@@ -1777,7 +1785,9 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     }
     else {
         filter_bind_result = bind_filter_consumer_pristine(
-            &image, load_u32(&g_runtime.worker_thread_id));
+            &image,
+            revision_permit,
+            load_u32(&g_runtime.worker_thread_id));
     }
     store_u32(
         &g_runtime.filter_bind_result,

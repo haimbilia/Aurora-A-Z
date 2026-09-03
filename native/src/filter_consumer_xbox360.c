@@ -1108,6 +1108,51 @@ az_rev1655_filter_consumer_bind_with_import_resolver(
         host);
 }
 
+AzRev1655FilterConsumerResult
+az_rev1655_filter_consumer_bind_with_validated_permit(
+    AzRev1655FilterConsumer *consumer,
+    const AzRev1655LoadedImage *image,
+    const AzRev1655HookPermit *permit,
+    const AzRev1655FilterProvenance *provenance,
+    uint32_t worker_thread_id,
+    const AzRev1655FilterHostOps *host)
+{
+    if (consumer == NULL) {
+        return AZ_REV1655_FILTER_CONSUMER_NULL_ARGUMENT;
+    }
+    memset(consumer, 0, sizeof(*consumer));
+    consumer->held_filter_index = AZ_NO_GLYPH;
+
+    if (image == NULL || permit == NULL || provenance == NULL ||
+        host == NULL || worker_thread_id == 0u) {
+        return AZ_REV1655_FILTER_CONSUMER_NULL_ARGUMENT;
+    }
+    if (bytes_equal(
+            provenance->aurora_xex_sha256,
+            k_rev1655_xex_sha256,
+            sizeof(k_rev1655_xex_sha256)) == 0u ||
+        bytes_equal(
+            provenance->extracted_pe_sha256,
+            k_rev1655_pe_sha256,
+            sizeof(k_rev1655_pe_sha256)) == 0u) {
+        return AZ_REV1655_FILTER_CONSUMER_BAD_PROVENANCE;
+    }
+    if (az_rev1655_hook_gate_permit_matches_image(permit, image) == 0u) {
+        return AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE;
+    }
+    if (signatures_match(image) == 0u) {
+        return AZ_REV1655_FILTER_CONSUMER_BAD_HELPER_SIGNATURE;
+    }
+    if (host_callbacks_are_complete(host) == 0u) {
+        return AZ_REV1655_FILTER_CONSUMER_BAD_BINDINGS;
+    }
+
+    consumer->host = *host;
+    consumer->worker_thread_id = worker_thread_id;
+    consumer->bound = 1u;
+    return AZ_REV1655_FILTER_CONSUMER_IDLE;
+}
+
 AzRev1655FilterConsumerResult az_rev1655_filter_consumer_worker_probe(
     AzRev1655FilterConsumer *consumer)
 {

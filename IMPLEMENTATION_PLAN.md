@@ -84,6 +84,14 @@ second, and only then re-arms A for the next letter. All probes remain confined 
 `Hdd1:\AuroraAZLab`; production Aurora, skins, databases, and `launch.ini`
 remain untouched.
 
+Hardware note: repeatable candidate `ffceb8f` failed closed before filtering,
+with `bind_result=bad-image` and `probe_result=not-bound`. The overlay proved
+the initial exact-revision gate had passed; a redundant later whole-text hash
+raced Aurora's own startup mutation. The corrected binder carries the opaque
+same-image permit from the initial gate and independently checks all twelve
+filter helper windows at bind time. It does not accept an unpermitted image or
+skip the helper signatures.
+
 ## M0 — Stabilize and measure
 
 ### Console cleanup

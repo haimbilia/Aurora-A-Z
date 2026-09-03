@@ -61,6 +61,10 @@
   successful enqueue disables A for at least eight seconds and requires one
   continuous second of an empty Aurora queue and clear worker-busy state before
   re-arming the next letter selection.
+- Fix a hardware-observed startup race where a redundant late whole-text hash
+  rejected the filter after the initial exact-revision gate had already passed.
+  Reuse that gate's opaque same-image permit while retaining exact bind-time
+  checks for every native filter helper window.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 
