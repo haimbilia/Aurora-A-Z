@@ -606,7 +606,17 @@ function Invoke-NovaTitleLaunch {
 
     $nova = New-NovaClient
     try {
-        $multipart = [System.Net.Http.MultipartFormDataContent]::new()
+        $boundary = '--------------------------{0}' -f `
+            [Guid]::NewGuid().ToString('N')
+        $multipart =
+            [System.Net.Http.MultipartFormDataContent]::new($boundary)
+        # The framework quotes the boundary parameter by default. Rev1622's
+        # narrow parser rejects that legal form even though curl's unquoted
+        # boundary succeeds.
+        $boundaryParameter =
+            $multipart.Headers.ContentType.Parameters |
+                Where-Object Name -eq 'boundary'
+        $boundaryParameter.Value = $boundary
         try {
             # NOVA's endpoint rejects StringContent parts because they carry
             # a text/plain Content-Type. curl -F sends untyped form fields;
@@ -617,9 +627,27 @@ function Invoke-NovaTitleLaunch {
                 [System.Text.Encoding]::UTF8.GetBytes($TargetDevicePath))
             $typePart = [System.Net.Http.ByteArrayContent]::new(
                 [System.Text.Encoding]::UTF8.GetBytes('0'))
-            $multipart.Add($execPart, 'exec')
-            $multipart.Add($pathPart, 'path')
-            $multipart.Add($typePart, 'type')
+            # HttpClient's Add(content, name) overload emits an unquoted
+            # Content-Disposition name under current PowerShell/.NET builds.
+            # NOVA's Rev1622 multipart parser accepts curl's quoted form only.
+            $execDisposition =
+                [System.Net.Http.Headers.ContentDispositionHeaderValue]::new(
+                    'form-data')
+            $execDisposition.Name = '"exec"'
+            $execPart.Headers.ContentDisposition = $execDisposition
+            $pathDisposition =
+                [System.Net.Http.Headers.ContentDispositionHeaderValue]::new(
+                    'form-data')
+            $pathDisposition.Name = '"path"'
+            $pathPart.Headers.ContentDisposition = $pathDisposition
+            $typeDisposition =
+                [System.Net.Http.Headers.ContentDispositionHeaderValue]::new(
+                    'form-data')
+            $typeDisposition.Name = '"type"'
+            $typePart.Headers.ContentDisposition = $typeDisposition
+            $multipart.Add($execPart)
+            $multipart.Add($pathPart)
+            $multipart.Add($typePart)
             $response = $nova.Client.PostAsync(
                 [uri]::new($nova.BaseUri, '/title/launch'), $multipart
             ).GetAwaiter().GetResult()
