@@ -109,14 +109,69 @@ static void transform(uint32_t state[8], const uint8_t block[64])
     state[7] += h;
 }
 
-void az_sha256(const uint8_t *bytes, size_t size, uint8_t digest[32])
+void az_sha256_init(AzSha256Context *context)
 {
-    uint32_t state[8] = {
+    static const uint32_t initial_state[8] = {
         0x6A09E667u, 0xBB67AE85u, 0x3C6EF372u, 0xA54FF53Au,
         0x510E527Fu, 0x9B05688Cu, 0x1F83D9ABu, 0x5BE0CD19u
     };
+
+    if (context == NULL) {
+        return;
+    }
+    memcpy(context->state, initial_state, sizeof(initial_state));
+    context->total_size = UINT64_C(0);
+    memset(context->block, 0, sizeof(context->block));
+    context->block_size = 0u;
+    context->failed = 0;
+}
+
+void az_sha256_update(
+    AzSha256Context *context,
+    const uint8_t *bytes,
+    size_t size)
+{
+    size_t copy_size;
+
+    if (context == NULL || context->failed != 0 || size == 0u) {
+        return;
+    }
+    if (bytes == NULL) {
+        context->failed = 1;
+        return;
+    }
+
+    context->total_size += (uint64_t)size;
+
+    if (context->block_size != 0u) {
+        copy_size = sizeof(context->block) - context->block_size;
+        if (copy_size > size) {
+            copy_size = size;
+        }
+        memcpy(context->block + context->block_size, bytes, copy_size);
+        context->block_size += copy_size;
+        bytes += copy_size;
+        size -= copy_size;
+        if (context->block_size == sizeof(context->block)) {
+            transform(context->state, context->block);
+            context->block_size = 0u;
+        }
+    }
+
+    while (size >= sizeof(context->block)) {
+        transform(context->state, bytes);
+        bytes += sizeof(context->block);
+        size -= sizeof(context->block);
+    }
+    if (size != 0u) {
+        memcpy(context->block, bytes, size);
+        context->block_size = size;
+    }
+}
+
+void az_sha256_final(AzSha256Context *context, uint8_t digest[32])
+{
     uint8_t tail[128];
-    size_t remaining = size;
     size_t tail_size;
     size_t index;
     uint64_t bit_length;
@@ -124,35 +179,42 @@ void az_sha256(const uint8_t *bytes, size_t size, uint8_t digest[32])
     if (digest == NULL) {
         return;
     }
-    if (bytes == NULL && size != 0u) {
+    if (context == NULL || context->failed != 0 ||
+        context->block_size >= sizeof(context->block)) {
         memset(digest, 0, 32u);
         return;
     }
 
-    while (remaining >= 64u) {
-        transform(state, bytes);
-        bytes += 64u;
-        remaining -= 64u;
-    }
-
     memset(tail, 0, sizeof(tail));
-    if (remaining != 0u) {
-        memcpy(tail, bytes, remaining);
+    if (context->block_size != 0u) {
+        memcpy(tail, context->block, context->block_size);
     }
-    tail[remaining] = 0x80u;
-    tail_size = remaining < 56u ? 64u : 128u;
-    bit_length = (uint64_t)size * UINT64_C(8);
+    tail[context->block_size] = 0x80u;
+    tail_size = context->block_size < 56u ? 64u : 128u;
+    bit_length = context->total_size * UINT64_C(8);
     for (index = 0u; index < 8u; ++index) {
         tail[tail_size - 1u - index] = (uint8_t)bit_length;
         bit_length >>= 8u;
     }
 
-    transform(state, tail);
+    transform(context->state, tail);
     if (tail_size == 128u) {
-        transform(state, tail + 64u);
+        transform(context->state, tail + 64u);
     }
 
     for (index = 0u; index < 8u; ++index) {
-        write_u32_be(digest + (index * 4u), state[index]);
+        write_u32_be(digest + (index * 4u), context->state[index]);
     }
+}
+
+void az_sha256(const uint8_t *bytes, size_t size, uint8_t digest[32])
+{
+    AzSha256Context context;
+
+    if (digest == NULL) {
+        return;
+    }
+    az_sha256_init(&context);
+    az_sha256_update(&context, bytes, size);
+    az_sha256_final(&context, digest);
 }

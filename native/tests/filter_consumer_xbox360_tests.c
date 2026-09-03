@@ -7,11 +7,17 @@
 #include <auroraaz/filters.h>
 #include <auroraaz/image.h>
 
+#include "../src/rev1655_hook_gate_private.h"
+
 #define TEST_WORKER_THREAD 0x1655u
 #define TEST_MAX_STRINGS 96u
 #define TEST_MAX_VECTORS 8u
 #define TEST_MAX_RAW_FILTERS 16u
 #define TEST_CAPTURE_TEXT 512u
+#define TEST_REV1655_TEXT_RVA 0x00210000u
+#define TEST_REV1655_THUNK_OFFSET 0x00955DFCu
+#define TEST_REV1655_THUNK_COUNT 350u
+#define TEST_REV1655_THUNK_SIZE 16u
 
 static int failures = 0;
 
@@ -100,6 +106,17 @@ typedef struct TestHost {
     uint32_t finish_calls;
 } TestHost;
 
+typedef struct TestImportResolver {
+    uint32_t targets[TEST_REV1655_THUNK_COUNT];
+    AzRev1655ImportLibrary libraries[TEST_REV1655_THUNK_COUNT];
+    uint16_t ordinals[TEST_REV1655_THUNK_COUNT];
+    size_t fail_index;
+    size_t calls;
+} TestImportResolver;
+
+static TestImportResolver g_test_import_resolver;
+static AzRev1655ImportResolver g_test_import_resolver_api;
+
 static const uint8_t k_xex_sha256[32] = {
     0x58, 0x3B, 0xCD, 0x44, 0x2D, 0x80, 0x17, 0xD6,
     0xFC, 0xB2, 0x64, 0x5B, 0x93, 0xCD, 0xA9, 0x87,
@@ -126,6 +143,22 @@ static uint32_t read_u32_le(const uint8_t *bytes)
         ((uint32_t)bytes[1] << 8u) |
         ((uint32_t)bytes[2] << 16u) |
         ((uint32_t)bytes[3] << 24u);
+}
+
+static uint32_t read_u32_be(const uint8_t *bytes)
+{
+    return ((uint32_t)bytes[0] << 24u) |
+        ((uint32_t)bytes[1] << 16u) |
+        ((uint32_t)bytes[2] << 8u) |
+        (uint32_t)bytes[3];
+}
+
+static void write_u32_be(uint8_t *bytes, uint32_t value)
+{
+    bytes[0] = (uint8_t)(value >> 24u);
+    bytes[1] = (uint8_t)(value >> 16u);
+    bytes[2] = (uint8_t)(value >> 8u);
+    bytes[3] = (uint8_t)value;
 }
 
 static int range_fits(size_t offset, size_t length, size_t total)
@@ -223,6 +256,77 @@ static uint8_t *load_pe_as_image(const char *path)
 
     free(raw);
     return image;
+}
+
+static int test_resolve_import(
+    void *context,
+    AzRev1655ImportLibrary library,
+    uint16_t ordinal,
+    size_t thunk_index,
+    uint32_t *out_target)
+{
+    TestImportResolver *resolver = (TestImportResolver *)context;
+
+    if (resolver == NULL || out_target == NULL ||
+        thunk_index >= (size_t)TEST_REV1655_THUNK_COUNT ||
+        thunk_index == resolver->fail_index ||
+        library != resolver->libraries[thunk_index] ||
+        ordinal != resolver->ordinals[thunk_index]) {
+        return 0;
+    }
+    ++resolver->calls;
+    *out_target = resolver->targets[thunk_index];
+    return 1;
+}
+
+static int prepare_loaded_image_and_resolver(uint8_t *image)
+{
+    uint8_t *thunks;
+    size_t index;
+
+    if (image == NULL) {
+        return 0;
+    }
+    memset(&g_test_import_resolver, 0, sizeof(g_test_import_resolver));
+    g_test_import_resolver.fail_index =
+        (size_t)TEST_REV1655_THUNK_COUNT;
+    thunks = image + TEST_REV1655_TEXT_RVA + TEST_REV1655_THUNK_OFFSET;
+
+    for (index = 0u;
+         index < (size_t)TEST_REV1655_THUNK_COUNT;
+         ++index) {
+        uint8_t *thunk = thunks + index * (size_t)TEST_REV1655_THUNK_SIZE;
+        AzRev1655ImportDescriptor descriptor;
+        uint32_t identity;
+        const uint32_t target = 0x81004000u +
+            (uint32_t)index * 0x00000104u;
+        const uint32_t low = target & 0xFFFFu;
+        const uint32_t adjusted_high =
+            ((target >> 16u) + (low >= 0x8000u ? 1u : 0u)) & 0xFFFFu;
+
+        if (!az_rev1655_hook_gate_import_descriptor(index, &descriptor)) {
+            return 0;
+        }
+        identity = ((uint32_t)descriptor.library << 16u) |
+            (uint32_t)descriptor.ordinal;
+
+        if (read_u32_be(thunk) != (0x01000000u | identity) ||
+            read_u32_be(thunk + 4u) != (0x02000000u | identity) ||
+            read_u32_be(thunk + 8u) != 0x7D6903A6u ||
+            read_u32_be(thunk + 12u) != 0x4E800420u) {
+            return 0;
+        }
+
+        g_test_import_resolver.libraries[index] = descriptor.library;
+        g_test_import_resolver.ordinals[index] = descriptor.ordinal;
+        g_test_import_resolver.targets[index] = target;
+        write_u32_be(thunk, 0x3D600000u | adjusted_high);
+        write_u32_be(thunk + 4u, 0x396B0000u | low);
+    }
+
+    g_test_import_resolver_api.resolve = &test_resolve_import;
+    g_test_import_resolver_api.context = &g_test_import_resolver;
+    return 1;
 }
 
 static void fill_provenance(AzRev1655FilterProvenance *provenance)
@@ -727,8 +831,13 @@ static AzRev1655FilterConsumerResult bind_consumer(
 
     fill_provenance(&provenance);
     make_host_ops(host, &ops);
-    return az_rev1655_filter_consumer_bind(
-        consumer, image, &provenance, TEST_WORKER_THREAD, &ops);
+    return az_rev1655_filter_consumer_bind_with_import_resolver(
+        consumer,
+        image,
+        &g_test_import_resolver_api,
+        &provenance,
+        TEST_WORKER_THREAD,
+        &ops);
 }
 
 static void bind_and_probe(
@@ -764,41 +873,85 @@ static void test_binding_and_exact_gates(const AzRev1655LoadedImage *image)
     AzRev1655FilterHostOps ops;
     AzRev1655FilterProvenance provenance;
     AzRev1655LoadedImage wrong_image;
+    TestImportResolver bad_resolver_context;
+    AzRev1655ImportResolver bad_resolver;
 
     test_host_init(&host);
     fill_provenance(&provenance);
     make_host_ops(&host, &ops);
-    CHECK(az_rev1655_filter_consumer_bind(
-        &consumer, image, &provenance, TEST_WORKER_THREAD, &ops) ==
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &g_test_import_resolver_api, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_IDLE);
 
-    provenance.aurora_xex_sha256[0] ^= 1u;
+    /* The legacy API and every missing/untrusted resolver path fail closed. */
     CHECK(az_rev1655_filter_consumer_bind(
         &consumer, image, &provenance, TEST_WORKER_THREAD, &ops) ==
+        AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE);
+    CHECK(consumer.bound == 0u);
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, NULL, &provenance, TEST_WORKER_THREAD, &ops) ==
+        AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE);
+    CHECK(consumer.bound == 0u);
+    bad_resolver = g_test_import_resolver_api;
+    bad_resolver.resolve = NULL;
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &bad_resolver, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
+        AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE);
+    CHECK(consumer.bound == 0u);
+
+    bad_resolver_context = g_test_import_resolver;
+    bad_resolver_context.fail_index = 17u;
+    bad_resolver.resolve = &test_resolve_import;
+    bad_resolver.context = &bad_resolver_context;
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &bad_resolver, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
+        AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE);
+    CHECK(consumer.bound == 0u);
+    bad_resolver_context.fail_index =
+        (size_t)TEST_REV1655_THUNK_COUNT;
+    bad_resolver_context.targets[23] += 4u;
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &bad_resolver, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
+        AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE);
+    CHECK(consumer.bound == 0u);
+
+    provenance.aurora_xex_sha256[0] ^= 1u;
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &g_test_import_resolver_api, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_BAD_PROVENANCE);
     provenance.aurora_xex_sha256[0] ^= 1u;
 
     wrong_image = *image;
     wrong_image.virtual_address += 4u;
-    CHECK(az_rev1655_filter_consumer_bind(
-        &consumer, &wrong_image, &provenance, TEST_WORKER_THREAD, &ops) ==
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, &wrong_image, &g_test_import_resolver_api, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE);
 
     ++ops.entrypoints.scheduler;
-    CHECK(az_rev1655_filter_consumer_bind(
-        &consumer, image, &provenance, TEST_WORKER_THREAD, &ops) ==
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &g_test_import_resolver_api, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_BAD_BINDINGS);
     --ops.entrypoints.scheduler;
     ops.registry_lookup = NULL;
-    CHECK(az_rev1655_filter_consumer_bind(
-        &consumer, image, &provenance, TEST_WORKER_THREAD, &ops) ==
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &g_test_import_resolver_api, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_BAD_BINDINGS);
 
-    CHECK(az_rev1655_filter_consumer_bind(
-        NULL, image, &provenance, TEST_WORKER_THREAD, &ops) ==
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        NULL, image, &g_test_import_resolver_api, &provenance,
+        TEST_WORKER_THREAD, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_NULL_ARGUMENT);
-    CHECK(az_rev1655_filter_consumer_bind(
-        &consumer, image, &provenance, 0u, &ops) ==
+    CHECK(az_rev1655_filter_consumer_bind_with_import_resolver(
+        &consumer, image, &g_test_import_resolver_api, &provenance,
+        0u, &ops) ==
         AZ_REV1655_FILTER_CONSUMER_NULL_ARGUMENT);
 }
 
@@ -1149,6 +1302,11 @@ int main(int argc, char **argv)
         printf("Rev1655 fixture unavailable at %s; exact "
             "filter-consumer tests skipped\n", argv[1]);
         return EXIT_SUCCESS;
+    }
+    if (!prepare_loaded_image_and_resolver(image_bytes)) {
+        fprintf(stderr, "Rev1655 fixture import table was not canonical\n");
+        free(image_bytes);
+        return EXIT_FAILURE;
     }
     image.bytes = image_bytes;
     image.size = AZ_REV1655_NT_IMAGE_SIZE;

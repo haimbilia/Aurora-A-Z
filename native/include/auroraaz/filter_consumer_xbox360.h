@@ -215,6 +215,20 @@ AzRev1655FilterConsumerResult az_rev1655_filter_consumer_bind(
     const AzRev1655FilterHostOps *host);
 
 /*
+ * Runtime binding requires the same authoritative import resolver as the
+ * Rev1655 hook gate. The compatibility entry point above deliberately has no
+ * resolver and therefore remains fail-closed for a loader-resolved image.
+ */
+AzRev1655FilterConsumerResult
+az_rev1655_filter_consumer_bind_with_import_resolver(
+    AzRev1655FilterConsumer *consumer,
+    const AzRev1655LoadedImage *image,
+    const AzRev1655ImportResolver *import_resolver,
+    const AzRev1655FilterProvenance *provenance,
+    uint32_t worker_thread_id,
+    const AzRev1655FilterHostOps *host);
+
+/*
  * Stage-1 read-only canary. Call from the dedicated worker before publishing
  * input_detour's filter_consumer_verified gate. It validates all 27 registry
  * entries and copy/destroys the active aggregate without mutation.

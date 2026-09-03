@@ -13,6 +13,17 @@ typedef struct AzRev1655ResolvedHookSite {
     size_t complete_signature_size;
 } AzRev1655ResolvedHookSite;
 
+typedef struct AzRev1655ImportDescriptor {
+    AzRev1655ImportLibrary library;
+    uint16_t ordinal;
+} AzRev1655ImportDescriptor;
+
+/* Read-only inspection helpers used by host fixture tests and integration. */
+size_t az_rev1655_hook_gate_import_count(void);
+int az_rev1655_hook_gate_import_descriptor(
+    size_t thunk_index,
+    AzRev1655ImportDescriptor *out_descriptor);
+
 /* Rechecks the complete live window before revealing an install target. */
 AzRev1655HookGateResult az_rev1655_hook_gate_resolve_site(
     const AzRev1655HookPermit *permit,

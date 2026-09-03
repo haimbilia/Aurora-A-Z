@@ -1010,9 +1010,10 @@ void az_rev1655_filter_consumer_exact_entrypoints(
     entrypoints->scheduler = AZ_REV1655_SCHEDULER_ADDRESS;
 }
 
-AzRev1655FilterConsumerResult az_rev1655_filter_consumer_bind(
+static AzRev1655FilterConsumerResult bind_with_import_resolver(
     AzRev1655FilterConsumer *consumer,
     const AzRev1655LoadedImage *image,
+    const AzRev1655ImportResolver *import_resolver,
     const AzRev1655FilterProvenance *provenance,
     uint32_t worker_thread_id,
     const AzRev1655FilterHostOps *host)
@@ -1039,7 +1040,8 @@ AzRev1655FilterConsumerResult az_rev1655_filter_consumer_bind(
             sizeof(k_rev1655_pe_sha256)) == 0u) {
         return AZ_REV1655_FILTER_CONSUMER_BAD_PROVENANCE;
     }
-    if (az_rev1655_hook_gate_validate(image, &permit) !=
+    if (az_rev1655_hook_gate_validate_with_import_resolver(
+            image, import_resolver, &permit) !=
             AZ_REV1655_HOOK_GATE_OK || permit == NULL) {
         return AZ_REV1655_FILTER_CONSUMER_BAD_IMAGE;
     }
@@ -1054,6 +1056,40 @@ AzRev1655FilterConsumerResult az_rev1655_filter_consumer_bind(
     consumer->worker_thread_id = worker_thread_id;
     consumer->bound = 1u;
     return AZ_REV1655_FILTER_CONSUMER_IDLE;
+}
+
+AzRev1655FilterConsumerResult az_rev1655_filter_consumer_bind(
+    AzRev1655FilterConsumer *consumer,
+    const AzRev1655LoadedImage *image,
+    const AzRev1655FilterProvenance *provenance,
+    uint32_t worker_thread_id,
+    const AzRev1655FilterHostOps *host)
+{
+    return bind_with_import_resolver(
+        consumer,
+        image,
+        NULL,
+        provenance,
+        worker_thread_id,
+        host);
+}
+
+AzRev1655FilterConsumerResult
+az_rev1655_filter_consumer_bind_with_import_resolver(
+    AzRev1655FilterConsumer *consumer,
+    const AzRev1655LoadedImage *image,
+    const AzRev1655ImportResolver *import_resolver,
+    const AzRev1655FilterProvenance *provenance,
+    uint32_t worker_thread_id,
+    const AzRev1655FilterHostOps *host)
+{
+    return bind_with_import_resolver(
+        consumer,
+        image,
+        import_resolver,
+        provenance,
+        worker_thread_id,
+        host);
 }
 
 AzRev1655FilterConsumerResult az_rev1655_filter_consumer_worker_probe(
