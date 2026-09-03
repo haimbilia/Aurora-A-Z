@@ -382,8 +382,6 @@ static AzOverlayRendererResult upload_texture(
     void *texture)
 {
     AzOverlayLockedRect locked;
-    int32_t lock_result;
-    int32_t unlock_result;
     uint32_t row;
 
     locked.pitch = 0u;
@@ -393,15 +391,15 @@ static AzOverlayRendererResult upload_texture(
         return AZ_OVERLAY_RENDERER_TEXTURE_UPLOAD_FAILED;
     }
 
-    lock_result = renderer->bindings.lock_texture(
+    /* Aurora's own CPU-upload caller ignores r3 from these forwarding
+     * wrappers. Their return register is unspecified; the authoritative
+     * success contract is the validated locked pitch/pointer they publish. */
+    (void)renderer->bindings.lock_texture(
         texture,
         0u,
         &locked,
         NULL,
         0u);
-    if (lock_result < 0) {
-        return AZ_OVERLAY_RENDERER_TEXTURE_LOCK_FAILED;
-    }
 
     if (!lock_rows_are_valid(renderer, &locked)) {
         (void)renderer->bindings.unlock_texture(texture, 0u);
@@ -423,10 +421,7 @@ static AzOverlayRendererResult upload_texture(
         }
     }
 
-    unlock_result = renderer->bindings.unlock_texture(texture, 0u);
-    if (unlock_result < 0) {
-        return AZ_OVERLAY_RENDERER_TEXTURE_UPLOAD_FAILED;
-    }
+    (void)renderer->bindings.unlock_texture(texture, 0u);
 
     return AZ_OVERLAY_RENDERER_OK;
 }

@@ -287,8 +287,8 @@ typedef uint32_t (*AzReleaseResourceFn)(void *resource);
 | Address | Practical role | Confidence |
 | ---: | --- | --- |
 | `0x82772300` | create texture; returns the resource pointer or null | proven ABI, argument meanings partly inferred |
-| `0x827722E0` | texture `LockRect` forwarding wrapper | proven |
-| `0x827706B8` | texture `UnlockRect` forwarding wrapper | proven |
+| `0x827722E0` | texture `LockRect` forwarding wrapper; validate its output structure, not `r3` | proven |
+| `0x827706B8` | texture `UnlockRect` forwarding wrapper; `r3` is unspecified | proven |
 | `0x82772680` | bind texture/fetch at a stage; use flags `0x80000000` | proven |
 | `0x8277ECF8` | copy `vector4_count` VS constants beginning at `start_register` | proven |
 | `0x82784520` | transient `DrawPrimitiveUP` wrapper | proven |
