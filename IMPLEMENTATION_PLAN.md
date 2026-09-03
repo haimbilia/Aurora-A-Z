@@ -3,9 +3,10 @@
 ## Outcome
 
 Build a skin-agnostic runtime extension for Aurora 0.7b.2 Rev1655 that renders
-the mockup's centered `# A B ... Z` row over the live coverflow, enters selector
-mode with R3, accepts D-pad and left-stick Left/Right, and applies the selected
-letter with A. It must leave every skin, the on-disk `Aurora.xex`, and Aurora's
+the mockup's centered `# A B ... Z` row over the live coverflow only while R3
+is held, accepts D-pad and left-stick Left/Right during that hold, and applies
+the selected letter when R3 is released. It must leave A, every skin, the
+on-disk `Aurora.xex`, and Aurora's
 normal RB QuickView menu unchanged. The production release and installed
 payload must be exactly one self-contained binary. It is released as
 `AuroraAZ.xex` and installed as `Plugins\NetDbgDll.xex`, the literal path used
@@ -40,10 +41,10 @@ decision. This file defines the order in which the risky parts must be proven.
 |---|---|---|
 | M0 — Safe baseline | Clean database, console/repo snapshots, performance baseline, isolated Aurora lab copy | Stock seven QuickViews restored; production Aurora still boots; backups and hashes verified |
 | M1 — Native lab | Reproducible Rev1655 analysis project and minimal export-capable `AuroraAZ.xex` | One lab file loads, receives automatic ordinal 4, and enters an AuroraAZ worker through the validated Aurora wrapper; removing the file disables it |
-| M2 — Input bridge | Log-only, then selectively consuming controller hook | R3, D-pad, left stick, and A are detected on the coverflow; RB and other scenes remain unchanged |
+| M2 — Input bridge | Log-only, then selectively consuming controller hook | R3 press/release, D-pad, and left stick are detected on the coverflow; A, RB, and other scenes remain unchanged |
 | M3 — Overlay spike | Runtime-owned row and highlight, with no filtering yet | Same overlay works on Default, CleanNXE, and two materially different third-party skins |
 | M4 — Filter bridge | In-memory application of `NameFilter.Other` or `NameFilter.*.<letter>` | Correct results on 2,241 titles without adding QuickViews; latency gate passes |
-| M5 — Vertical slice | Complete R3 → navigate → A state machine | All controller acceptance tests pass on one skin and the coverflow never moves while selecting |
+| M5 — Vertical slice | Complete hold R3 → navigate → release R3 state machine | All controller acceptance tests pass on one skin and the coverflow never moves while selecting |
 | M6 — Fidelity and compatibility | Mockup-quality visuals and lifecycle handling | Visual/skin/resolution matrix passes with no skin-file changes |
 | M7 — Release candidate | Single `AuroraAZ.xex`, compatibility gate, recovery guide, checksum | Cold-boot, stress, one-file removal, and unsupported-version tests pass |
 
@@ -80,7 +81,7 @@ one scheduled job with zero rejections. Its second A press was deliberately
 blocked by the one-shot safety gate. The repeatable lab candidate now revokes
 the filter gate after every successful enqueue, waits at least eight seconds,
 requires Aurora's queue and worker-busy state to remain idle for one continuous
-second, and only then re-arms A for the next letter. All probes remain confined to
+second, and only then re-arms the selector for the next letter. All probes remain confined to
 `Hdd1:\AuroraAZLab`; production Aurora, skins, databases, and `launch.ini`
 remain untouched.
 
@@ -267,9 +268,9 @@ Develop in two steps:
 
 1. **M2a — observe only:** observe R3, D-pad Left/Right, left-stick Left/Right,
    A, and RB, including the current scene/state. Do not consume anything.
-2. **M2b — selector ownership:** after an R3 edge on the coverflow, consume
-   only the required navigation/A events until selection completes. All other
-   states pass through unchanged.
+2. **M2b — selector ownership:** while R3 is held on the coverflow, consume R3
+   and the required horizontal navigation events. Commit on the owned R3
+   release. A and all other states pass through unchanged.
 
 M2a is closed. Its hardware-passing direct hook remained observe-only and
 proved every required control without consuming input. M2b selector ownership
@@ -338,7 +339,7 @@ Prove these separately:
 Proposed latency budget on the 2,241-title console:
 
 - highlight movement: visible within 50 ms;
-- A press to filter completion: median under 1 second;
+- R3 release to filter completion: median under 1 second;
 - no new `Sorting Game List` event for letter-only changes.
 
 If Aurora's public/internal path always forces the roughly five-second re-sort,
@@ -350,9 +351,9 @@ state, or continue into a riskier cache/list-swap implementation.
 Required transitions:
 
 ```text
-Coverflow --R3--> Selector(#)
+Coverflow --R3 press/hold--> Selector(#)
 Selector --Left/Right--> Selector(previous/next letter)
-Selector --A--> Apply filter --> Coverflow
+Selector --R3 release--> Apply filter --> Coverflow
 ```
 
 While `Selector` is active, letter navigation must never move the coverflow.
@@ -361,11 +362,11 @@ Filter application must be idempotent and resilient to an empty result.
 Resolve these product decisions before freezing the state machine:
 
 - whether `#` and `Z` wrap or clamp;
-- whether B, R3, or both cancel without applying;
+- whether a separate cancel gesture is needed;
 - how the user clears a letter filter without adding an `ALL` item to the
   mockup row;
 - whether a letter replaces the active QuickView filter or combines with it;
-- whether the row is always visible or only emphasized in selector mode.
+- the row is hidden outside the R3-held selector mode.
 
 ## M6 — Match the mockup
 
@@ -396,7 +397,7 @@ editing the skin.
 - video modes used by the console, with 720p as the reference;
 - cold boot, warm restart, skin change, profile sign-in/out, opening/closing
   QuickView, launching a title, and returning to Aurora;
-- D-pad taps/holds, left-stick taps/holds, R3 bounce, rapid A, and empty-result
+- D-pad taps/holds, left-stick taps/holds, R3 bounce, rapid R3 release/re-entry, and empty-result
   filters;
 - wired/wireless controllers in ports 1–4, controller disconnect/reconnect,
   and a second controller attempting input during an owned selector session;

@@ -315,15 +315,10 @@ int main(void)
             0) != AZ_OVERLAY_RENDERER_OK ||
         az_overlay_renderer_try_draw(
             &renderer,
-            &request) != AZ_OVERLAY_RENDERER_DRAWN ||
-        g_set_texture_count != 2u ||
-        g_set_constant_count != 4u ||
-        g_draw_count != 2u ||
-        !close_enough(g_draw_vertices[1][0].x, 89.5f) ||
-        !close_enough(g_draw_vertices[1][0].y, 344.5f) ||
-        g_draw_vertices[1][0].u != 0 ||
-        g_draw_vertices[1][2].u != 922 ||
-        g_draw_vertices[1][3].u != 0) {
+            &request) != AZ_OVERLAY_RENDERER_OK ||
+        g_set_texture_count != 0u ||
+        g_set_constant_count != 0u ||
+        g_draw_count != 0u) {
         return EXIT_FAILURE;
     }
 

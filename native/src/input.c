@@ -5,7 +5,6 @@
 typedef char AzInputKeystroke_must_be_eight_bytes[
     sizeof(AzInputKeystroke) == 8u ? 1 : -1];
 
-#define AZ_CONSUMED_A (1u << 0u)
 #define AZ_CONSUMED_R3 (1u << 1u)
 #define AZ_CONSUMED_DPAD_LEFT (1u << 2u)
 #define AZ_CONSUMED_DPAD_RIGHT (1u << 3u)
@@ -45,7 +44,7 @@ static uint32_t control_mask(AzInputControl control)
 {
     switch (control) {
     case AZ_INPUT_CONTROL_A:
-        return AZ_CONSUMED_A;
+        return 0u;
     case AZ_INPUT_CONTROL_R3:
         return AZ_CONSUMED_R3;
     case AZ_INPUT_CONTROL_DPAD_LEFT:
@@ -94,7 +93,7 @@ static AzSelectorCommand translate_command(
     if (event == AZ_INPUT_EVENT_PRESS) {
         switch (control) {
         case AZ_INPUT_CONTROL_A:
-            return AZ_COMMAND_APPLY;
+            return AZ_COMMAND_NONE;
         case AZ_INPUT_CONTROL_R3:
             return AZ_COMMAND_ENTER;
         case AZ_INPUT_CONTROL_DPAD_LEFT:
@@ -108,6 +107,11 @@ static AzSelectorCommand translate_command(
         default:
             return AZ_COMMAND_NONE;
         }
+    }
+
+    if (event == AZ_INPUT_EVENT_RELEASE &&
+        control == AZ_INPUT_CONTROL_R3) {
+        return AZ_COMMAND_APPLY;
     }
 
     if (event == AZ_INPUT_EVENT_REPEAT) {
@@ -299,7 +303,8 @@ AzInputDecision az_input_process(
             return decision;
         }
 
-        if (decision.translation.event != AZ_INPUT_EVENT_REPEAT ||
+        if ((decision.translation.event != AZ_INPUT_EVENT_REPEAT &&
+             decision.translation.event != AZ_INPUT_EVENT_RELEASE) ||
             decision.translation.command == AZ_COMMAND_NONE) {
             return decision;
         }
@@ -329,7 +334,9 @@ AzInputDecision az_input_process(
     }
 
     runtime->selector = candidate_state;
-    runtime->consumed_controls |= mask;
+    if (decision.translation.event != AZ_INPUT_EVENT_RELEASE) {
+        runtime->consumed_controls |= mask;
+    }
     decision.consume = 1u;
     decision.clear_keystroke = 1u;
     return decision;

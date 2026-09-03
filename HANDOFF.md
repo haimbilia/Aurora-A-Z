@@ -53,6 +53,12 @@ from the successful initial exact-revision gate, verifies that it belongs to
 the same loaded image, and still rechecks every filter helper signature before
 installing this plugin's first hook.
 
+The controller contract changed on 2026-09-04 after an unarmed build allowed A
+to reach Aurora and launch the highlighted game. The row is now hidden during
+normal coverflow use. Press and hold R3 to show it at `#`, navigate with D-pad
+or left-stick Left/Right while continuing to hold R3, and release R3 to apply
+and hide it. Aurora A-Z no longer assigns, consumes, or clears A at all.
+
 ### Current console state
 
 ```
@@ -326,10 +332,11 @@ screen.
 
 ## 8. The goal, honestly assessed
 
-The target is a persistent `# A B C ... Z` row over the coverflow with the current
-letter highlighted, responding to the D-pad.
+The target is a transient `# A B C ... Z` row over the coverflow, visible only
+while R3 is held, with the current letter highlighted and responding to the
+D-pad or left stick.
 
-- **Persistent row on the coverflow:** impossible in a skin. Nothing can update it.
+- **Dynamic row on the coverflow:** impossible in a skin. Nothing can update it.
 - **Highlight tracking state:** impossible in a skin, for the same reason.
 - **In Lua:** impossible. No scene API, no input.
 - **Closest achievable:** restyle `ScnQuickView` (§5). One highlighted letter at a

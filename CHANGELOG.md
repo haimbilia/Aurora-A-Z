@@ -65,6 +65,10 @@
   rejected the filter after the initial exact-revision gate had already passed.
   Reuse that gate's opaque same-image permit while retaining exact bind-time
   checks for every native filter helper window.
+- Replace the press-R3/navigate/press-A interaction with a transient hold-R3
+  selector. The row is hidden normally, appears at `#` while R3 is held,
+  accepts D-pad or left-stick Left/Right during the hold, and applies on R3
+  release. Aurora A-Z no longer consumes or assigns any action to A.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

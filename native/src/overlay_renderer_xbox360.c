@@ -880,6 +880,10 @@ AzOverlayRendererResult az_overlay_renderer_try_draw(
         result = AZ_OVERLAY_RENDERER_BAD_REQUEST;
         goto draw_done;
     }
+    if (request->selector_active == 0u) {
+        result = AZ_OVERLAY_RENDERER_OK;
+        goto draw_done;
+    }
     if (!(request->viewport_width > 0.0f) ||
         !(request->viewport_height > 0.0f) ||
         !(request->viewport_width <= AZ_MAX_VIEWPORT_DIMENSION) ||

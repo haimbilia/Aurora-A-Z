@@ -725,7 +725,6 @@ uint32_t az_rev1655_input_detour_c(
     AzInputGate gate;
     AzInputKeystroke original_key;
     AzInputDecision decision;
-    AzSelectorState selector_before;
     uint8_t filter_queued = 0u;
     uint8_t capture_prerequisites;
 
@@ -820,10 +819,11 @@ uint32_t az_rev1655_input_detour_c(
         gate.scene_allows_capture = 0u;
     }
 
-    selector_before = g_input_bridge.runtime.selector;
-    if (filter_is_busy() != 0u &&
-        g_input_bridge.runtime.selector.mode == AZ_MODE_COVERFLOW &&
-        original_key.virtual_key == AZ_VK_PAD_RTHUMB_PRESS) {
+    if (g_input_bridge.runtime.selector.mode == AZ_MODE_COVERFLOW &&
+        original_key.virtual_key == AZ_VK_PAD_RTHUMB_PRESS &&
+        (filter_is_busy() != 0u ||
+         bool_from_atomic(
+            &g_input_bridge.filter_consumer_verified) == 0u)) {
         gate.scene_allows_capture = 0u;
     }
 
@@ -840,11 +840,9 @@ uint32_t az_rev1655_input_detour_c(
 
         if (bool_from_atomic(
                 &g_input_bridge.filter_consumer_verified) == 0u) {
-            /* Selector ownership is independently useful on hardware, but an
-             * A press must never queue work until the worker has completed
-             * its read-only runtime probe. Keep the selector open and consume
-             * the press so it cannot launch the highlighted title. */
-            g_input_bridge.runtime.selector = selector_before;
+            /* R3 release always closes the transient overlay. If filtering
+             * was revoked while R3 was held, consume the owned release but
+             * drop the request rather than leaking input into Aurora. */
             decision.selector_result.request_filter = 0u;
             decision.selector_result.filter_index = AZ_NO_GLYPH;
         }
@@ -860,7 +858,6 @@ uint32_t az_rev1655_input_detour_c(
             filter_queued = 1u;
         }
         else {
-            g_input_bridge.runtime.selector = selector_before;
             decision.selector_result.request_filter = 0u;
             decision.selector_result.filter_index = AZ_NO_GLYPH;
             (void)increment_u32(&g_input_bridge.filter_queue_busy);

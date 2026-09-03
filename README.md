@@ -1,10 +1,10 @@
 # Aurora A-Z
 
 Aurora A-Z is a skin-agnostic, on-coverflow alphabetical selector for the
-Aurora dashboard on Xbox 360. The target UI is a persistent `# A B ... Z` row
-above the game title, with controller navigation and selection directly from
-the main coverflow. It must work without modifying or replacing the selected
-Aurora skin.
+Aurora dashboard on Xbox 360. The target UI is a transient `# A B ... Z` row
+above the game title, shown only while R3 is held, with controller navigation
+and selection directly from the main coverflow. It works without modifying or
+replacing the selected Aurora skin.
 
 The production artifact is strictly one self-contained file,
 `AuroraAZ.xex`. All runtime resources are embedded. Installation must not
@@ -14,10 +14,10 @@ changes to `Aurora.xex`, or changes to `launch.ini`.
 ## Required interaction
 
 The normative controller and filtering behavior is defined in
-[`REQUIREMENTS.md`](REQUIREMENTS.md). In short: R3 enters the on-coverflow
-selector at `#`; D-pad Left/Right and left-stick Left/Right move the highlight;
-A filters the coverflow by the highlighted initial and returns control to the
-coverflow. RB must retain Aurora's normal QuickView menu.
+[`REQUIREMENTS.md`](REQUIREMENTS.md). In short: hold R3 to reveal the
+on-coverflow selector at `#`; while holding it, D-pad Left/Right and left-stick
+Left/Right move the highlight; release R3 to filter and hide the row. Aurora
+A-Z never consumes A, and RB retains Aurora's normal QuickView menu.
 
 The architectural constraints that follow from these requirements are recorded
 in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
@@ -26,7 +26,7 @@ in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
 ## Current status
 
 There is no compliant filtering release yet. The native C99 selector core is
-implemented and host-tested: it models the R3/Left/Right/A state machine, maps
+implemented and host-tested: it models the hold-R3/Left/Right/release state machine, maps
 `#` and `A` through `Z` to Aurora's built-in name filters, carries the mockup's
 measured 1280x720 layout, and rejects binaries that do not match the exact
 Rev1655 code probes. M1, the one-file native bootstrap and worker-entry gate, is
@@ -37,8 +37,8 @@ renderer-owned overlay and selector interaction passed on hardware with commit
 `c86ad0c`, GitHub Actions run `33747222158`, and artifact SHA-256
 `94F32460DBC5A76153F63BB9B23158E7CFE690277D792DBB7822666B93B09CF8`.
 The complete row rendered without diagonal clipping; R3, D-pad Left/Right,
-left-stick Left/Right, and RB behaved as required. A remains deliberately
-inert until the independently gated filter bridge passes its hardware probes.
+left-stick Left/Right, and RB behaved as required. The filter bridge remains
+hardware-gated; A is no longer part of the Aurora A-Z interaction.
 
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary
@@ -103,16 +103,15 @@ Read in this order:
 
 The production implementation must be a version-gated runtime extension for
 Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
-its own selector overlay above the active skin, and bridge A-button selection
+its own selector overlay above the active skin, and bridge an owned R3 release
 to Aurora's coverflow filtering. It must not write to `Skins`. The XEX
 toolchain and Network Debugger bootstrap are operational, and M1 is complete.
 The hardware-passing M2a artifact is commit `06affc4`, GitHub Actions run
 `33736960588`, SHA-256
 `431FAD613E1C177B5B5A486B5B21B98AB17BB2AC2592C1A6F630DC07E68EB86E`.
-Its final telemetry recorded all seven controls, the recovered main caller,
+Its final telemetry recorded all seven observed controls, the recovered main caller,
 and clean safety fields. The current overlay canary adds only the centered
-inactive row and shadow; input consumption and filter mutation remain behind
-later hardware gates.
+transient row; filter mutation remains behind its independent hardware gate.
 
 ## Project layout
 

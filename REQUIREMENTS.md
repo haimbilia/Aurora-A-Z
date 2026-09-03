@@ -47,18 +47,18 @@ functional unless it satisfies every acceptance criterion below on Aurora
 
 ## User-visible behavior
 
-- The coverflow displays one centered row containing `# A B ... Z` above the
-  game title area.
-- Pressing R3 (right-stick click) while the coverflow is active enters letter
-  selection without opening Aurora's QuickView menu.
-- Selection starts at `#` each time selector mode is entered.
+- The alphabet is hidden during normal coverflow use.
+- Holding R3 (right-stick click) while the coverflow is active displays one
+  centered row containing `# A B ... Z` above the game title area.
+- Selection starts at `#` each time R3 is pressed and held.
 - D-pad Left and D-pad Right move the highlight one letter at a time.
 - Left-stick Left and left-stick Right perform the same movement as the D-pad.
 - While selector mode is active, those four inputs move only the letter
   highlight. They must not move or scroll the coverflow.
 - Exactly one letter is visibly highlighted at a time.
-- Pressing A applies the highlighted initial-character filter to the coverflow.
-- After A is pressed, selector mode closes and normal coverflow control resumes.
+- Releasing R3 applies the highlighted initial-character filter, hides the
+  alphabet, and returns normal coverflow control.
+- Aurora A-Z must never consume, clear, or assign any action to A.
 - RB continues to open Aurora's unmodified QuickView menu.
 
 ## Filtering semantics
@@ -75,27 +75,31 @@ functional unless it satisfies every acceptance criterion below on Aurora
 
 There are two distinct states:
 
-1. **Coverflow active:** Aurora retains its normal controls. R3 enters selector
-   mode; RB retains the normal QuickView action.
-2. **Selector active:** D-pad or left-stick Left/Right changes the highlighted
-   character, and A applies it. Coverflow navigation is suspended until the
-   selection is applied.
+1. **Coverflow active:** the alphabet is hidden and Aurora retains its normal
+   controls. Holding R3 enters selector mode; RB retains the normal QuickView
+   action.
+2. **R3 held / selector active:** the alphabet is visible. D-pad or left-stick
+   Left/Right changes the highlighted character. Releasing R3 applies it and
+   hides the alphabet. Coverflow navigation is suspended while R3 is held.
 
 Cancel behavior and whether navigation stops or wraps at `#` and `Z` are not
 specified yet. They must not be assumed by an implementation until documented.
 
 ## Acceptance tests
 
-1. From the coverflow, press R3. The highlight appears on `#`, and no QuickView
-   menu opens.
-2. Press D-pad Right once. `A` is highlighted and the coverflow does not move.
-3. Press D-pad Left once. `#` is highlighted and the coverflow does not move.
-4. Press left-stick Right once. `A` is highlighted and the coverflow does not
-   move.
-5. Press left-stick Left once. `#` is highlighted and the coverflow does not
-   move.
-6. Highlight a known letter and press A. Only matching titles remain visible,
-   the selector relinquishes input, and normal coverflow navigation resumes.
+1. From the coverflow, verify that the alphabet is hidden, then press and hold
+   R3. The row appears with `#` highlighted and no QuickView menu opens.
+2. While holding R3, press D-pad Right once. `A` is highlighted and the
+   coverflow does not move.
+3. While holding R3, press D-pad Left once. `#` is highlighted and the
+   coverflow does not move.
+4. While holding R3, press left-stick Right once. `A` is highlighted and the
+   coverflow does not move.
+5. While holding R3, press left-stick Left once. `#` is highlighted and the
+   coverflow does not move.
+6. While holding R3, highlight a known letter and release R3. The alphabet
+   hides, only matching titles remain visible, and normal coverflow navigation
+   resumes.
 7. Press RB from the coverflow. Aurora's normal QuickView menu opens unchanged.
 8. Repeat tests 1 through 7 with Aurora's Default skin and at least one
    third-party skin. The controls and filtering behavior remain identical.
@@ -105,6 +109,8 @@ specified yet. They must not be assumed by an implementation until documented.
     `Plugins\NetDbgDll.xex` loader name, then remove it. Verify that no
     companion files, database records, or boot-configuration edits are created
     or required.
+11. Press A during normal coverflow use and verify Aurora receives it unchanged;
+    Aurora A-Z must neither apply a letter nor consume the key.
 
 ## Explicitly non-compliant implementations
 

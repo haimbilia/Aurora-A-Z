@@ -405,9 +405,10 @@ Production code must use a single cleanup path like the above. It must not
 destroy a partially constructed aggregate, and must always destroy a
 successfully copied one even when classification or scheduling fails.
 
-Only one apply may be in flight. Further A presses should be ignored or
-coalesced to the latest letter until event `0x102` completes; otherwise every
-press queues Aurora's measured multi-second sort.
+Only one apply may be in flight. Further R3-held selector sessions must remain
+unavailable until event `0x102` completes (or the conservative queue-idle
+cooldown proves completion); otherwise every release could queue Aurora's
+measured multi-second sort.
 
 ## Hardware gates
 
@@ -417,7 +418,7 @@ press queues Aurora's measured multi-second sort.
 - Require every callable helper signature below.
 - Confirm the GCM singleton is initialized and active `Work+0x10` is nonzero.
 - Confirm all string and vector invariants before dereferencing heap pointers.
-- On any failure, keep the overlay navigable but disable A/apply.
+- On any failure, leave the transient overlay hidden and do not claim R3.
 
 ### Stage 1: read-only registry and snapshot canary
 

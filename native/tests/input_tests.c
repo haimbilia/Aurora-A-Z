@@ -88,6 +88,12 @@ static void test_translation(void)
     CHECK(translation.event == AZ_INPUT_EVENT_PRESS);
     CHECK(translation.command == AZ_COMMAND_ENTER);
 
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYUP);
+    translation = az_input_translate(&key);
+    CHECK(translation.control == AZ_INPUT_CONTROL_R3);
+    CHECK(translation.event == AZ_INPUT_EVENT_RELEASE);
+    CHECK(translation.command == AZ_COMMAND_APPLY);
+
     key = make_key(AZ_VK_PAD_DPAD_LEFT, AZ_KEYSTROKE_KEYDOWN);
     translation = az_input_translate(&key);
     CHECK(translation.control == AZ_INPUT_CONTROL_DPAD_LEFT);
@@ -115,7 +121,7 @@ static void test_translation(void)
     key = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
     translation = az_input_translate(&key);
     CHECK(translation.control == AZ_INPUT_CONTROL_A);
-    CHECK(translation.command == AZ_COMMAND_APPLY);
+    CHECK(translation.command == AZ_COMMAND_NONE);
 
     key = make_key(AZ_VK_PAD_RSHOULDER, AZ_KEYSTROKE_KEYDOWN);
     translation = az_input_translate(&key);
@@ -224,7 +230,6 @@ static void test_verified_selector_flow(void)
     CHECK(key.flags == 0u);
     CHECK(key.user_index == 0u);
     CHECK(key.hid_code == 0u);
-    release_key(&runtime, AZ_VK_PAD_RTHUMB_PRESS, &gate);
 
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
     decision = az_input_process(&runtime, &key, &gate);
@@ -255,24 +260,20 @@ static void test_verified_selector_flow(void)
     CHECK(runtime.selector.selected_index == 1u);
     release_key(&runtime, AZ_VK_PAD_LTHUMB_LEFT, &gate);
 
-    key = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYUP);
     decision = az_input_process(&runtime, &key, &gate);
     CHECK(decision.consume == 1u);
     CHECK(decision.selector_result.request_filter == 1u);
     CHECK(decision.selector_result.filter_index == 1u);
     CHECK(runtime.selector.mode == AZ_MODE_COVERFLOW);
     CHECK(runtime.selector.applied_index == 1u);
-
-    key.flags = AZ_KEYSTROKE_REPEAT;
-    decision = az_input_process(&runtime, &key, &gate);
-    CHECK(decision.consume == 1u);
-    CHECK(decision.selector_result.request_filter == 0u);
-    release_key(&runtime, AZ_VK_PAD_A, &gate);
+    CHECK(runtime.consumed_controls == 0u);
 
     original = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
     key = original;
     decision = az_input_process(&runtime, &key, &gate);
     CHECK(decision.consume == 0u);
+    CHECK(decision.selector_result.request_filter == 0u);
     az_input_apply_consumption(&key, &decision);
     CHECK(memcmp(&key, &original, sizeof(key)) == 0);
 }
@@ -321,7 +322,6 @@ static void test_fail_closed_and_release_drain(void)
 
     key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
     (void)az_input_process(&runtime, &key, &gate);
-    release_key(&runtime, AZ_VK_PAD_RTHUMB_PRESS, &gate);
 
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
     decision = az_input_process(&runtime, &key, &gate);
@@ -337,6 +337,11 @@ static void test_fail_closed_and_release_drain(void)
     key.flags = AZ_KEYSTROKE_KEYUP;
     decision = az_input_process(&runtime, &key, &gate);
     CHECK(decision.consume == 1u);
+
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYUP);
+    decision = az_input_process(&runtime, &key, &gate);
+    CHECK(decision.consume == 1u);
+    CHECK(decision.selector_result.request_filter == 0u);
 
     key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
     decision = az_input_process(&runtime, &key, &gate);

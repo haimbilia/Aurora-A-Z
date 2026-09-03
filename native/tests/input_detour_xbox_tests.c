@@ -57,7 +57,7 @@ static void arm_next_input(void)
     az_rev1655_input_detour_set_scene_allows_capture(1u);
 }
 
-static void test_selector_without_filter_worker(void)
+static void test_selector_requires_filter_worker(void)
 {
     AzInputKeystroke key;
     AzSelectorState selector;
@@ -73,26 +73,14 @@ static void test_selector_without_filter_worker(void)
     arm_next_input();
     key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);
-    CHECK(key.virtual_key == 0u);
-    release_main(AZ_VK_PAD_RTHUMB_PRESS);
-
-    arm_next_input();
-    key = make_key(AZ_VK_PAD_LTHUMB_RIGHT, AZ_KEYSTROKE_KEYDOWN);
-    (void)dispatch_main(&key);
-    CHECK(key.virtual_key == 0u);
-    release_main(AZ_VK_PAD_LTHUMB_RIGHT);
+    CHECK(key.virtual_key == AZ_VK_PAD_RTHUMB_PRESS);
     az_rev1655_input_detour_snapshot_selector(&selector);
-    CHECK(selector.mode == AZ_MODE_SELECTING);
-    CHECK(selector.selected_index == 1u);
+    CHECK(selector.mode == AZ_MODE_COVERFLOW);
 
     arm_next_input();
     key = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);
-    CHECK(key.virtual_key == 0u);
-    release_main(AZ_VK_PAD_A);
-    az_rev1655_input_detour_snapshot_selector(&selector);
-    CHECK(selector.mode == AZ_MODE_SELECTING);
-    CHECK(selector.selected_index == 1u);
+    CHECK(key.virtual_key == AZ_VK_PAD_A);
     CHECK(az_rev1655_input_detour_take_filter_request(&filter_index) ==
         AZ_INPUT_DETOUR_NO_FILTER);
 
@@ -177,7 +165,6 @@ static void test_verified_flow_and_filter_queue(void)
     az_rev1655_input_detour_snapshot_selector(&selector);
     CHECK(selector.mode == AZ_MODE_SELECTING);
     CHECK(selector.selected_index == 0u);
-    release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
     arm_next_input();
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
@@ -187,14 +174,15 @@ static void test_verified_flow_and_filter_queue(void)
     CHECK(selector.selected_index == 1u);
     release_main(AZ_VK_PAD_DPAD_RIGHT);
 
-    arm_next_input();
-    key = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
-    (void)dispatch_main(&key);
-    CHECK(key.virtual_key == 0u);
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
     az_rev1655_input_detour_snapshot_selector(&selector);
     CHECK(selector.mode == AZ_MODE_COVERFLOW);
     CHECK(selector.applied_index == 1u);
-    release_main(AZ_VK_PAD_A);
+
+    arm_next_input();
+    key = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
+    (void)dispatch_main(&key);
+    CHECK(key.virtual_key == AZ_VK_PAD_A);
 
     CHECK(az_rev1655_input_detour_take_filter_request(&filter_index) ==
         AZ_INPUT_DETOUR_OK);
@@ -228,7 +216,6 @@ static void test_rb_and_shutdown_drain(void)
     arm_next_input();
     key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);
-    release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
     arm_next_input();
     key = make_key(AZ_VK_PAD_RSHOULDER, AZ_KEYSTROKE_KEYDOWN);
@@ -236,11 +223,11 @@ static void test_rb_and_shutdown_drain(void)
     CHECK(key.virtual_key == AZ_VK_PAD_RSHOULDER);
     az_rev1655_input_detour_snapshot_selector(&selector);
     CHECK(selector.mode == AZ_MODE_COVERFLOW);
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
     arm_next_input();
     key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);
-    release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
     arm_next_input();
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
@@ -255,6 +242,7 @@ static void test_rb_and_shutdown_drain(void)
     CHECK(key.virtual_key == AZ_VK_PAD_DPAD_LEFT);
 
     release_main(AZ_VK_PAD_DPAD_RIGHT);
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
     az_rev1655_input_detour_snapshot_status(&status);
     CHECK(status.consumed_controls == 0u);
 
@@ -284,7 +272,6 @@ static void test_revoked_verification_only_drains(void)
     arm_next_input();
     key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);
-    release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
     arm_next_input();
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
@@ -298,6 +285,7 @@ static void test_revoked_verification_only_drains(void)
     CHECK(key.virtual_key == AZ_VK_PAD_DPAD_LEFT);
 
     release_main(AZ_VK_PAD_DPAD_RIGHT);
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
     az_rev1655_input_detour_snapshot_status(&status);
     CHECK(status.consumed_controls == 0u);
 }
@@ -319,19 +307,15 @@ static void test_shutdown_is_one_way_and_drains_owned_key(void)
     arm_next_input();
     key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);
-    release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
     arm_next_input();
     key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
     (void)dispatch_main(&key);
     CHECK(key.virtual_key == 0u);
-    release_main(AZ_VK_PAD_DPAD_RIGHT);
 
-    /* Leave A owned and its filter request pending across shutdown. */
-    arm_next_input();
-    key = make_key(AZ_VK_PAD_A, AZ_KEYSTROKE_KEYDOWN);
-    (void)dispatch_main(&key);
-    CHECK(key.virtual_key == 0u);
+    /* R3 release commits while the D-pad release remains owned. Keep both
+     * the filter request and that owned release pending across shutdown. */
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
     az_rev1655_input_detour_begin_shutdown();
     CHECK(az_rev1655_input_detour_shutdown_ready() == 0u);
@@ -365,7 +349,7 @@ static void test_shutdown_is_one_way_and_drains_owned_key(void)
     CHECK(key.virtual_key == AZ_VK_PAD_DPAD_LEFT);
 
     /* The release paired with a previously consumed press still drains. */
-    release_main(AZ_VK_PAD_A);
+    release_main(AZ_VK_PAD_DPAD_RIGHT);
     CHECK(az_rev1655_input_detour_shutdown_ready() == 1u);
 
     az_rev1655_input_detour_snapshot_status(&status);
@@ -411,7 +395,7 @@ int main(void)
 {
     test_stage_gates_and_observe();
     test_verified_flow_and_filter_queue();
-    test_selector_without_filter_worker();
+    test_selector_requires_filter_worker();
     test_rb_and_shutdown_drain();
     test_revoked_verification_only_drains();
     test_invalid_pointer_range_fails_closed();

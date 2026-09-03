@@ -1826,8 +1826,9 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     }
 
     /* M2a hardware telemetry already proved every requested virtual key. The
-     * selector may now own only R3, horizontal navigation, and an inert A
-     * while the independently gated filter worker remains disabled. */
+     * selector may own only held R3 and horizontal navigation. A remains
+     * entirely Aurora-owned; releasing R3 commits only after the independently
+     * gated filter worker is verified. */
     az_rev1655_input_detour_publish_verification(1u, 1u, 1u, 0u);
     az_rev1655_input_detour_confirm_controls(AZ_INPUT_VERIFIED_REQUIRED);
     input_result = az_rev1655_input_detour_request_stage(
