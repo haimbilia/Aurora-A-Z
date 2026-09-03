@@ -47,9 +47,12 @@
 #define AZ_LIFETIME_FAILED 3u
 #define AZ_REV1655_IMPORT_LIBRARY_COUNT 2u
 #define AZ_FILTER_THREAD_WAIT_TICKS 2000u
-#define AZ_FILTER_ONE_SHOT_UNARMED 0u
-#define AZ_FILTER_ONE_SHOT_ARMED 1u
-#define AZ_FILTER_ONE_SHOT_COMPLETE 2u
+#define AZ_FILTER_APPLY_UNARMED 0u
+#define AZ_FILTER_APPLY_ARMED 1u
+#define AZ_FILTER_APPLY_COOLDOWN 2u
+#define AZ_FILTER_APPLY_FAILED 3u
+#define AZ_FILTER_COOLDOWN_TICKS 160u
+#define AZ_FILTER_IDLE_STABLE_TICKS 20u
 
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
 #define AZ_FILTER_GCM_SINGLETON_ADDRESS 0x82223060u
@@ -89,7 +92,9 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t filter_bind_result;
     volatile uint32_t filter_probe_result;
     volatile uint32_t filter_step_result;
-    volatile uint32_t filter_one_shot_state;
+    volatile uint32_t filter_apply_state;
+    uint32_t filter_cooldown_ticks;
+    uint32_t filter_idle_ticks;
     AzRev1655FilterConsumer filter_consumer;
 #endif
     AzM2aInputTelemetry telemetry;
@@ -136,12 +141,14 @@ typedef struct AzM3bFilterMarker {
     uint32_t scheduled_count;
     uint32_t rejected_count;
     uint32_t deferred_count;
-    uint32_t one_shot_state;
+    uint32_t apply_state;
     uint32_t filter_gate_published;
+    uint32_t cooldown_ticks;
+    uint32_t idle_ticks;
 } AzM3bFilterMarker;
 
-typedef char AzM3bFilterMarkerMustBe60Bytes[
-    (sizeof(AzM3bFilterMarker) == 60u) ? 1 : -1];
+typedef char AzM3bFilterMarkerMustBe68Bytes[
+    (sizeof(AzM3bFilterMarker) == 68u) ? 1 : -1];
 #endif
 
 static AzRev1655Runtime g_runtime;
@@ -429,7 +436,7 @@ static void flush_render_telemetry(uint8_t force)
     marker.magic[1] = 'Z';
     marker.magic[2] = 'R';
     marker.magic[3] = '2';
-    marker.version = 2u;
+    marker.version = 1u;
     marker.record_size = (uint32_t)sizeof(marker);
     marker.stage = load_u32(&g_runtime.stage);
     marker.state = load_u32(&g_runtime.state);
@@ -466,7 +473,7 @@ static void flush_filter_probe_telemetry(void)
     marker.magic[1] = 'Z';
     marker.magic[2] = 'F';
     marker.magic[3] = '3';
-    marker.version = 1u;
+    marker.version = 3u;
     marker.record_size = (uint32_t)sizeof(marker);
     marker.worker_thread_id = load_u32(&g_runtime.worker_thread_id);
     marker.bind_result = load_u32(&g_runtime.filter_bind_result);
@@ -478,9 +485,11 @@ static void flush_filter_probe_telemetry(void)
     marker.scheduled_count = status.scheduled_count;
     marker.rejected_count = status.rejected_count;
     marker.deferred_count = status.deferred_count;
-    marker.one_shot_state = load_u32(&g_runtime.filter_one_shot_state);
+    marker.apply_state = load_u32(&g_runtime.filter_apply_state);
     marker.filter_gate_published =
-        marker.one_shot_state == AZ_FILTER_ONE_SHOT_ARMED ? 1u : 0u;
+        marker.apply_state == AZ_FILTER_APPLY_ARMED ? 1u : 0u;
+    marker.cooldown_ticks = g_runtime.filter_cooldown_ticks;
+    marker.idle_ticks = g_runtime.filter_idle_ticks;
     (void)write_complete_file(
         g_filter_marker_path,
         (const uint8_t *)&marker,
@@ -1398,9 +1407,9 @@ static uint32_t input_observe_worker(void *context)
                 &g_runtime.filter_probe_result,
                 (uint32_t)probe_result);
             if (probe_result == AZ_REV1655_FILTER_CONSUMER_IDLE) {
-                /* Hardware probe passed. Arm exactly one asynchronous apply
-                 * for this title lifetime; completion below revokes the gate
-                 * immediately after the first schedule attempt. */
+                /* Hardware probe passed. Arm asynchronous applies.  Each
+                 * successful schedule revokes the gate until Aurora's work
+                 * queue has remained idle beyond the conservative cooldown. */
                 az_rev1655_input_detour_publish_verification(
                     1u, 1u, 1u, 1u);
                 az_rev1655_input_detour_confirm_controls(
@@ -1408,14 +1417,16 @@ static uint32_t input_observe_worker(void *context)
                 if (az_rev1655_input_detour_request_stage(
                         AZ_INPUT_DETOUR_CONSUME) == AZ_INPUT_DETOUR_OK) {
                     store_u32(
-                        &g_runtime.filter_one_shot_state,
-                        AZ_FILTER_ONE_SHOT_ARMED);
+                        &g_runtime.filter_apply_state,
+                        AZ_FILTER_APPLY_ARMED);
+                    g_runtime.filter_cooldown_ticks = 0u;
+                    g_runtime.filter_idle_ticks = 0u;
                 }
             }
             flush_filter_probe_telemetry();
         }
-        if (load_u32(&g_runtime.filter_one_shot_state) ==
-            AZ_FILTER_ONE_SHOT_ARMED) {
+        if (load_u32(&g_runtime.filter_apply_state) ==
+            AZ_FILTER_APPLY_ARMED) {
             const AzRev1655FilterConsumerResult step_result =
                 az_rev1655_filter_consumer_worker_step(
                     &g_runtime.filter_consumer);
@@ -1426,9 +1437,7 @@ static uint32_t input_observe_worker(void *context)
             if (step_result != AZ_REV1655_FILTER_CONSUMER_IDLE) {
                 flush_filter_probe_telemetry();
             }
-            if (step_result != AZ_REV1655_FILTER_CONSUMER_IDLE &&
-                step_result != AZ_REV1655_FILTER_CONSUMER_DEFERRED &&
-                step_result != AZ_REV1655_FILTER_CONSUMER_INPUT_BUSY) {
+            if (step_result == AZ_REV1655_FILTER_CONSUMER_SCHEDULED) {
                 az_rev1655_input_detour_publish_verification(
                     1u, 1u, 1u, 0u);
                 az_rev1655_input_detour_confirm_controls(
@@ -1436,8 +1445,65 @@ static uint32_t input_observe_worker(void *context)
                 (void)az_rev1655_input_detour_request_stage(
                     AZ_INPUT_DETOUR_CONSUME);
                 store_u32(
-                    &g_runtime.filter_one_shot_state,
-                    AZ_FILTER_ONE_SHOT_COMPLETE);
+                    &g_runtime.filter_apply_state,
+                    AZ_FILTER_APPLY_COOLDOWN);
+                g_runtime.filter_cooldown_ticks = 0u;
+                g_runtime.filter_idle_ticks = 0u;
+                flush_filter_probe_telemetry();
+            }
+            else if (step_result != AZ_REV1655_FILTER_CONSUMER_IDLE &&
+                     step_result != AZ_REV1655_FILTER_CONSUMER_DEFERRED &&
+                     step_result != AZ_REV1655_FILTER_CONSUMER_INPUT_BUSY) {
+                az_rev1655_input_detour_publish_verification(
+                    1u, 1u, 1u, 0u);
+                az_rev1655_input_detour_confirm_controls(
+                    AZ_INPUT_VERIFIED_REQUIRED);
+                (void)az_rev1655_input_detour_request_stage(
+                    AZ_INPUT_DETOUR_CONSUME);
+                store_u32(
+                    &g_runtime.filter_apply_state,
+                    AZ_FILTER_APPLY_FAILED);
+                flush_filter_probe_telemetry();
+            }
+        }
+        else if (load_u32(&g_runtime.filter_apply_state) ==
+                 AZ_FILTER_APPLY_COOLDOWN) {
+            if (g_runtime.filter_cooldown_ticks <
+                AZ_FILTER_COOLDOWN_TICKS) {
+                ++g_runtime.filter_cooldown_ticks;
+            }
+            if (g_runtime.filter_cooldown_ticks <
+                AZ_FILTER_COOLDOWN_TICKS) {
+                g_runtime.filter_idle_ticks = 0u;
+            }
+            else if (filter_queue_is_demonstrably_idle(NULL) != 0u) {
+                if (g_runtime.filter_idle_ticks <
+                    AZ_FILTER_IDLE_STABLE_TICKS) {
+                    ++g_runtime.filter_idle_ticks;
+                }
+            }
+            else {
+                g_runtime.filter_idle_ticks = 0u;
+            }
+            if (g_runtime.filter_cooldown_ticks >=
+                    AZ_FILTER_COOLDOWN_TICKS &&
+                g_runtime.filter_idle_ticks >=
+                    AZ_FILTER_IDLE_STABLE_TICKS) {
+                az_rev1655_input_detour_publish_verification(
+                    1u, 1u, 1u, 1u);
+                az_rev1655_input_detour_confirm_controls(
+                    AZ_INPUT_VERIFIED_REQUIRED);
+                if (az_rev1655_input_detour_request_stage(
+                        AZ_INPUT_DETOUR_CONSUME) == AZ_INPUT_DETOUR_OK) {
+                    store_u32(
+                        &g_runtime.filter_step_result,
+                        (uint32_t)AZ_REV1655_FILTER_CONSUMER_IDLE);
+                    store_u32(
+                        &g_runtime.filter_apply_state,
+                        AZ_FILTER_APPLY_ARMED);
+                    g_runtime.filter_cooldown_ticks = 0u;
+                    g_runtime.filter_idle_ticks = 0u;
+                }
                 flush_filter_probe_telemetry();
             }
         }
@@ -1819,8 +1885,10 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
         &g_runtime.filter_step_result,
         (uint32_t)AZ_REV1655_FILTER_CONSUMER_IDLE);
     store_u32(
-        &g_runtime.filter_one_shot_state,
-        AZ_FILTER_ONE_SHOT_UNARMED);
+        &g_runtime.filter_apply_state,
+        AZ_FILTER_APPLY_UNARMED);
+    g_runtime.filter_cooldown_ticks = 0u;
+    g_runtime.filter_idle_ticks = 0u;
     memset(&g_runtime.filter_consumer, 0, sizeof(g_runtime.filter_consumer));
 #endif
     az_m2a_input_telemetry_init(&g_runtime.telemetry);

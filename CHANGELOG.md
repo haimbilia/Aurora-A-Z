@@ -54,6 +54,13 @@
 - Add the lab-only one-shot apply gate after M3b passed on hardware. A single
   A press may enqueue Aurora's native additional-filter job; the filter gate
   then revokes immediately to prevent repeated expensive sort jobs.
+- Record the successful one-shot hardware apply: Aurora loaded the selected
+  letter filter, the native scheduler reported one job and zero rejections,
+  and the safety gate correctly blocked a second request.
+- Replace the one-shot state with a lab-only repeatable apply cycle. Each
+  successful enqueue disables A for at least eight seconds and requires one
+  continuous second of an empty Aurora queue and clear worker-busy state before
+  re-arming the next letter selection.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

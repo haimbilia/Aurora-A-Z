@@ -31,9 +31,16 @@ A was deliberately consumed but inert because the filter gate stayed false.
 M3b pre-hook bind plus the read-only all-27 registry and active aggregate
 copy/validate/destroy probe passed immediately afterward. `AZF3` v1 reported
 `bind_result=1` (`idle`), `probe_result=1` (`idle`), `probe_count=1`,
-`runtime_verified=1`, and `disabled=0`. The next build may arm exactly one
-lab-only A enqueue, then must revoke the filter gate after its first scheduling
-attempt; normal repeated apply is not yet authorized.
+`runtime_verified=1`, and `disabled=0`. The one-shot live apply from commit
+`43aba10`, run `33750116775`, then passed on hardware: the first A press loaded
+the selected letter filter, `worker_step_result=0` (`scheduled`),
+`scheduled_count=1`, `rejected_count=0`, and the apply completed without a
+crash. A second attempt was correctly inert because that safety build revoked
+its filter gate after the first enqueue. The next experimental build replaces
+that one-shot gate with conservative repeat arming: at least eight seconds
+after a successful schedule and one continuous second with Aurora's queue
+empty and worker-busy byte clear. It remains lab-only until two sequential
+letter changes pass on hardware.
 
 ### Current console state
 

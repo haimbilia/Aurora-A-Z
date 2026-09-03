@@ -74,9 +74,13 @@ The complete centered row rendered without diagonal clipping. R3 entered at
 Aurora's stock menu. A was safely consumed and inert because filter
 verification remained false. M3b then passed on hardware: marker `AZF3` v1
 reported bind `idle`, probe `idle`, one successful probe, runtime verified,
-and no disabled/error flag. The next lab-only build arms exactly one live A
-enqueue after that probe and revokes the filter gate immediately after the
-first scheduling attempt. All probes remain confined to
+and no disabled/error flag. The one-shot apply build from commit `43aba10`
+also passed on hardware: its first A press loaded a letter filter and reported
+one scheduled job with zero rejections. Its second A press was deliberately
+blocked by the one-shot safety gate. The repeatable lab candidate now revokes
+the filter gate after every successful enqueue, waits at least eight seconds,
+requires Aurora's queue and worker-busy state to remain idle for one continuous
+second, and only then re-arms A for the next letter. All probes remain confined to
 `Hdd1:\AuroraAZLab`; production Aurora, skins, databases, and `launch.ini`
 remain untouched.
 
