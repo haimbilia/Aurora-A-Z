@@ -12,6 +12,7 @@
 
 #define AZ_ADMITTED_RELAY_WORDS 21u
 #define AZ_RESIDENT_EXIT_WORDS 7u
+#define AZ_EMBEDDED_ARENA_PAGE_SIZE 0x10000u
 
 /*
  * NtAllocateVirtualMemory cannot create pages in the loader-owned 0x8xxxxxxx
@@ -49,6 +50,8 @@ typedef char AzResidentExitMustFit[
     AZ_HOOK_RESIDENT_EXIT_OFFSET +
         AZ_RESIDENT_EXIT_WORDS * sizeof(uint32_t) <=
         AZ_HOOK_ADMISSION_OFFSET ? 1 : -1];
+typedef char AzArenaMustFitItsXexPage[
+    AZ_HOOK_ARENA_SIZE <= AZ_EMBEDDED_ARENA_PAGE_SIZE ? 1 : -1];
 
 /* xecorelib exports these ordinals but does not currently declare them. */
 extern void KeSweepDcacheRange(void *address, uint32_t size);
@@ -260,7 +263,10 @@ AzHookRuntimeResult az_hook_arena_create_rev1655(AzHookArena *arena)
 
         MmSetAddressProtect(
             (void *)resident_base,
-            AZ_HOOK_ARENA_SIZE,
+            /* Low-address XEX images use 64-KiB pages. Protect the complete
+             * isolated .azhook page, while exposing only the first 4 KiB to
+             * the hook allocator. */
+            AZ_EMBEDDED_ARENA_PAGE_SIZE,
             PAGE_EXECUTE_READWRITE);
         protection = MmQueryAddressProtect((void *)resident_base);
         if ((protection & 0xFFu) != PAGE_EXECUTE_READWRITE) {
