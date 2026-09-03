@@ -34,6 +34,7 @@
 #define AZ_LIFETIME_PINNING 1u
 #define AZ_LIFETIME_PINNED 2u
 #define AZ_LIFETIME_FAILED 3u
+#define AZ_REV1655_IMPORT_LIBRARY_COUNT 2u
 
 typedef char AzM2aInputContinuationMustMatch[
     AZ_M2A_INPUT_TARGET_ADDRESS + 4u ==
@@ -333,6 +334,96 @@ static uint8_t image_range_is_mapped(const uint8_t *image, size_t size)
     return MmIsAddressValid((void *)(image + size - 1u)) ? 1u : 0u;
 }
 
+typedef struct AzRev1655RuntimeImportResolverContext {
+    HMODULE modules[AZ_REV1655_IMPORT_LIBRARY_COUNT];
+    uint8_t module_queries[AZ_REV1655_IMPORT_LIBRARY_COUNT];
+} AzRev1655RuntimeImportResolverContext;
+
+static const char *import_module_identity(
+    AzRev1655ImportLibrary library,
+    size_t *module_index)
+{
+    if (module_index == NULL) {
+        return NULL;
+    }
+
+    switch (library) {
+    case AZ_REV1655_IMPORT_LIBRARY_XAM:
+        *module_index = 0u;
+        return "xam.xex";
+    case AZ_REV1655_IMPORT_LIBRARY_XBOXKRNL:
+        *module_index = 1u;
+        return "xboxkrnl.exe";
+    default:
+        return NULL;
+    }
+}
+
+/* Resolve each frozen import identity from the loader, never from mutable
+ * thunk/IAT bytes. Module handles are looked up once per complete validation;
+ * each of the 350 callbacks still performs its own ordinal resolution. */
+static int resolve_runtime_import_target(
+    void *context,
+    AzRev1655ImportLibrary library,
+    uint16_t ordinal,
+    size_t thunk_index,
+    uint32_t *out_target)
+{
+    AzRev1655RuntimeImportResolverContext *resolver_context =
+        (AzRev1655RuntimeImportResolverContext *)context;
+    const char *identity;
+    HMODULE module;
+    void *procedure = NULL;
+    uintptr_t target;
+    size_t module_index = 0u;
+    NTSTATUS status;
+
+    (void)thunk_index;
+    if (resolver_context == NULL || out_target == NULL) {
+        return 0;
+    }
+    *out_target = 0u;
+
+    identity = import_module_identity(library, &module_index);
+    if (identity == NULL ||
+        module_index >= (size_t)AZ_REV1655_IMPORT_LIBRARY_COUNT) {
+        return 0;
+    }
+
+    if (resolver_context->module_queries[module_index] == 0u) {
+        resolver_context->module_queries[module_index] = 1u;
+        status = XexGetModuleHandle(
+            identity,
+            &resolver_context->modules[module_index]);
+        if (FAILED(status) ||
+            resolver_context->modules[module_index] == NULL) {
+            resolver_context->modules[module_index] = NULL;
+            return 0;
+        }
+    }
+
+    module = resolver_context->modules[module_index];
+    if (module == NULL) {
+        return 0;
+    }
+
+    status = XexGetProcedureAddress(module, (uint32_t)ordinal, &procedure);
+    if (FAILED(status) || procedure == NULL) {
+        return 0;
+    }
+
+    target = (uintptr_t)procedure;
+    if (target > (uintptr_t)(UINT32_MAX - 3u) ||
+        (target & (uintptr_t)3u) != (uintptr_t)0u ||
+        !MmIsAddressValid((void *)target) ||
+        !MmIsAddressValid((void *)(target + (uintptr_t)3u))) {
+        return 0;
+    }
+
+    *out_target = (uint32_t)target;
+    return 1;
+}
+
 static AzRev1655RuntimeResult validate_input_site(
     AzRev1655LoadedImage *image,
     AzRev1655ResolvedHookSite *resolved,
@@ -340,6 +431,14 @@ static AzRev1655RuntimeResult validate_input_site(
 {
     const AzRev1655HookPermit *permit = NULL;
     const AzRev1655HookSiteDescriptor *descriptor;
+    AzRev1655RuntimeImportResolverContext resolver_context = {
+        {NULL, NULL},
+        {0u, 0u}
+    };
+    const AzRev1655ImportResolver import_resolver = {
+        resolve_runtime_import_target,
+        &resolver_context
+    };
     AzRev1655HookGateResult gate_result;
 
     image->bytes = (const uint8_t *)(uintptr_t)AZ_REV1655_IMAGE_BASE;
@@ -358,10 +457,14 @@ static AzRev1655RuntimeResult validate_input_site(
         return AZ_REV1655_RUNTIME_IMAGE_UNMAPPED;
     }
 
-    /* This verifies the header, complete .text hash, and every reviewed site
-     * window.  No arena, bridge state, thread, or executable byte is mutated
-     * before the complete gate succeeds. */
-    gate_result = az_rev1655_hook_gate_validate(image, &permit);
+    /* This verifies the header, immutable .text prefix, all loader-resolved
+     * import thunks, canonical complete-.text hash, and every reviewed site.
+     * No arena, bridge state, thread, or executable byte is mutated before
+     * the complete gate succeeds. */
+    gate_result = az_rev1655_hook_gate_validate_with_import_resolver(
+        image,
+        &import_resolver,
+        &permit);
     if (gate_result != AZ_REV1655_HOOK_GATE_OK) {
         if (log_failures != 0u) {
             DbgPrint(

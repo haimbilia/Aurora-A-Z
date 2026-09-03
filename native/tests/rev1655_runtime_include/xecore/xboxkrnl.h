@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 typedef void *HANDLE;
+typedef void *HMODULE;
 typedef int32_t NTSTATUS;
 
 #define FAILED(status) ((NTSTATUS)(status) < (NTSTATUS)0)
@@ -18,6 +19,12 @@ typedef int32_t NTSTATUS;
 
 bool MmIsAddressValid(void *address);
 int DbgPrint(const char *format, ...);
+
+NTSTATUS XexGetModuleHandle(const char *module_name, HMODULE *module_handle);
+NTSTATUS XexGetProcedureAddress(
+    HMODULE module_handle,
+    uint32_t ordinal,
+    void **procedure);
 
 HANDLE CreateFileA(
     char *path,

@@ -87,6 +87,16 @@ static uint32_t telemetry_close_calls;
 static uint32_t telemetry_read_open_calls;
 static uint32_t telemetry_read_calls;
 static uint32_t telemetry_read_close_calls;
+static uint32_t module_handle_calls[2];
+static uint32_t procedure_calls[2];
+static NTSTATUS configured_module_status[2];
+static NTSTATUS configured_procedure_status;
+static HMODULE configured_module_handle[2] = {
+    (HMODULE)(uintptr_t)0x1000u,
+    (HMODULE)(uintptr_t)0x2000u
+};
+static uintptr_t configured_procedure_target = (uintptr_t)0x91000000u;
+static uintptr_t rejected_export_address;
 static char telemetry_path[64];
 static uint8_t telemetry_record[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
 static uint8_t prior_slot_b[AZ_M2A_INPUT_TELEMETRY_RECORD_SIZE];
@@ -154,6 +164,10 @@ bool MmIsAddressValid(void *address)
     const uintptr_t wrapper_end = wrapper_start +
         sizeof(g_auroraaz_test_thread_wrapper_probe);
 
+    if (candidate == rejected_export_address) {
+        return false;
+    }
+
     if (reject_thread_startup != 0u &&
         ((candidate >= probe_start && candidate < probe_end) ||
          (candidate >= wrapper_start && candidate < wrapper_end))) {
@@ -177,6 +191,69 @@ bool MmIsAddressValid(void *address)
         return in_mapped_range;
     }
     return address != NULL;
+}
+
+NTSTATUS XexGetModuleHandle(
+    const char *module_name,
+    HMODULE *module_handle)
+{
+    size_t module_index;
+
+    CHECK(module_name != NULL);
+    CHECK(module_handle != NULL);
+    if (module_name == NULL || module_handle == NULL) {
+        return (NTSTATUS)-1;
+    }
+
+    if (strcmp(module_name, "xam.xex") == 0) {
+        module_index = 0u;
+    }
+    else if (strcmp(module_name, "xboxkrnl.exe") == 0) {
+        module_index = 1u;
+    }
+    else {
+        CHECK(0);
+        *module_handle = NULL;
+        return (NTSTATUS)-1;
+    }
+
+    ++module_handle_calls[module_index];
+    *module_handle = FAILED(configured_module_status[module_index]) ?
+        NULL : configured_module_handle[module_index];
+    return configured_module_status[module_index];
+}
+
+NTSTATUS XexGetProcedureAddress(
+    HMODULE module_handle,
+    uint32_t ordinal,
+    void **procedure)
+{
+    size_t module_index;
+
+    CHECK(procedure != NULL);
+    CHECK(ordinal <= UINT16_MAX);
+    if (procedure == NULL) {
+        return (NTSTATUS)-1;
+    }
+
+    if (module_handle == configured_module_handle[0] &&
+        module_handle != NULL) {
+        module_index = 0u;
+    }
+    else if (module_handle == configured_module_handle[1] &&
+             module_handle != NULL) {
+        module_index = 1u;
+    }
+    else {
+        CHECK(0);
+        *procedure = NULL;
+        return (NTSTATUS)-1;
+    }
+
+    ++procedure_calls[module_index];
+    *procedure = FAILED(configured_procedure_status) ?
+        NULL : (void *)configured_procedure_target;
+    return configured_procedure_status;
 }
 
 int DbgPrint(const char *format, ...)
@@ -369,18 +446,63 @@ AzRev1655HookGateResult az_rev1655_hook_gate_validate(
     const AzRev1655LoadedImage *image,
     const AzRev1655HookPermit **out_permit)
 {
+    (void)image;
+    (void)out_permit;
+    CHECK(0);
+    return AZ_REV1655_HOOK_GATE_IMPORT_RESOLVER_REQUIRED;
+}
+
+AzRev1655HookGateResult
+az_rev1655_hook_gate_validate_with_import_resolver(
+    const AzRev1655LoadedImage *image,
+    const AzRev1655ImportResolver *resolver,
+    const AzRev1655HookPermit **out_permit)
+{
+    size_t thunk_index;
+
     ++gate_calls;
     CHECK(image != NULL);
     CHECK(image->virtual_address == 0x82000000u);
+    CHECK(resolver != NULL);
+    CHECK(resolver != NULL && resolver->resolve != NULL);
     CHECK(out_permit != NULL);
 
-    if (configured_gate_result == AZ_REV1655_HOOK_GATE_OK) {
-        *out_permit = (const AzRev1655HookPermit *)(uintptr_t)1u;
-    }
-    else {
+    if (out_permit != NULL) {
         *out_permit = NULL;
     }
-    return configured_gate_result;
+    if (configured_gate_result != AZ_REV1655_HOOK_GATE_OK) {
+        return configured_gate_result;
+    }
+    if (resolver == NULL || resolver->resolve == NULL ||
+        out_permit == NULL) {
+        return AZ_REV1655_HOOK_GATE_NULL_ARGUMENT;
+    }
+
+    /* Mirror the frozen Rev1655 physical import-library transitions. The
+     * exact ordinal identities are gate-owned; this runtime test focuses on
+     * resolver selection, per-import lookup, and handle caching. */
+    for (thunk_index = 0u; thunk_index < 350u; ++thunk_index) {
+        const AzRev1655ImportLibrary library =
+            (thunk_index < 81u ||
+             (thunk_index >= 255u && thunk_index < 326u)) ?
+            AZ_REV1655_IMPORT_LIBRARY_XAM :
+            AZ_REV1655_IMPORT_LIBRARY_XBOXKRNL;
+        const uint16_t ordinal = (uint16_t)(thunk_index + 1u);
+        uint32_t target = 0u;
+
+        if (resolver->resolve(
+                resolver->context,
+                library,
+                ordinal,
+                thunk_index,
+                &target) == 0 ||
+            target != (uint32_t)configured_procedure_target) {
+            return AZ_REV1655_HOOK_GATE_IMPORT_RESOLUTION_FAILED;
+        }
+    }
+
+    *out_permit = (const AzRev1655HookPermit *)(uintptr_t)1u;
+    return AZ_REV1655_HOOK_GATE_OK;
 }
 
 const AzRev1655HookSiteDescriptor *az_rev1655_hook_gate_site(
@@ -581,6 +703,21 @@ uint32_t az_rev1655_input_detour_entry(
     return 0u;
 }
 
+static void reset_import_resolution_fakes(void)
+{
+    module_handle_calls[0] = 0u;
+    module_handle_calls[1] = 0u;
+    procedure_calls[0] = 0u;
+    procedure_calls[1] = 0u;
+    configured_module_status[0] = (NTSTATUS)0;
+    configured_module_status[1] = (NTSTATUS)0;
+    configured_module_handle[0] = (HMODULE)(uintptr_t)0x1000u;
+    configured_module_handle[1] = (HMODULE)(uintptr_t)0x2000u;
+    configured_procedure_status = (NTSTATUS)0;
+    configured_procedure_target = (uintptr_t)0x91000000u;
+    rejected_export_address = (uintptr_t)0u;
+}
+
 static void test_gate_failure_precedes_host_mutation(void)
 {
     const uintptr_t rejected_text_page =
@@ -625,6 +762,83 @@ static void test_gate_failure_precedes_host_mutation(void)
     CHECK(lifetime_pin_calls == 0u);
     CHECK(sparse_gap_probe_calls == 0u);
     CHECK(az_rev1655_runtime_state() == AZ_REV1655_RUNTIME_STOPPED);
+    az_rev1655_runtime_test_reset_lifetime();
+}
+
+static void test_import_resolver_fail_closed_and_cached(void)
+{
+    const uint32_t ordinal4 =
+        (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite;
+
+    configured_gate_result = AZ_REV1655_HOOK_GATE_OK;
+
+    reset_import_resolution_fakes();
+    configured_module_status[0] = (NTSTATUS)-1;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_IMAGE_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(module_handle_calls[1] == 0u);
+    CHECK(procedure_calls[0] == 0u);
+    az_rev1655_runtime_test_reset_lifetime();
+
+    reset_import_resolution_fakes();
+    configured_module_handle[0] = NULL;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_IMAGE_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(procedure_calls[0] == 0u);
+    az_rev1655_runtime_test_reset_lifetime();
+
+    reset_import_resolution_fakes();
+    configured_procedure_status = (NTSTATUS)-1;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_IMAGE_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(procedure_calls[0] == 1u);
+    az_rev1655_runtime_test_reset_lifetime();
+
+    reset_import_resolution_fakes();
+    configured_procedure_target = (uintptr_t)0u;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_IMAGE_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(procedure_calls[0] == 1u);
+    az_rev1655_runtime_test_reset_lifetime();
+
+    reset_import_resolution_fakes();
+    configured_procedure_target = (uintptr_t)0x91000002u;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_IMAGE_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(procedure_calls[0] == 1u);
+    az_rev1655_runtime_test_reset_lifetime();
+
+    reset_import_resolution_fakes();
+    rejected_export_address = configured_procedure_target;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_IMAGE_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(procedure_calls[0] == 1u);
+    az_rev1655_runtime_test_reset_lifetime();
+
+    reset_import_resolution_fakes();
+    rejected_export_address = configured_procedure_target + (uintptr_t)3u;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_IMAGE_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(procedure_calls[0] == 1u);
+    az_rev1655_runtime_test_reset_lifetime();
+
+    reset_import_resolution_fakes();
+    reject_thread_startup = 1u;
+    CHECK(az_rev1655_runtime_pin_module(ordinal4) ==
+        AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED);
+    CHECK(module_handle_calls[0] == 1u);
+    CHECK(module_handle_calls[1] == 1u);
+    CHECK(procedure_calls[0] == 152u);
+    CHECK(procedure_calls[1] == 198u);
+    CHECK(lifetime_pin_calls == 0u);
+    reject_thread_startup = 0u;
     az_rev1655_runtime_test_reset_lifetime();
 }
 
@@ -919,6 +1133,7 @@ static void test_observe_only_lifecycle(void)
 int main(void)
 {
     test_gate_failure_precedes_host_mutation();
+    test_import_resolver_fail_closed_and_cached();
     test_telemetry_file_completion_matrix();
     test_telemetry_retry_throttle_and_alternation();
     test_observe_only_lifecycle();
