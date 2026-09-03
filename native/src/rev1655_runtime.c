@@ -831,14 +831,6 @@ static AzRev1655RuntimeResult start_input_observe(void)
         return AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED;
     }
 
-    hook_result = az_hook_arena_create_rev1655(&g_runtime.arena);
-    if (hook_result != AZ_HOOK_RUNTIME_OK) {
-        DbgPrint(
-            "AuroraAZ: M2a near arena rejected: %s\n",
-            az_hook_runtime_result_name(hook_result));
-        return AZ_REV1655_RUNTIME_ARENA_FAILED;
-    }
-
     az_rev1655_input_detour_reset();
     az_rev1655_input_detour_publish_verification(1u, 0u, 0u, 0u);
 
@@ -848,7 +840,6 @@ static AzRev1655RuntimeResult start_input_observe(void)
         &worker_thread);
     if (create_result != AZ_REV1655_THREAD_CREATE_OK) {
         az_rev1655_input_detour_publish_verification(0u, 0u, 0u, 0u);
-        (void)az_hook_arena_release_uninstalled(&g_runtime.arena);
         if (create_result ==
             AZ_REV1655_THREAD_CREATE_REVISION_MISMATCH) {
             DbgPrint("AuroraAZ: M2a thread wrapper changed before call\n");
@@ -859,18 +850,14 @@ static AzRev1655RuntimeResult start_input_observe(void)
     }
     g_runtime.worker_thread = worker_thread;
 
-    hook_result = az_live_hook_install(
-        &g_runtime.arena,
+    hook_result = az_live_hook_install_direct(
         resolved.target_address,
         resolved.expected_instruction,
-        (const void *)(uintptr_t)&az_rev1655_input_detour_entry,
+        (const void *)(uintptr_t)&az_rev1655_input_direct_detour_entry,
         &g_runtime.input_hook);
     if (hook_result != AZ_HOOK_RUNTIME_OK) {
         az_rev1655_input_detour_publish_verification(0u, 0u, 0u, 0u);
         stop_starting_worker();
-        if (g_runtime.arena.used == 0u) {
-            (void)az_hook_arena_release_uninstalled(&g_runtime.arena);
-        }
         DbgPrint(
             "AuroraAZ: M2a input hook rejected: %s\n",
             az_hook_runtime_result_name(hook_result));

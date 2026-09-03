@@ -465,6 +465,7 @@ static void check_hook_cleared(const AzLiveHook *hook)
     CHECK(hook->old_protect == 0u);
     CHECK(hook->installed == 0u);
     CHECK(hook->target_restored == 0u);
+    CHECK(hook->direct == 0u);
 }
 
 static size_t count_events(TestEventType type)
@@ -888,6 +889,61 @@ static void test_install_cas_failure_closes_and_reserves_slot(void)
     CHECK(az_live_hook_remove(&hook) == AZ_HOOK_RUNTIME_OK);
 }
 
+static void test_direct_install_and_remove_need_no_arena(void)
+{
+    const uint32_t direct_detour = TEST_TARGET_ADDRESS + 0x1000u;
+    AzLiveHook hook;
+    volatile uint32_t *target;
+    uint32_t expected_branch = 0u;
+
+    reset_stubs();
+    target = map_target(TEST_TARGET_ADDRESS, TEST_ORIGINAL_INSTRUCTION);
+    CHECK(target != NULL);
+    clear_events();
+    memset(&hook, 0xA5, sizeof(hook));
+
+    CHECK(az_live_hook_install_direct(
+        TEST_TARGET_ADDRESS,
+        TEST_ORIGINAL_INSTRUCTION,
+        (const void *)(uintptr_t)direct_detour,
+        &hook) == AZ_HOOK_RUNTIME_OK);
+    CHECK(az_ppc_encode_relative_branch(
+        TEST_TARGET_ADDRESS,
+        direct_detour,
+        0u,
+        &expected_branch) == AZ_PPC_OK);
+    CHECK(*target == expected_branch);
+    CHECK(hook.plan.target_branch == expected_branch);
+    CHECK(hook.plan.detour_address == direct_detour);
+    CHECK(hook.plan.relay_address == 0u);
+    CHECK(hook.plan.trampoline_address == 0u);
+    CHECK(hook.admission_address == (uintptr_t)0u);
+    CHECK(hook.installed == 1u);
+    CHECK(hook.target_restored == 0u);
+    CHECK(hook.direct == 1u);
+    CHECK(az_live_hook_active_entries(&hook) == 0u);
+    CHECK(az_live_hook_accepting(&hook) == 0u);
+    CHECK(az_live_hook_can_unload(&hook) == 0u);
+    CHECK(az_live_hook_trampoline(&hook) == NULL);
+
+    clear_events();
+    CHECK(az_live_hook_remove(&hook) == AZ_HOOK_RUNTIME_OK);
+    CHECK(*target == TEST_ORIGINAL_INSTRUCTION);
+    CHECK(hook.installed == 0u);
+    CHECK(hook.target_restored == 1u);
+    CHECK(hook.direct == 1u);
+    CHECK(az_live_hook_can_unload(&hook) == 1u);
+    CHECK(event_count == 4u);
+    check_event(0u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
+        sizeof(uint32_t), PAGE_EXECUTE_READWRITE);
+    check_event(1u, TEST_EVENT_SWEEP_DCACHE, TEST_TARGET_ADDRESS,
+        sizeof(uint32_t), 0u);
+    check_event(2u, TEST_EVENT_SWEEP_ICACHE, TEST_TARGET_ADDRESS,
+        sizeof(uint32_t), 0u);
+    check_event(3u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
+        sizeof(uint32_t), TEST_OLD_PROTECT);
+}
+
 static void test_arena_capacity_and_permanent_reservations(void)
 {
     AzHookArena arena;
@@ -1144,6 +1200,7 @@ int main(void)
     test_install_target_and_plan_failures_are_non_mutating();
     test_successful_install_emits_resident_code();
     test_install_cas_failure_closes_and_reserves_slot();
+    test_direct_install_and_remove_need_no_arena();
     test_arena_capacity_and_permanent_reservations();
     test_remove_guards_and_success();
     test_remove_quiesces_without_repatching();

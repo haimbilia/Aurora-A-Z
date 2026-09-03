@@ -85,6 +85,7 @@ static void clear_hook(AzLiveHook *hook)
     hook->old_protect = 0u;
     hook->installed = 0u;
     hook->target_restored = 0u;
+    hook->direct = 0u;
 }
 
 static uintptr_t embedded_arena_base(void)
@@ -499,6 +500,85 @@ AzHookRuntimeResult az_live_hook_install(
 
     hook->installed = 1u;
     hook->target_restored = 0u;
+    hook->direct = 0u;
+    return AZ_HOOK_RUNTIME_OK;
+}
+
+AzHookRuntimeResult az_live_hook_install_direct(
+    uint32_t target_address,
+    uint32_t expected_instruction,
+    const void *detour,
+    AzLiveHook *hook)
+{
+    volatile uint32_t *target;
+    AzPpcResult branch_result;
+    uint32_t compare;
+    int exchanged;
+
+    if (detour == NULL || hook == NULL) {
+        return AZ_HOOK_RUNTIME_NULL;
+    }
+    clear_hook(hook);
+
+    target = (volatile uint32_t *)(uintptr_t)target_address;
+    if ((target_address & 3u) != 0u ||
+        !MmIsAddressValid((void *)(uintptr_t)target_address)) {
+        return AZ_HOOK_RUNTIME_BAD_TARGET;
+    }
+    if ((uintptr_t)detour > (uintptr_t)UINT32_MAX ||
+        (((uintptr_t)detour & (uintptr_t)3u) != (uintptr_t)0u)) {
+        return AZ_HOOK_RUNTIME_PLAN_FAILED;
+    }
+    if (__atomic_load_n(target, __ATOMIC_ACQUIRE) != expected_instruction) {
+        return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+    }
+
+    branch_result = az_ppc_encode_relative_branch(
+        target_address,
+        (uint32_t)(uintptr_t)detour,
+        0u,
+        &hook->plan.target_branch);
+    if (branch_result != AZ_PPC_OK) {
+        clear_hook(hook);
+        return AZ_HOOK_RUNTIME_PLAN_FAILED;
+    }
+    hook->plan.target_address = target_address;
+    hook->plan.detour_address = (uint32_t)(uintptr_t)detour;
+    hook->plan.original_instruction = expected_instruction;
+
+    hook->old_protect =
+        MmQueryAddressProtect((void *)(uintptr_t)target_address);
+    MmSetAddressProtect(
+        (void *)(uintptr_t)target_address,
+        (uint32_t)sizeof(uint32_t),
+        PAGE_EXECUTE_READWRITE);
+    compare = expected_instruction;
+    exchanged = __atomic_compare_exchange_n(
+        target,
+        &compare,
+        hook->plan.target_branch,
+        0,
+        __ATOMIC_SEQ_CST,
+        __ATOMIC_SEQ_CST);
+    if (exchanged == 0) {
+        MmSetAddressProtect(
+            (void *)(uintptr_t)target_address,
+            (uint32_t)sizeof(uint32_t),
+            hook->old_protect);
+        clear_hook(hook);
+        return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+    }
+
+    flush_code(
+        (void *)(uintptr_t)target_address,
+        (uint32_t)sizeof(uint32_t));
+    MmSetAddressProtect(
+        (void *)(uintptr_t)target_address,
+        (uint32_t)sizeof(uint32_t),
+        hook->old_protect);
+    hook->installed = 1u;
+    hook->target_restored = 0u;
+    hook->direct = 1u;
     return AZ_HOOK_RUNTIME_OK;
 }
 
@@ -517,6 +597,42 @@ AzHookRuntimeResult az_live_hook_remove(AzLiveHook *hook)
     }
 
     admission = hook_admission(hook);
+    if (hook->direct != 0u) {
+        target = (volatile uint32_t *)(uintptr_t)hook->plan.target_address;
+        if (!MmIsAddressValid(
+                (void *)(uintptr_t)hook->plan.target_address)) {
+            return AZ_HOOK_RUNTIME_BAD_TARGET;
+        }
+        MmSetAddressProtect(
+            (void *)(uintptr_t)hook->plan.target_address,
+            (uint32_t)sizeof(uint32_t),
+            PAGE_EXECUTE_READWRITE);
+        compare = hook->plan.target_branch;
+        exchanged = __atomic_compare_exchange_n(
+            target,
+            &compare,
+            hook->plan.original_instruction,
+            0,
+            __ATOMIC_SEQ_CST,
+            __ATOMIC_SEQ_CST);
+        if (exchanged == 0) {
+            MmSetAddressProtect(
+                (void *)(uintptr_t)hook->plan.target_address,
+                (uint32_t)sizeof(uint32_t),
+                hook->old_protect);
+            return AZ_HOOK_RUNTIME_TARGET_CHANGED;
+        }
+        flush_code(
+            (void *)(uintptr_t)hook->plan.target_address,
+            (uint32_t)sizeof(uint32_t));
+        MmSetAddressProtect(
+            (void *)(uintptr_t)hook->plan.target_address,
+            (uint32_t)sizeof(uint32_t),
+            hook->old_protect);
+        hook->target_restored = 1u;
+        hook->installed = 0u;
+        return AZ_HOOK_RUNTIME_OK;
+    }
     if (admission == NULL) {
         return AZ_HOOK_RUNTIME_NULL;
     }
@@ -598,6 +714,10 @@ uint8_t az_live_hook_can_unload(const AzLiveHook *hook)
 {
     AzResidentAdmission *admission = hook_admission(hook);
 
+    if (hook != NULL && hook->direct != 0u) {
+        return (hook->target_restored != 0u &&
+            hook->installed == 0u) ? 1u : 0u;
+    }
     if (hook == NULL || admission == NULL ||
         hook->target_restored == 0u ||
         load_u32(&admission->accepting) != 0u ||

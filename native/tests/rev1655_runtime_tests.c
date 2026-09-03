@@ -589,6 +589,25 @@ AzHookRuntimeResult az_live_hook_install(
     return AZ_HOOK_RUNTIME_OK;
 }
 
+AzHookRuntimeResult az_live_hook_install_direct(
+    uint32_t target_address,
+    uint32_t expected_instruction,
+    const void *detour,
+    AzLiveHook *hook)
+{
+    AzHookArena arena;
+
+    arena.base = (uintptr_t)0x82D50000u;
+    arena.size = AZ_HOOK_ARENA_SIZE;
+    arena.used = 0u;
+    return az_live_hook_install(
+        &arena,
+        target_address,
+        expected_instruction,
+        detour,
+        hook);
+}
+
 AzHookRuntimeResult az_live_hook_remove(AzLiveHook *hook)
 {
     ++hook_remove_calls;
@@ -701,6 +720,14 @@ uint32_t az_rev1655_input_detour_entry(
     (void)flags;
     (void)keystroke;
     return 0u;
+}
+
+uint32_t az_rev1655_input_direct_detour_entry(
+    uint32_t user_index,
+    uint32_t flags,
+    AzInputKeystroke *keystroke)
+{
+    return az_rev1655_input_detour_entry(user_index, flags, keystroke);
 }
 
 static void reset_import_resolution_fakes(void)

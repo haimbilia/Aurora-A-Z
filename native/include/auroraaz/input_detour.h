@@ -171,6 +171,12 @@ uint32_t az_rev1655_input_detour_entry(
     uint32_t flags,
     AzInputKeystroke *keystroke);
 
+/* Low-linked direct-entry variant; uses the same C bridge without a relay. */
+uint32_t az_rev1655_input_direct_detour_entry(
+    uint32_t user_index,
+    uint32_t flags,
+    AzInputKeystroke *keystroke);
+
 /* Exported for the assembly shim; hook installers should use _entry above. */
 uint32_t az_rev1655_input_detour_c(
     uint32_t user_index,

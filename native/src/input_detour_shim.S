@@ -33,6 +33,22 @@ az_rev1655_input_detour_entry:
     mtctr %r0
     bctr
 
+    .globl az_rev1655_input_direct_detour_entry
+az_rev1655_input_direct_detour_entry:
+    /*
+     * The plugin image is linked within relative-branch reach of Aurora's
+     * wrapper, so the observe-only gate needs no generated relay. Preserve
+     * Aurora's caller LR across the C bridge and return directly to it.
+     */
+    mflr %r6
+    stwu %r1, -112(%r1)
+    stw %r6, 104(%r1)
+    bl az_rev1655_input_detour_c
+    lwz %r12, 104(%r1)
+    addi %r1, %r1, 112
+    mtlr %r12
+    blr
+
 /*
  * Dedicated Rev1655 trampoline. The input hook's displaced instruction is
  * mflr r12. This function is called normally by the C bridge, so Aurora's

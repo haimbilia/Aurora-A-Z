@@ -59,6 +59,7 @@ typedef struct AzLiveHook {
     uint32_t old_protect;
     uint8_t installed;
     uint8_t target_restored;
+    uint8_t direct;
 } AzLiveHook;
 
 typedef struct AzHookArenaDiagnostics {
@@ -87,6 +88,18 @@ AzHookRuntimeResult az_hook_arena_release_uninstalled(AzHookArena *arena);
 
 AzHookRuntimeResult az_live_hook_install(
     AzHookArena *arena,
+    uint32_t target_address,
+    uint32_t expected_instruction,
+    const void *detour,
+    AzLiveHook *hook);
+
+/*
+ * Install a direct relative branch when the linked detour is already within
+ * PPC branch reach and owns a fixed trampoline for the displaced instruction.
+ * This path writes no runtime-generated code and is used by the low-linked
+ * Rev1655 input observer on retail kernels.
+ */
+AzHookRuntimeResult az_live_hook_install_direct(
     uint32_t target_address,
     uint32_t expected_instruction,
     const void *detour,
