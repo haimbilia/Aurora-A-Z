@@ -312,10 +312,11 @@ letter highlighted, responding to the D-pad.
   calls only 2-4 with ignored returns. The release archive and live console
   contain no stock `NetDbgDll.xex`, so the candidate occupies an unused
   optional path rather than replacing an installed feature. It would keep the
-  product skin agnostic and one-file with no `launch.ini` change. M1 now passes
+  product skin agnostic and one-file with no `launch.ini` change. M1 passes
   wrapper loading, ordinal resolution, automatic ordinal-4 dispatch, and
-  AuroraAZ worker entry. M2a input observation is underway; input consumption,
-  overlay drawing, and filter mutation are not functional. See
+  AuroraAZ worker entry. M2a direct input observation also passes on hardware;
+  input consumption, hardware-proven overlay drawing, and filter mutation are
+  not yet functional. See
   `reference/NETDBG_BOOTSTRAP.md`.
 
 ### First native loader canary: failed safely
@@ -401,10 +402,31 @@ statuses and reported `phase=7` (`WORKER_ENTERED`). The source field proves
 Aurora called ordinal 4 automatically; the separate phase-7 record proves the
 AuroraAZ worker entered. M1 is therefore complete.
 
-The current work is M2a only: a once-gated ordinal-4 bootstrap starts the
-Rev1655 runtime in `INPUT_OBSERVE`. It must remain non-consuming and does not
-render or filter. Do not describe the selector as functional until the later
-input-ownership, overlay, and filter gates pass.
+### M2a direct input gate: passed
+
+Commit `06affc4`, GitHub Actions run `33736960588`, produced the 397,312-byte
+hardware-passing artifact with SHA-256:
+
+```text
+431FAD613E1C177B5B5A486B5B21B98AB17BB2AC2592C1A6F630DC07E68EB86E
+```
+
+The v3 `AuroraAZ-M2a.bin` marker returned runtime result 0 and target
+`0x82801D90`. On the RGH/freeBOOT console, the direct compare/exchange patch
+worked even though `MmQueryAddressProtect` continued reporting `0x20` before
+and after the advisory protection change. Final input telemetry selected slot
+A, generation 57, with 139 relevant observations, zero invalid events, zero
+drops, and clean safety masks. All seven controls were present. The deliberate
+left-stick Right hold recorded 4 presses, 74 repeats, and 5 releases. Every
+event remained unconsumed and no filter request was queued. Aurora stayed
+responsive.
+
+The current work is an explicit `OVERLAY_CANARY`: direct RenderMenu and
+Font::End hooks feed the existing renderer while the input bridge remains in
+OBSERVE and filter verification remains false. This canary is title-lifetime
+and cold-restart-only because direct hooks have no hot-unload admission relay.
+Do not describe the selector as functional until visible rendering, later
+input ownership, and filtering each pass their hardware gates.
 
 The user rejected the popup-list fallback and does not want a 27-QuickView
 carousel. If the mockup is non-negotiable, the honest next step is reverse

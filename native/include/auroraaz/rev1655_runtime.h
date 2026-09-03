@@ -14,7 +14,9 @@ extern "C" {
  */
 typedef enum AzRev1655RuntimeStage {
     AZ_REV1655_RUNTIME_STAGE_DISABLED = 0,
-    AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE
+    AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE,
+    /* Static # A-Z row; input remains observe-only and filtering is off. */
+    AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY
 } AzRev1655RuntimeStage;
 
 typedef enum AzRev1655RuntimeState {
@@ -39,7 +41,11 @@ typedef enum AzRev1655RuntimeResult {
     AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED,
     AZ_REV1655_RUNTIME_THREAD_CREATE_FAILED,
     AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED,
-    AZ_REV1655_RUNTIME_DETOUR_STAGE_FAILED
+    AZ_REV1655_RUNTIME_DETOUR_STAGE_FAILED,
+    AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED,
+    AZ_REV1655_RUNTIME_RENDER_INIT_FAILED,
+    AZ_REV1655_RUNTIME_SCENE_GATE_FAILED,
+    AZ_REV1655_RUNTIME_RENDER_DETOUR_FAILED
 } AzRev1655RuntimeResult;
 
 /*
@@ -52,10 +58,10 @@ AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
     uint32_t expected_ordinal4_export);
 
 /*
- * Selects one reviewed runtime milestone.  INPUT_OBSERVE installs only the
- * Rev1655 input-wrapper hook and is idempotent while already running.  The
- * initial STOPPED instance is one-shot: shutdown closes the input bridge and
- * a fresh module load is required before another start.
+ * Selects one reviewed runtime milestone. INPUT_OBSERVE installs only the
+ * Rev1655 input-wrapper hook. OVERLAY_CANARY adds static rendering while
+ * keeping input observe-only; it is title-lifetime and cold-restart-only.
+ * The initial STOPPED instance is one-shot.
  */
 AzRev1655RuntimeResult az_rev1655_runtime_start(
     AzRev1655RuntimeStage stage);

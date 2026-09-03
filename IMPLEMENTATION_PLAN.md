@@ -57,26 +57,23 @@ artifact with SHA-256
 its FTP round-trip hash matched. Primary phase `5` and worker phase `7` markers
 prove automatic ordinal-4 dispatch and worker entry.
 
-M2a remains open. The first observe-only runtime reached a compatibility-gate
-problem before input-hook installation: Aurora's loader resolves the final 350
-`.text` import thunks, so the live section cannot equal the extracted image's
-static complete-section hash. The clean v2 CPU-visible hardware capture now
-proves that the immutable `.text` prefix matches exactly and that every change
-is confined to those thunks. It also proves real hardware emits
-`lis r11`/`addi r11,r11` targets, and exposes two non-stock target redirections.
-The exact capture hashes, ranges, and proven/inferred boundary are recorded in
-`reference/HARDWARE_BASELINE.md`.
+M2a passed on hardware with commit `06affc4`, GitHub Actions run
+`33736960588`, and SHA-256
+`431FAD613E1C177B5B5A486B5B21B98AB17BB2AC2592C1A6F630DC07E68EB86E`.
+The direct hook at `0x82801D90` observed A, RB, R3, D-pad Left/Right, and
+left-stick Left/Right. The final stick-right sample added 4 presses, 74
+repeats, and 5 releases. Telemetry reported the recovered main caller,
+zero invalid events, zero drops, zero consumed controls, and zero filter
+requests. Aurora remained stable.
 
-A loader-aware, fail-closed gate and its tests are in progress. Commit
-`4a8c6ee` adds the v3 IAT diagnostic needed to settle the remaining live import
-semantics. CI run `33724035200` succeeded and its downloaded artifact hash was
-verified, but its hardware capture is still pending. The scene/render
-telemetry in `604b3b3` is host-tested scaffolding only and is not evidence of a
-hardware overlay or selector. At that checkpoint, all 19 CTest targets and all
-35 Python tests passed. No input observation or consumption, overlay, or filter
-behavior has passed a hardware gate. All probes have stayed inside
-`Hdd1:\AuroraAZLab`; the production `Hdd1:\Aurora` files, skins, database, and
-`launch.ini` remain untouched.
+The current work is the first M3 renderer-owned overlay canary. It adds direct
+RenderMenu and Font::End hooks only after the exact Rev1655 gate passes, draws
+the centered inactive row and shadow only on the focused main scene, and keeps
+the input runtime in OBSERVE with filter verification false. It is a
+cold-restart-only lab build and is not evidence of a functional selector until
+hardware rendering passes. All probes remain confined to
+`Hdd1:\AuroraAZLab`; production Aurora, skins, database, and `launch.ini`
+remain untouched.
 
 ## M0 — Stabilize and measure
 
@@ -257,12 +254,11 @@ Develop in two steps:
    only the required navigation/A events until selection completes. All other
    states pass through unchanged.
 
-M2a is the current work. Its ordinal-4 bootstrap starts only
-`AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE`. The current sub-gate is to validate a
-loader-resolved Rev1655 image without trusting loader-controlled thunk bytes,
-then install the unchanged observe-only input hook. Passing M1 and completing
-the v2 image capture do not establish that this input hook works on hardware,
-and M2a must not silently widen into M2b, rendering, or filtering.
+M2a is closed. Its hardware-passing direct hook remained observe-only and
+proved every required control without consuming input. M2b selector ownership
+remains gated. The current `OVERLAY_CANARY` stage widens only into static
+rendering; it continues to request `AZ_INPUT_DETOUR_OBSERVE`, never confirms
+control ownership, and never enables the filter consumer.
 
 The bridge needs edge detection, left-stick dead-zone/hysteresis, and controlled
 repeat for held directions. It must ignore R3 outside the main coverflow and
@@ -403,24 +399,17 @@ editing the skin.
 
 ## Immediate next work session
 
-1. After the requested cold reboot, use production Aurora's FTP service to
-   rename the still-isolated v2 lab probe to its SHA-derived disabled name;
-   verify production Aurora and its plugin directory remain unchanged.
-2. Deploy the verified v3 IAT probe from commit `4a8c6ee` only to
-   `AuroraAZLab`, verify its FTP round-trip hash, and capture/validate its v3
-   marker, header, `.text`, IAT, and NOVA screenshot.
-3. Finalize the loader-aware hook gate only from the v2/v3 hardware evidence,
-   including an independent policy for the two observed redirected imports;
-   fail closed if an exact target cannot be established.
-4. Build and record the exact M2a observe-only artifact, CI run, and SHA-256;
-   confirm its runtime entry selects only input observation and its link
-   manifest excludes input consumption, renderer, and filter-consumer sources.
-5. Repeat the isolated-lab preflight, upload, FTP round-trip hash, launch, and
-   recoverable rollback procedure without changing `launch.ini`. Require the
-   M2a marker and log-backed evidence that the required controls are observed
-   while RB, coverflow motion, and other scenes remain unchanged.
-6. Keep M2b input ownership, M3 overlay integration, and M4 filtering gated
-   until the M2a hardware evidence is reviewed.
+1. Cross-build and hash the explicit `OVERLAY_CANARY` artifact.
+2. Deploy it only to `Hdd1:\AuroraAZLab`, verify the FTP round-trip hash, then
+   cold reboot once so the title-pinned module is loaded fresh.
+3. Capture a 1280x720 NOVA screenshot and pull two identical M2b marker copies.
+   Require a responsive UI, centered visible row, draw result `DRAWN`, main
+   scene allowed, and continued zero consumption/filtering.
+4. If the row is absent, diagnose `last_note_result` and `last_draw_result`;
+   do not weaken the scene, caller, font, device, or System UI gates.
+5. After visual placement passes, enable selector ownership as a separate M2b
+   build, then implement filtering as M4.
 
-M1 is closed. The project is not yet a functional selector: input consumption,
-the mockup-faithful overlay, and filter application remain later milestones.
+M1 and M2a are closed. The project is not yet a functional selector: the
+overlay canary, input ownership, and filter application still need their
+hardware gates.

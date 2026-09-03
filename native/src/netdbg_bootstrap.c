@@ -91,7 +91,7 @@ static uint32_t bootstrap_rev1655_runtime(void *context)
         AZ_M2A_MARKER_WORKER_ENTERED,
         AZ_M2A_RESULT_NOT_ATTEMPTED);
     result = az_rev1655_runtime_start(
-        AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE);
+        AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY);
     write_m2a_marker(
         AZ_M2A_MARKER_RUNTIME_RETURNED,
         (uint32_t)result);

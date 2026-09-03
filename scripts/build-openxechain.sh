@@ -22,6 +22,13 @@ m2a_sources=(
     "${repo_root}/native/src/input.c"
     "${repo_root}/native/src/input_detour.c"
     "${repo_root}/native/src/input_detour_shim.S"
+    "${repo_root}/native/src/glyph_atlas.c"
+    "${repo_root}/native/src/layout.c"
+    "${repo_root}/native/src/overlay_model.c"
+    "${repo_root}/native/src/overlay_renderer_xbox360.c"
+    "${repo_root}/native/src/render_detours.c"
+    "${repo_root}/native/src/render_detour_shims.S"
+    "${repo_root}/native/src/scene_gate_rev1655.c"
     "${repo_root}/native/src/m2a_input_telemetry.c"
     "${repo_root}/native/src/rev1655_runtime.c"
 )

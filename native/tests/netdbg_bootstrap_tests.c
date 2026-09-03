@@ -223,7 +223,7 @@ int main(void)
     CHECK(pending_worker(pending_worker_context) ==
         (uint32_t)AZ_REV1655_RUNTIME_OK);
     CHECK(runtime_start_calls == 1u);
-    CHECK(observed_stage == AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE);
+    CHECK(observed_stage == AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY);
     CHECK(marker_open_calls == 2u);
     CHECK(marker_write_calls == 2u);
     CHECK(marker_close_calls == 2u);

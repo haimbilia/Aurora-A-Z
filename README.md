@@ -30,9 +30,11 @@ implemented and host-tested: it models the R3/Left/Right/A state machine, maps
 `#` and `A` through `Z` to Aurora's built-in name filters, carries the mockup's
 measured 1280x720 layout, and rejects binaries that do not match the exact
 Rev1655 code probes. M1, the one-file native bootstrap and worker-entry gate, is
-complete on hardware. M2a is now underway as an observe-only input runtime. It
-does not consume controller input, draw the alphabet overlay, or mutate the
-coverflow filter.
+complete on hardware. M2a is also complete on hardware: the direct observe-only
+input hook saw every required control, including stick holds/repeats, while
+recording zero invalid events, drops, consumed keys, or filter requests. M3's
+first renderer-owned overlay canary is now being integrated. It deliberately
+keeps input observe-only and filtering disabled.
 
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary
@@ -100,9 +102,13 @@ Aurora 0.7b.2 Rev1655. It will own controller-state handling, render or inject
 its own selector overlay above the active skin, and bridge A-button selection
 to Aurora's coverflow filtering. It must not write to `Skins`. The XEX
 toolchain and Network Debugger bootstrap are operational, and M1 is complete.
-The current M2a image is deliberately limited to input observation; input
-consumption, rendering, and filter mutation remain behind later hardware
-gates.
+The hardware-passing M2a artifact is commit `06affc4`, GitHub Actions run
+`33736960588`, SHA-256
+`431FAD613E1C177B5B5A486B5B21B98AB17BB2AC2592C1A6F630DC07E68EB86E`.
+Its final telemetry recorded all seven controls, the recovered main caller,
+and clean safety fields. The current overlay canary adds only the centered
+inactive row and shadow; input consumption and filter mutation remain behind
+later hardware gates.
 
 ## Project layout
 
@@ -116,7 +122,7 @@ scripts/xzp.ps1          XZP extract/build utility
 scripts/build-openxechain.sh
                          Native Xbox cross-build entry point
 scripts/capture-nova.ps1 Repeatable hardware screenshots through NOVA
-native/                  Host-tested core, proven bootstrap, observe-only M2a
+native/                  Host-tested core, proven M1/M2a, M3 overlay canary
 source/utility/          On-console Lua: QuickView installer, API dump
 research/                Rejected skin route, kept as evidence only
 

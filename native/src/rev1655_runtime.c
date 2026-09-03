@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <xecore/xam.h>
 #include <xecore/xboxkrnl.h>
@@ -15,8 +16,11 @@
 #include <auroraaz/m2a_input_telemetry.h>
 #include <auroraaz/netdbg_bootstrap.h>
 #include <auroraaz/netdbg_lifetime_rev1655.h>
+#include <auroraaz/overlay_renderer_xbox360.h>
+#include <auroraaz/render_detours.h>
 #include <auroraaz/rev1655_hook_gate.h>
 #include <auroraaz/rev1655_runtime.h>
+#include <auroraaz/scene_gate_rev1655.h>
 
 #include "rev1655_hook_gate_private.h"
 #include "rev1655_thread_private.h"
@@ -24,9 +28,13 @@
 #define AZ_IMAGE_VALIDATION_STRIDE 0x1000u
 #define AZ_REV1655_PE_HEADER_SIZE 0x400u
 #define AZ_M2A_INPUT_TARGET_ADDRESS 0x82801D90u
+#define AZ_M2B_RENDER_MENU_TARGET_ADDRESS 0x82358A08u
+#define AZ_M2B_FONT_END_TARGET_ADDRESS 0x8247E390u
 #define AZ_INPUT_SIGNATURE_SIZE 20u
+#define AZ_RENDER_SIGNATURE_SIZE 16u
 #define AZ_OBSERVATION_DRAIN_BUDGET 8u
 #define AZ_TELEMETRY_FLUSH_TICKS 5u
+#define AZ_RENDER_TELEMETRY_FLUSH_TICKS 100u
 #define AZ_WORKER_INTERVAL_100NS (-500000LL)
 #define AZ_CONTROL_WAIT_100NS (-10000LL)
 
@@ -43,6 +51,9 @@ typedef char AzM2aInputContinuationMustMatch[
 typedef struct AzRev1655Runtime {
     AzHookArena arena;
     AzLiveHook input_hook;
+    AzLiveHook render_menu_hook;
+    AzLiveHook font_end_hook;
+    AzOverlayRenderer renderer;
     HANDLE worker_thread;
     volatile uint32_t state;
     volatile uint32_t stage;
@@ -51,13 +62,45 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t pinned_ordinal4_export;
     AzM2aInputTelemetry telemetry;
     uint32_t telemetry_flush_ticks;
+    uint32_t render_telemetry_flush_ticks;
 } AzRev1655Runtime;
+
+typedef struct AzM2bRenderMarker {
+    uint8_t magic[4];
+    uint32_t version;
+    uint32_t record_size;
+    uint32_t stage;
+    uint32_t state;
+    uint32_t render_menu_target;
+    uint32_t font_end_target;
+    uint32_t render_menu_calls;
+    uint32_t font_end_calls;
+    uint32_t last_render_result;
+    uint32_t last_note_result;
+    uint32_t last_draw_result;
+    uint32_t scene_probes;
+    uint32_t scene_allowed;
+    uint32_t scene_denied;
+    uint32_t last_scene_reason;
+    uint32_t scene_configured;
+    uint32_t renderer_validated;
+} AzM2bRenderMarker;
+
+typedef char AzM2bRenderMarkerMustBe72Bytes[
+    (sizeof(AzM2bRenderMarker) == 72u) ? 1 : -1];
 
 static AzRev1655Runtime g_runtime;
 static char g_input_telemetry_slot_a_path[] =
     AZ_M2A_INPUT_TELEMETRY_SLOT_A_PATH;
 static char g_input_telemetry_slot_b_path[] =
     AZ_M2A_INPUT_TELEMETRY_SLOT_B_PATH;
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+static char g_render_marker_path[] =
+    "game:\\Data\\Logs\\AuroraAZ-M2b.bin";
+
+/* xecorelib exports ordinal 748 but does not yet declare the prototype. */
+extern int32_t XamIsUIActive(void);
+#endif
 
 static uint32_t load_u32(const volatile uint32_t *value)
 {
@@ -269,6 +312,85 @@ static void flush_input_telemetry(uint8_t force)
             revision_token);
     }
 }
+
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+static int overlay_address_is_valid(void *address)
+{
+    return MmIsAddressValid(address) ? 1 : 0;
+}
+
+static int32_t overlay_system_ui_is_active(void)
+{
+    return XamIsUIActive();
+}
+
+/* The scene decision is sampled in the same Font::End callback that draws.
+ * It is intentionally local: observe-only input remains unable to consume. */
+static void snapshot_input_with_current_scene(AzInputDetourStatus *status)
+{
+    AzSceneGateDecision decision;
+
+    if (status == NULL) {
+        return;
+    }
+    az_rev1655_input_detour_snapshot_status(status);
+    status->scene_allows_capture =
+        az_rev1655_scene_gate_probe(&decision) != 0u ? 1u : 0u;
+}
+
+static void flush_render_telemetry(uint8_t force)
+{
+    AzRenderDetourStatus render_status;
+    AzSceneGateStatus scene_status;
+    AzM2bRenderMarker marker;
+
+    if (load_u32(&g_runtime.stage) !=
+        (uint32_t)AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
+        return;
+    }
+    if (force == 0u) {
+        if (g_runtime.render_telemetry_flush_ticks <
+            AZ_RENDER_TELEMETRY_FLUSH_TICKS) {
+            ++g_runtime.render_telemetry_flush_ticks;
+        }
+        if (g_runtime.render_telemetry_flush_ticks <
+            AZ_RENDER_TELEMETRY_FLUSH_TICKS) {
+            return;
+        }
+    }
+    g_runtime.render_telemetry_flush_ticks = 0u;
+
+    az_rev1655_render_detours_snapshot_status(&render_status);
+    az_rev1655_scene_gate_snapshot_status(&scene_status);
+    memset(&marker, 0, sizeof(marker));
+    marker.magic[0] = 'A';
+    marker.magic[1] = 'Z';
+    marker.magic[2] = 'R';
+    marker.magic[3] = '2';
+    marker.version = 1u;
+    marker.record_size = (uint32_t)sizeof(marker);
+    marker.stage = load_u32(&g_runtime.stage);
+    marker.state = load_u32(&g_runtime.state);
+    marker.render_menu_target = AZ_M2B_RENDER_MENU_TARGET_ADDRESS;
+    marker.font_end_target = AZ_M2B_FONT_END_TARGET_ADDRESS;
+    marker.render_menu_calls = render_status.render_menu_calls;
+    marker.font_end_calls = render_status.font_end_calls;
+    marker.last_render_result =
+        (uint32_t)render_status.last_render_menu_result;
+    marker.last_note_result = (uint32_t)render_status.last_note_result;
+    marker.last_draw_result = (uint32_t)render_status.last_draw_result;
+    marker.scene_probes = scene_status.probes;
+    marker.scene_allowed = scene_status.allowed;
+    marker.scene_denied = scene_status.denied;
+    marker.last_scene_reason = (uint32_t)scene_status.last_reason;
+    marker.scene_configured = scene_status.configured;
+    marker.renderer_validated = g_runtime.renderer.rev1655_validated;
+    (void)write_complete_file(
+        g_render_marker_path,
+        (const uint8_t *)&marker,
+        (uint32_t)sizeof(marker));
+}
+#endif
 
 #if defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
 void az_rev1655_runtime_test_telemetry_init(uint32_t generation)
@@ -516,6 +638,75 @@ static AzRev1655RuntimeResult validate_input_site(
     return AZ_REV1655_RUNTIME_OK;
 }
 
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+static AzRev1655RuntimeResult validate_render_sites(
+    const AzRev1655LoadedImage *image,
+    AzRev1655ResolvedHookSite *render_menu,
+    AzRev1655ResolvedHookSite *font_end)
+{
+    const AzRev1655HookPermit *permit = NULL;
+    const AzRev1655HookSiteDescriptor *descriptor;
+    AzRev1655RuntimeImportResolverContext resolver_context = {
+        {NULL, NULL},
+        {0u, 0u}
+    };
+    const AzRev1655ImportResolver import_resolver = {
+        resolve_runtime_import_target,
+        &resolver_context
+    };
+    AzRev1655HookGateResult gate_result;
+
+    if (image == NULL || render_menu == NULL || font_end == NULL) {
+        return AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED;
+    }
+
+    gate_result = az_rev1655_hook_gate_validate_with_import_resolver(
+        image,
+        &import_resolver,
+        &permit);
+    if (gate_result != AZ_REV1655_HOOK_GATE_OK || permit == NULL) {
+        return AZ_REV1655_RUNTIME_IMAGE_REJECTED;
+    }
+
+    descriptor = az_rev1655_hook_gate_site(
+        permit,
+        AZ_REV1655_HOOK_SITE_RENDER_MENU);
+    if (descriptor == NULL ||
+        az_rev1655_hook_gate_resolve_site(
+            permit,
+            descriptor,
+            image,
+            render_menu) != AZ_REV1655_HOOK_GATE_OK ||
+        render_menu->target_address !=
+            AZ_M2B_RENDER_MENU_TARGET_ADDRESS ||
+        render_menu->expected_instruction !=
+            AZ_REV1655_RENDER_MENU_FIRST_INSTRUCTION ||
+        render_menu->complete_signature_size !=
+            (size_t)AZ_RENDER_SIGNATURE_SIZE) {
+        return AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED;
+    }
+
+    descriptor = az_rev1655_hook_gate_site(
+        permit,
+        AZ_REV1655_HOOK_SITE_FONT_END);
+    if (descriptor == NULL ||
+        az_rev1655_hook_gate_resolve_site(
+            permit,
+            descriptor,
+            image,
+            font_end) != AZ_REV1655_HOOK_GATE_OK ||
+        font_end->target_address != AZ_M2B_FONT_END_TARGET_ADDRESS ||
+        font_end->expected_instruction !=
+            AZ_REV1655_FONT_END_FIRST_INSTRUCTION ||
+        font_end->complete_signature_size !=
+            (size_t)AZ_RENDER_SIGNATURE_SIZE) {
+        return AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED;
+    }
+
+    return AZ_REV1655_RUNTIME_OK;
+}
+#endif
+
 AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
     uint32_t expected_ordinal4_export)
 {
@@ -740,16 +931,23 @@ static uint32_t input_observe_worker(void *context)
 
     if (state == (uint32_t)AZ_REV1655_RUNTIME_RUNNING) {
         DbgPrint(
-            "AuroraAZ: M2a input observe active target=%08X "
+            "AuroraAZ: runtime active stage=%u input=%08X "
             "consume=disabled\n",
+            (unsigned int)load_u32(&g_runtime.stage),
             (unsigned int)AZ_M2A_INPUT_TARGET_ADDRESS);
         flush_input_telemetry(1u);
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        flush_render_telemetry(1u);
+#endif
     }
 
     while (load_u32(&g_runtime.state) ==
            (uint32_t)AZ_REV1655_RUNTIME_RUNNING) {
         (void)drain_observation_pass();
         flush_input_telemetry(0u);
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        flush_render_telemetry(0u);
+#endif
         wait_for_input();
     }
 
@@ -889,13 +1087,180 @@ static AzRev1655RuntimeResult start_input_observe(void)
     return AZ_REV1655_RUNTIME_OK;
 }
 
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+static void retain_published_hooks_fail_closed(uint8_t render_verified)
+{
+    /* Direct hooks have no admission counter. Once any one-word branch has
+     * been published, retain all backing code/state until cold title exit;
+     * never race a returning callback with hot rollback or reinitialization. */
+    az_rev1655_input_detour_publish_verification(
+        1u,
+        g_runtime.input_hook.installed != 0u ? 1u : 0u,
+        render_verified,
+        0u);
+    if (g_runtime.input_hook.installed != 0u) {
+        (void)az_rev1655_input_detour_request_stage(
+            AZ_INPUT_DETOUR_OBSERVE);
+    }
+    store_u32(
+        &g_runtime.stage,
+        (uint32_t)AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY);
+    store_u32(
+        &g_runtime.state,
+        (uint32_t)AZ_REV1655_RUNTIME_RUNNING);
+}
+
+static AzRev1655RuntimeResult start_overlay_canary(void)
+{
+    AzRev1655LoadedImage image;
+    AzRev1655ResolvedHookSite input_site;
+    AzRev1655ResolvedHookSite render_menu_site;
+    AzRev1655ResolvedHookSite font_end_site;
+    AzRev1655RenderDetourBindings bindings;
+    AzRev1655RuntimeResult validation;
+    AzOverlayRendererResult renderer_result;
+    AzSceneGateConfigureResult scene_result;
+    AzRenderDetourResult render_detour_result;
+    AzHookRuntimeResult hook_result;
+    AzInputDetourResult input_result;
+    AzRev1655ThreadCreateResult create_result;
+    HANDLE worker_thread = NULL;
+
+    validation = validate_input_site(&image, &input_site, 1u);
+    if (validation != AZ_REV1655_RUNTIME_OK) {
+        return validation;
+    }
+    validation = validate_render_sites(
+        &image,
+        &render_menu_site,
+        &font_end_site);
+    if (validation != AZ_REV1655_RUNTIME_OK) {
+        DbgPrint("AuroraAZ: M2b render sites rejected\n");
+        return validation;
+    }
+
+    renderer_result = az_overlay_renderer_init_rev1655(
+        &g_runtime.renderer,
+        (const uint8_t *)(uintptr_t)AZ_REV1655_TEXT_BASE,
+        (size_t)AZ_REV1655_TEXT_SIZE,
+        AZ_REV1655_TEXT_BASE,
+        1u,
+        &overlay_address_is_valid,
+        &overlay_system_ui_is_active);
+    if (renderer_result != AZ_OVERLAY_RENDERER_OK) {
+        DbgPrint(
+            "AuroraAZ: M2b renderer rejected: %s\n",
+            az_overlay_renderer_result_name(renderer_result));
+        return AZ_REV1655_RUNTIME_RENDER_INIT_FAILED;
+    }
+
+    az_rev1655_scene_gate_reset();
+    scene_result = az_rev1655_scene_gate_configure_default(1u);
+    if (scene_result != AZ_SCENE_GATE_CONFIGURE_OK) {
+        DbgPrint(
+            "AuroraAZ: M2b scene gate rejected: %s\n",
+            az_scene_gate_configure_result_name(scene_result));
+        return AZ_REV1655_RUNTIME_SCENE_GATE_FAILED;
+    }
+
+    memset(&bindings, 0, sizeof(bindings));
+    bindings.renderer = &g_runtime.renderer;
+    bindings.note_overlay = &az_overlay_renderer_note_render_menu;
+    bindings.note_input = &az_rev1655_input_detour_note_render;
+    bindings.try_draw = &az_overlay_renderer_try_draw;
+    bindings.release_texture = &az_overlay_renderer_release_texture;
+    bindings.snapshot_selector =
+        &az_rev1655_input_detour_snapshot_selector;
+    bindings.snapshot_input_status = &snapshot_input_with_current_scene;
+    bindings.viewport_width = 1280.0f;
+    bindings.viewport_height = 720.0f;
+    az_rev1655_render_detours_reset();
+    render_detour_result = az_rev1655_render_detours_configure(&bindings);
+    if (render_detour_result != AZ_RENDER_DETOUR_OK) {
+        DbgPrint(
+            "AuroraAZ: M2b detour bridge rejected: %s\n",
+            az_render_detour_result_name(render_detour_result));
+        return AZ_REV1655_RUNTIME_RENDER_DETOUR_FAILED;
+    }
+
+    if (az_rev1655_thread_wrapper_is_valid() == 0u) {
+        return AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED;
+    }
+    az_rev1655_input_detour_reset();
+    az_rev1655_input_detour_publish_verification(1u, 0u, 0u, 0u);
+    create_result = az_rev1655_thread_create(
+        (void *)(uintptr_t)&input_observe_worker,
+        NULL,
+        &worker_thread);
+    if (create_result != AZ_REV1655_THREAD_CREATE_OK) {
+        az_rev1655_input_detour_publish_verification(0u, 0u, 0u, 0u);
+        return create_result ==
+            AZ_REV1655_THREAD_CREATE_REVISION_MISMATCH ?
+                AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED :
+                AZ_REV1655_RUNTIME_THREAD_CREATE_FAILED;
+    }
+    g_runtime.worker_thread = worker_thread;
+
+    hook_result = az_live_hook_install_direct(
+        input_site.target_address,
+        input_site.expected_instruction,
+        (const void *)(uintptr_t)&az_rev1655_input_direct_detour_entry,
+        &g_runtime.input_hook);
+    if (hook_result != AZ_HOOK_RUNTIME_OK) {
+        az_rev1655_input_detour_publish_verification(0u, 0u, 0u, 0u);
+        stop_starting_worker();
+        return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+    }
+
+    hook_result = az_live_hook_install_direct(
+        render_menu_site.target_address,
+        render_menu_site.expected_instruction,
+        (const void *)(uintptr_t)
+            &az_rev1655_render_menu_direct_detour_entry,
+        &g_runtime.render_menu_hook);
+    if (hook_result != AZ_HOOK_RUNTIME_OK) {
+        retain_published_hooks_fail_closed(0u);
+        return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+    }
+
+    hook_result = az_live_hook_install_direct(
+        font_end_site.target_address,
+        font_end_site.expected_instruction,
+        (const void *)(uintptr_t)&az_rev1655_font_end_direct_detour_entry,
+        &g_runtime.font_end_hook);
+    if (hook_result != AZ_HOOK_RUNTIME_OK) {
+        retain_published_hooks_fail_closed(0u);
+        return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+    }
+
+    /* The visible canary proves rendering only. Input remains OBSERVE and
+     * filter-consumer verification remains false, so no control is owned. */
+    az_rev1655_input_detour_publish_verification(1u, 1u, 1u, 0u);
+    input_result = az_rev1655_input_detour_request_stage(
+        AZ_INPUT_DETOUR_OBSERVE);
+    if (input_result != AZ_INPUT_DETOUR_OK) {
+        retain_published_hooks_fail_closed(1u);
+        return AZ_REV1655_RUNTIME_DETOUR_STAGE_FAILED;
+    }
+
+    store_u32(
+        &g_runtime.stage,
+        (uint32_t)AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY);
+    store_u32(
+        &g_runtime.state,
+        (uint32_t)AZ_REV1655_RUNTIME_RUNNING);
+    return AZ_REV1655_RUNTIME_OK;
+}
+#endif
+
 AzRev1655RuntimeResult az_rev1655_runtime_start(
     AzRev1655RuntimeStage stage)
 {
     uint32_t expected;
     AzRev1655RuntimeResult result;
 
-    if (stage != AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE) {
+    if (stage != AZ_REV1655_RUNTIME_STAGE_INPUT_OBSERVE &&
+        stage != AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
         return AZ_REV1655_RUNTIME_BAD_STAGE;
     }
     if (load_u32(&g_runtime.lifetime_state) != AZ_LIFETIME_PINNED ||
@@ -926,8 +1291,25 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     store_u32(&g_runtime.observations_logged, 0u);
     az_m2a_input_telemetry_init(&g_runtime.telemetry);
     g_runtime.telemetry_flush_ticks = 0u;
-    result = start_input_observe();
-    if (result != AZ_REV1655_RUNTIME_OK) {
+    g_runtime.render_telemetry_flush_ticks = 0u;
+#if defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+    if (stage == AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
+        result = AZ_REV1655_RUNTIME_BAD_STAGE;
+    }
+    else {
+        result = start_input_observe();
+    }
+#else
+    if (stage == AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
+        result = start_overlay_canary();
+    }
+    else {
+        result = start_input_observe();
+    }
+#endif
+    if (result != AZ_REV1655_RUNTIME_OK &&
+        load_u32(&g_runtime.state) ==
+            (uint32_t)AZ_REV1655_RUNTIME_STARTING) {
         store_u32(
             &g_runtime.stage,
             (uint32_t)AZ_REV1655_RUNTIME_STAGE_DISABLED);
@@ -940,6 +1322,13 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
 
 void az_rev1655_runtime_shutdown(void)
 {
+    /* The overlay canary uses direct one-word hooks without an admission
+     * relay. It is intentionally title-lifetime-only and cold-restart-only. */
+    if (load_u32(&g_runtime.stage) ==
+        (uint32_t)AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
+        return;
+    }
+
     for (;;) {
         uint32_t state = load_u32(&g_runtime.state);
 
@@ -1020,6 +1409,14 @@ const char *az_rev1655_runtime_result_name(AzRev1655RuntimeResult result)
         return "hook-install-failed";
     case AZ_REV1655_RUNTIME_DETOUR_STAGE_FAILED:
         return "detour-stage-failed";
+    case AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED:
+        return "render-site-rejected";
+    case AZ_REV1655_RUNTIME_RENDER_INIT_FAILED:
+        return "render-init-failed";
+    case AZ_REV1655_RUNTIME_SCENE_GATE_FAILED:
+        return "scene-gate-failed";
+    case AZ_REV1655_RUNTIME_RENDER_DETOUR_FAILED:
+        return "render-detour-failed";
     default:
         return "unknown";
     }

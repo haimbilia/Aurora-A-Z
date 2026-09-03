@@ -237,8 +237,13 @@ void az_rev1655_font_end_detour_c(void *font, uint32_t caller_lr)
             memset(&selector, 0, sizeof(selector));
             memset(&input_status, 0, sizeof(input_status));
             memset(&request, 0, sizeof(request));
-            g_render_detours.bindings.snapshot_selector(&selector);
-            g_render_detours.bindings.snapshot_input_status(&input_status);
+            /* Only the recovered final coverflow caller may trigger the XUI
+             * focus probe used by the default snapshot callback. */
+            if (caller_lr == AZ_REV1655_FONT_END_CALLER_LR) {
+                g_render_detours.bindings.snapshot_selector(&selector);
+                g_render_detours.bindings.snapshot_input_status(
+                    &input_status);
+            }
 
             request.font = font;
             request.caller_lr = caller_lr;

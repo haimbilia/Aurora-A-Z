@@ -38,6 +38,20 @@ az_rev1655_render_menu_detour_entry:
     mtctr %r0
     bctr
 
+    .globl az_rev1655_render_menu_direct_detour_entry
+az_rev1655_render_menu_direct_detour_entry:
+    /* Direct one-word hook: preserve Aurora's caller LR and result. */
+    mflr %r12
+    stwu %r1, -112(%r1)
+    stw %r12, 104(%r1)
+    bl az_rev1655_render_menu_detour_c
+    stw %r3, 100(%r1)
+    lwz %r12, 104(%r1)
+    lwz %r3, 100(%r1)
+    addi %r1, %r1, 112
+    mtlr %r12
+    blr
+
     .globl az_rev1655_font_end_detour_entry
 az_rev1655_font_end_detour_entry:
     /* Pass the untouched Aurora caller LR as the C bridge's r4 argument. */
@@ -56,6 +70,18 @@ az_rev1655_font_end_detour_entry:
     addi %r0, %r11, -AZ_HOOK_RESIDENT_EXIT_ADMISSION_DELTA
     mtctr %r0
     bctr
+
+    .globl az_rev1655_font_end_direct_detour_entry
+az_rev1655_font_end_direct_detour_entry:
+    /* Pass the untouched Aurora caller LR to the existing C bridge. */
+    mflr %r4
+    stwu %r1, -112(%r1)
+    stw %r4, 104(%r1)
+    bl az_rev1655_font_end_detour_c
+    lwz %r12, 104(%r1)
+    addi %r1, %r1, 112
+    mtlr %r12
+    blr
 
 /*
  * Exact Rev1655 trampolines. A normal call from the C bridge deliberately

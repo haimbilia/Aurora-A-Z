@@ -140,6 +140,11 @@ void az_rev1655_render_detours_snapshot_status(
 int32_t az_rev1655_render_menu_detour_entry(void *game_content_manager);
 void az_rev1655_font_end_detour_entry(void *font);
 
+/* Low-linked direct-entry variants; no resident admission pointer in r0. */
+int32_t az_rev1655_render_menu_direct_detour_entry(
+    void *game_content_manager);
+void az_rev1655_font_end_direct_detour_entry(void *font);
+
 /* C bridges called by render_detour_shims.S; public for host tests only. */
 int32_t az_rev1655_render_menu_detour_c(void *game_content_manager);
 void az_rev1655_font_end_detour_c(void *font, uint32_t caller_lr);
