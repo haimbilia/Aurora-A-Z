@@ -51,6 +51,9 @@
 - Record the successful M3a hardware interaction test and add the M3b
   fail-closed filter foundation: aligned host object layouts, exact provenance,
   pristine pre-hook binding, and a read-only registry/snapshot probe marker.
+- Add the lab-only one-shot apply gate after M3b passed on hardware. A single
+  A press may enqueue Aurora's native additional-filter job; the filter gate
+  then revokes immediately to prevent repeated expensive sort jobs.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

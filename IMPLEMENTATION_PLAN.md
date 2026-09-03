@@ -72,10 +72,13 @@ commit `c86ad0c`, run `33747222158`, and SHA-256
 The complete centered row rendered without diagonal clipping. R3 entered at
 `#`; D-pad and left-stick Left/Right moved the visible highlight; RB retained
 Aurora's stock menu. A was safely consumed and inert because filter
-verification remained false. M3b now adds pre-hook filter binding and a
-read-only registry/snapshot probe; it must not enable live apply. All probes
-remain confined to `Hdd1:\AuroraAZLab`; production Aurora, skins, databases,
-and `launch.ini` remain untouched.
+verification remained false. M3b then passed on hardware: marker `AZF3` v1
+reported bind `idle`, probe `idle`, one successful probe, runtime verified,
+and no disabled/error flag. The next lab-only build arms exactly one live A
+enqueue after that probe and revokes the filter gate immediately after the
+first scheduling attempt. All probes remain confined to
+`Hdd1:\AuroraAZLab`; production Aurora, skins, databases, and `launch.ini`
+remain untouched.
 
 ## M0 — Stabilize and measure
 

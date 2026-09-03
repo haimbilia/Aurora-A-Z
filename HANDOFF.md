@@ -28,9 +28,12 @@ M3a interaction passed on hardware on 2026-09-03 with commit `c86ad0c`, run
 The full centered row rendered without diagonal clipping. R3 selected `#`,
 D-pad and left-stick Left/Right moved the highlight, and RB remained stock.
 A was deliberately consumed but inert because the filter gate stayed false.
-The next gate is M3b pre-hook bind plus a read-only all-27 registry and active
-aggregate copy/validate/destroy probe; do not enable live apply before it
-passes.
+M3b pre-hook bind plus the read-only all-27 registry and active aggregate
+copy/validate/destroy probe passed immediately afterward. `AZF3` v1 reported
+`bind_result=1` (`idle`), `probe_result=1` (`idle`), `probe_count=1`,
+`runtime_verified=1`, and `disabled=0`. The next build may arm exactly one
+lab-only A enqueue, then must revoke the filter gate after its first scheduling
+attempt; normal repeated apply is not yet authorized.
 
 ### Current console state
 
