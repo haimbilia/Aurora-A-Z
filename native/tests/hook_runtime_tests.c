@@ -391,6 +391,8 @@ void MmSetAddressProtect(
         0);
     CHECK(region_size == sizeof(uint32_t));
 
+    query_protect_result = protect_bits;
+
     if (protect_bits == PAGE_EXECUTE_READWRITE &&
         mutate_on_next_write_enable != 0u) {
         volatile uint32_t *target = (volatile uint32_t *)base_address;
@@ -933,14 +935,16 @@ static void test_direct_install_and_remove_need_no_arena(void)
     CHECK(hook.target_restored == 1u);
     CHECK(hook.direct == 1u);
     CHECK(az_live_hook_can_unload(&hook) == 1u);
-    CHECK(event_count == 4u);
+    CHECK(event_count == 5u);
     check_event(0u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), PAGE_EXECUTE_READWRITE);
-    check_event(1u, TEST_EVENT_SWEEP_DCACHE, TEST_TARGET_ADDRESS,
+    check_event(1u, TEST_EVENT_QUERY_PROTECT, TEST_TARGET_ADDRESS,
+        0u, PAGE_EXECUTE_READWRITE);
+    check_event(2u, TEST_EVENT_SWEEP_DCACHE, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), 0u);
-    check_event(2u, TEST_EVENT_SWEEP_ICACHE, TEST_TARGET_ADDRESS,
+    check_event(3u, TEST_EVENT_SWEEP_ICACHE, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), 0u);
-    check_event(3u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
+    check_event(4u, TEST_EVENT_SET_PROTECT, TEST_TARGET_ADDRESS,
         sizeof(uint32_t), TEST_OLD_PROTECT);
 }
 
@@ -1177,7 +1181,8 @@ static void test_result_names(void)
         { AZ_HOOK_RUNTIME_TARGET_CHANGED, "target-changed" },
         { AZ_HOOK_RUNTIME_PLAN_FAILED, "plan-failed" },
         { AZ_HOOK_RUNTIME_QUIESCING, "quiescing" },
-        { AZ_HOOK_RUNTIME_NOT_INSTALLED, "not-installed" }
+        { AZ_HOOK_RUNTIME_NOT_INSTALLED, "not-installed" },
+        { AZ_HOOK_RUNTIME_PROTECT_FAILED, "protect-failed" }
     };
     size_t index;
 

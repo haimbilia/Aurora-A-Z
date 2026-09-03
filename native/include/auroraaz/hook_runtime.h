@@ -44,7 +44,8 @@ typedef enum AzHookRuntimeResult {
     AZ_HOOK_RUNTIME_TARGET_CHANGED,
     AZ_HOOK_RUNTIME_PLAN_FAILED,
     AZ_HOOK_RUNTIME_QUIESCING,
-    AZ_HOOK_RUNTIME_NOT_INSTALLED
+    AZ_HOOK_RUNTIME_NOT_INSTALLED,
+    AZ_HOOK_RUNTIME_PROTECT_FAILED
 } AzHookRuntimeResult;
 
 typedef struct AzHookArena {
@@ -67,6 +68,9 @@ typedef struct AzHookArenaDiagnostics {
     uint32_t validation_failures;
     uint32_t protection_before;
     uint32_t protection_after;
+    uint32_t target_address;
+    uint32_t target_protection_before;
+    uint32_t target_protection_after;
 } AzHookArenaDiagnostics;
 
 #define AZ_HOOK_ARENA_DIAG_BASE_ABOVE_32BIT 0x00000001u

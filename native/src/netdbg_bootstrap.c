@@ -28,10 +28,13 @@ typedef struct AzM2aMarker {
     uint32_t arena_validation_failures;
     uint32_t arena_protection_before;
     uint32_t arena_protection_after;
+    uint32_t target_address;
+    uint32_t target_protection_before;
+    uint32_t target_protection_after;
 } AzM2aMarker;
 
-typedef char AzM2aMarkerMustBe36Bytes[
-    (sizeof(AzM2aMarker) == 36u) ? 1 : -1];
+typedef char AzM2aMarkerMustBe48Bytes[
+    (sizeof(AzM2aMarker) == 48u) ? 1 : -1];
 
 static uint32_t g_bootstrap_claimed = 0u;
 static char g_m2a_marker_path[] =
@@ -43,14 +46,17 @@ static void write_m2a_marker(uint32_t phase, uint32_t runtime_result)
         az_hook_arena_diagnostics();
     const AzM2aMarker marker = {
         {'A', 'Z', 'M', '2'},
-        2u,
+        3u,
         (uint32_t)sizeof(AzM2aMarker),
         phase,
         runtime_result,
         diagnostics.embedded_base,
         diagnostics.validation_failures,
         diagnostics.protection_before,
-        diagnostics.protection_after
+        diagnostics.protection_after,
+        diagnostics.target_address,
+        diagnostics.target_protection_before,
+        diagnostics.target_protection_after
     };
     HANDLE file;
     uint32_t bytes_written = 0u;

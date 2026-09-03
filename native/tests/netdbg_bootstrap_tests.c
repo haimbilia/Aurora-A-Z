@@ -31,6 +31,9 @@ typedef struct TestM2aMarker {
     uint32_t arena_validation_failures;
     uint32_t arena_protection_before;
     uint32_t arena_protection_after;
+    uint32_t target_address;
+    uint32_t target_protection_before;
+    uint32_t target_protection_after;
 } TestM2aMarker;
 
 const uint32_t g_auroraaz_test_xapi_thread_startup[8] = {
@@ -91,7 +94,10 @@ AzHookArenaDiagnostics az_hook_arena_diagnostics(void)
         0x82D90000u,
         AZ_HOOK_ARENA_DIAG_PROTECT_MISMATCH,
         0x20u,
-        0x20u
+        0x20u,
+        0x82801D90u,
+        0x20u,
+        0x40u
     };
     return diagnostics;
 }
@@ -222,7 +228,7 @@ int main(void)
     CHECK(marker_write_calls == 2u);
     CHECK(marker_close_calls == 2u);
     CHECK(memcmp(observed_markers[0].magic, "AZM2", 4u) == 0);
-    CHECK(observed_markers[0].version == 2u);
+    CHECK(observed_markers[0].version == 3u);
     CHECK(observed_markers[0].record_size ==
         (uint32_t)sizeof(TestM2aMarker));
     CHECK(observed_markers[0].phase == 1u);
@@ -235,6 +241,9 @@ int main(void)
         AZ_HOOK_ARENA_DIAG_PROTECT_MISMATCH);
     CHECK(observed_markers[1].arena_protection_before == 0x20u);
     CHECK(observed_markers[1].arena_protection_after == 0x20u);
+    CHECK(observed_markers[1].target_address == 0x82801D90u);
+    CHECK(observed_markers[1].target_protection_before == 0x20u);
+    CHECK(observed_markers[1].target_protection_after == 0x40u);
 
     CHECK(DllMain(NULL, 1u, NULL) == 1);
     CHECK(close_calls == 1u);

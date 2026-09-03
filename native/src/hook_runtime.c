@@ -28,7 +28,8 @@ __declspec(allocate(".azhook")) __declspec(align(4096))
 __attribute__((section(".azhook"), used, aligned(4096)))
 #endif
 static uint8_t g_auroraaz_hook_arena_storage[AZ_HOOK_ARENA_SIZE] = {0};
-static AzHookArenaDiagnostics g_arena_diagnostics = {0u, 0u, 0u, 0u};
+static AzHookArenaDiagnostics g_arena_diagnostics = {
+    0u, 0u, 0u, 0u, 0u, 0u, 0u};
 
 typedef struct AzResidentAdmission {
     volatile uint32_t active_entries;
@@ -512,6 +513,7 @@ AzHookRuntimeResult az_live_hook_install_direct(
 {
     volatile uint32_t *target;
     AzPpcResult branch_result;
+    uint32_t write_protection;
     uint32_t compare;
     int exchanged;
 
@@ -548,10 +550,24 @@ AzHookRuntimeResult az_live_hook_install_direct(
 
     hook->old_protect =
         MmQueryAddressProtect((void *)(uintptr_t)target_address);
+    g_arena_diagnostics.target_address = target_address;
+    g_arena_diagnostics.target_protection_before = hook->old_protect;
+    g_arena_diagnostics.target_protection_after = 0u;
     MmSetAddressProtect(
         (void *)(uintptr_t)target_address,
         (uint32_t)sizeof(uint32_t),
         PAGE_EXECUTE_READWRITE);
+    write_protection =
+        MmQueryAddressProtect((void *)(uintptr_t)target_address);
+    g_arena_diagnostics.target_protection_after = write_protection;
+    if ((write_protection & 0xFFu) != PAGE_EXECUTE_READWRITE) {
+        MmSetAddressProtect(
+            (void *)(uintptr_t)target_address,
+            (uint32_t)sizeof(uint32_t),
+            hook->old_protect);
+        clear_hook(hook);
+        return AZ_HOOK_RUNTIME_PROTECT_FAILED;
+    }
     compare = expected_instruction;
     exchanged = __atomic_compare_exchange_n(
         target,
@@ -586,6 +602,7 @@ AzHookRuntimeResult az_live_hook_remove(AzLiveHook *hook)
 {
     volatile uint32_t *target;
     AzResidentAdmission *admission;
+    uint32_t write_protection;
     uint32_t compare;
     int exchanged;
 
@@ -607,6 +624,15 @@ AzHookRuntimeResult az_live_hook_remove(AzLiveHook *hook)
             (void *)(uintptr_t)hook->plan.target_address,
             (uint32_t)sizeof(uint32_t),
             PAGE_EXECUTE_READWRITE);
+        write_protection = MmQueryAddressProtect(
+            (void *)(uintptr_t)hook->plan.target_address);
+        if ((write_protection & 0xFFu) != PAGE_EXECUTE_READWRITE) {
+            MmSetAddressProtect(
+                (void *)(uintptr_t)hook->plan.target_address,
+                (uint32_t)sizeof(uint32_t),
+                hook->old_protect);
+            return AZ_HOOK_RUNTIME_PROTECT_FAILED;
+        }
         compare = hook->plan.target_branch;
         exchanged = __atomic_compare_exchange_n(
             target,
@@ -756,6 +782,8 @@ const char *az_hook_runtime_result_name(AzHookRuntimeResult result)
         return "quiescing";
     case AZ_HOOK_RUNTIME_NOT_INSTALLED:
         return "not-installed";
+    case AZ_HOOK_RUNTIME_PROTECT_FAILED:
+        return "protect-failed";
     default:
         return "unknown";
     }
