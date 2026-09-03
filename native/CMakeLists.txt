@@ -142,6 +142,20 @@ if(BUILD_TESTING)
     target_link_libraries(auroraaz_m2a_input_telemetry_tests
         PRIVATE auroraaz_core)
 
+    add_executable(auroraaz_m2b_scene_telemetry_tests
+        tests/m2b_scene_telemetry_tests.c
+        src/m2b_scene_telemetry.c)
+    target_link_libraries(auroraaz_m2b_scene_telemetry_tests
+        PRIVATE auroraaz_core)
+
+    add_executable(auroraaz_render_observe_rev1655_tests
+        tests/render_observe_rev1655_tests.c
+        src/render_observe_rev1655.c)
+    target_link_libraries(auroraaz_render_observe_rev1655_tests
+        PRIVATE auroraaz_core)
+    target_compile_definitions(auroraaz_render_observe_rev1655_tests
+        PRIVATE AURORAAZ_RENDER_OBSERVE_TEST_HOOKS=1)
+
     set(AURORAAZ_TEST_TARGETS
         auroraaz_core_tests
         auroraaz_input_tests
@@ -160,6 +174,8 @@ if(BUILD_TESTING)
         auroraaz_render_detours_tests
         auroraaz_scene_gate_rev1655_tests
         auroraaz_m2a_input_telemetry_tests
+        auroraaz_m2b_scene_telemetry_tests
+        auroraaz_render_observe_rev1655_tests
     )
 
     # These tests use assert() as their executable check. Keep assertions
@@ -200,6 +216,10 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_scene_gate_rev1655_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_m2a_input_telemetry_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_m2b_scene_telemetry_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_render_observe_rev1655_tests
             PRIVATE /W4 /WX)
     else()
         target_compile_options(auroraaz_core_tests PRIVATE
@@ -253,6 +273,12 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_m2a_input_telemetry_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_m2b_scene_telemetry_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_render_observe_rev1655_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
     endif()
 
     add_test(NAME auroraaz_core_tests COMMAND auroraaz_core_tests)
@@ -285,4 +311,8 @@ if(BUILD_TESTING)
         COMMAND auroraaz_scene_gate_rev1655_tests)
     add_test(NAME auroraaz_m2a_input_telemetry_tests
         COMMAND auroraaz_m2a_input_telemetry_tests)
+    add_test(NAME auroraaz_m2b_scene_telemetry_tests
+        COMMAND auroraaz_m2b_scene_telemetry_tests)
+    add_test(NAME auroraaz_render_observe_rev1655_tests
+        COMMAND auroraaz_render_observe_rev1655_tests)
 endif()
