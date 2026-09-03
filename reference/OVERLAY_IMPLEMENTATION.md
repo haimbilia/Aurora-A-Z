@@ -308,20 +308,18 @@ Atlas ink appears at screen Y `569..602`, with baseline Y `597`. These constants
 are within a few pixels of the visual contract and should be tuned only from a
 NOVA comparison.
 
-The ATG vertex shader subtracts `0.5` from each input position before writing
-clip position. The recommended CPU mapping from logical pixel edges to its
-input is:
+The ATG font path disables `D3DRS_VIEWPORTENABLE`. Its vertex shader applies
+only the half-pixel correction `In.Pos.xy - 0.5`, matching ATG's own DrawText
+implementation, which writes raw screen-pixel positions. Submit logical pixel
+edges directly:
 
 ```c
-vx = (2.0f * pixel_x / screen_width) - 0.5f;
-vy = 1.5f - (2.0f * pixel_y / screen_height);
+vx = pixel_x;
+vy = pixel_y;
 ```
 
-This mapping is a strong inference from the recovered shader and the font
-object's stored screen width/height. It is the first pixel-canary item: if the
-quad is clipped or occupies only part of the screen, log the four generated
-positions and test the raw-pixel convention once. Do not bury that distinction
-in an arbitrary scale constant.
+Do not normalize to clip space or invert Y. Doing so compresses the complete
+922x33 row to roughly a single screen pixel in this disabled-viewport path.
 
 For the full atlas quad, submit vertices in triangle-strip order:
 

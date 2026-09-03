@@ -40,6 +40,8 @@
 - Correct the recovered vertex-constant ABI: target the vertex bank rather than
   the pixel bank and publish the mandatory 64-bit dirty mask for c1/c2 so the
   font shader actually receives the overlay constants.
+- Match the ATG font pipeline's disabled viewport transform by submitting raw
+  screen-pixel vertex positions instead of clip-space-normalized coordinates.
 
 ## 0.1.0 - 2026-09-01 (deprecated)
 

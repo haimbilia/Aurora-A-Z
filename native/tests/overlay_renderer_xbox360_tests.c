@@ -249,8 +249,8 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    if (!close_enough(g_draw_vertices[1][0].x, -0.2203125f) ||
-        !close_enough(g_draw_vertices[1][0].y, -0.0805556f) ||
+    if (!close_enough(g_draw_vertices[1][0].x, 179.0f) ||
+        !close_enough(g_draw_vertices[1][0].y, 569.0f) ||
         g_draw_vertices[1][0].u != 0 ||
         g_draw_vertices[1][0].v != 20 ||
         g_draw_vertices[1][3].u != 922 ||
@@ -316,8 +316,8 @@ int main(void)
         g_set_texture_count != 2u ||
         g_set_constant_count != 4u ||
         g_draw_count != 2u ||
-        !close_enough(g_draw_vertices[1][0].x, -0.2203125f) ||
-        !close_enough(g_draw_vertices[1][0].y, 0.0645833f) ||
+        !close_enough(g_draw_vertices[1][0].x, 89.5f) ||
+        !close_enough(g_draw_vertices[1][0].y, 344.5f) ||
         g_draw_vertices[1][0].u != 0 ||
         g_draw_vertices[1][3].u != 922) {
         return EXIT_FAILURE;

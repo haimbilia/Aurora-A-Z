@@ -514,16 +514,6 @@ static int quad_is_valid(
     return 1;
 }
 
-static float position_x(float pixel_x, float viewport_width)
-{
-    return (2.0f * pixel_x / viewport_width) - 0.5f;
-}
-
-static float position_y(float pixel_y, float viewport_height)
-{
-    return 1.5f - (2.0f * pixel_y / viewport_height);
-}
-
 static void color_to_float4(uint32_t color, float *rgba)
 {
     const float scale = 1.0f / 255.0f;
@@ -642,26 +632,26 @@ static AzOverlayRendererResult draw_quad(
     source_right = (int16_t)(quad->source_x + quad->source_width);
     source_bottom = (int16_t)(quad->source_y + quad->source_height);
 
-    vertices[0].x = position_x(left, request->viewport_width);
-    vertices[0].y = position_y(top, request->viewport_height);
+    vertices[0].x = left;
+    vertices[0].y = top;
     vertices[0].u = source_left;
     vertices[0].v = source_top;
     vertices[0].channel_selector = 0u;
 
-    vertices[1].x = position_x(right, request->viewport_width);
-    vertices[1].y = position_y(top, request->viewport_height);
+    vertices[1].x = right;
+    vertices[1].y = top;
     vertices[1].u = source_right;
     vertices[1].v = source_top;
     vertices[1].channel_selector = 0u;
 
-    vertices[2].x = position_x(left, request->viewport_width);
-    vertices[2].y = position_y(bottom, request->viewport_height);
+    vertices[2].x = left;
+    vertices[2].y = bottom;
     vertices[2].u = source_left;
     vertices[2].v = source_bottom;
     vertices[2].channel_selector = 0u;
 
-    vertices[3].x = position_x(right, request->viewport_width);
-    vertices[3].y = position_y(bottom, request->viewport_height);
+    vertices[3].x = right;
+    vertices[3].y = bottom;
     vertices[3].u = source_right;
     vertices[3].v = source_bottom;
     vertices[3].channel_selector = 0u;
