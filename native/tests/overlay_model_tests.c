@@ -31,9 +31,10 @@ int main(void)
         model.quads[0].color != 0xA0000000u ||
         !close_enough(model.quads[0].width, 1280.0f) ||
         !close_enough(model.quads[0].height, 720.0f) ||
-        !close_enough(model.quads[2].x, 141.0f) ||
+        !close_enough(model.quads[2].x, 209.0f) ||
         !close_enough(model.quads[2].y, 344.0f) ||
-        !close_enough(model.quads[2].width, 998.0f) ||
+        !close_enough(model.quads[2].source_x, 68.0f) ||
+        !close_enough(model.quads[2].width, 930.0f) ||
         !close_enough(model.quads[2].height, 33.0f) ||
         !close_enough(model.quads[4].x, 131.76f) ||
         !close_enough(model.quads[4].y, 339.38f) ||
@@ -45,9 +46,17 @@ int main(void)
 
     az_overlay_model_build(
         1280.0f, 720.0f, 1u, 1u, 1u, 0u, 0u, 0.0f, &model);
-    if (model.count != 5u ||
-        !close_enough(model.quads[4].x, 213.78f) ||
-        !close_enough(model.quads[4].width, 29.44f)) {
+    if (model.count != 7u ||
+        model.quads[1].layer != AZ_OVERLAY_LAYER_SHADOW ||
+        model.quads[2].layer != AZ_OVERLAY_LAYER_SHADOW ||
+        model.quads[3].layer != AZ_OVERLAY_LAYER_ROW ||
+        model.quads[4].layer != AZ_OVERLAY_LAYER_ROW ||
+        model.quads[5].layer != AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
+        model.quads[6].layer != AZ_OVERLAY_LAYER_SELECTED ||
+        !close_enough(model.quads[3].source_width, 74.0f) ||
+        !close_enough(model.quads[4].source_x, 101.0f) ||
+        !close_enough(model.quads[6].x, 213.78f) ||
+        !close_enough(model.quads[6].width, 29.44f)) {
         return EXIT_FAILURE;
     }
 
@@ -66,9 +75,9 @@ int main(void)
     az_overlay_model_build(
         640.0f, 480.0f, 1u, 1u, 0u, 0u, 0u, 0.0f, &model);
     if (model.count != 5u ||
-        !close_enough(model.quads[2].x, 70.5f) ||
+        !close_enough(model.quads[2].x, 104.5f) ||
         !close_enough(model.quads[2].y, 234.0f) ||
-        !close_enough(model.quads[2].width, 499.0f) ||
+        !close_enough(model.quads[2].width, 465.0f) ||
         !close_enough(model.quads[2].height, 16.5f)) {
         return EXIT_FAILURE;
     }

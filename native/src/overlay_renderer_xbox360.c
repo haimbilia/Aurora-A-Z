@@ -560,9 +560,19 @@ static int prepare_model(
     const float origin_y =
         (request->viewport_height -
             (AZ_LOGICAL_VIEWPORT_HEIGHT * scale)) * 0.5f;
-    const size_t expected_count =
-        request->selector_active != 0u ? 5u : 3u;
+    size_t expected_count = 3u;
+    size_t segment_count = 0u;
     size_t index;
+
+    if (request->selector_active != 0u) {
+        const AzGlyphAtlasGlyph *glyph =
+            &g_az_glyph_atlas_glyphs[request->selected_index];
+        segment_count =
+            (glyph->source_x == 0u ||
+             (uint32_t)glyph->source_x + (uint32_t)glyph->advance ==
+                AZ_GLYPH_ATLAS_ROW_ADVANCE) ? 1u : 2u;
+        expected_count += segment_count * 2u;
+    }
 
     az_overlay_model_build(
         AZ_LOGICAL_VIEWPORT_WIDTH,
@@ -581,10 +591,19 @@ static int prepare_model(
             AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
         model->quads[expected_count - 1u].layer !=
             AZ_OVERLAY_LAYER_SELECTED ||
-        (request->selector_active != 0u &&
-            (model->quads[1].layer != AZ_OVERLAY_LAYER_SHADOW ||
-             model->quads[2].layer != AZ_OVERLAY_LAYER_ROW))) {
+        expected_count > AZ_OVERLAY_MAX_QUADS) {
         return 0;
+    }
+
+    if (request->selector_active != 0u) {
+        for (index = 0u; index < segment_count; ++index) {
+            if (model->quads[1u + index].layer !=
+                    AZ_OVERLAY_LAYER_SHADOW ||
+                model->quads[1u + segment_count + index].layer !=
+                    AZ_OVERLAY_LAYER_ROW) {
+                return 0;
+            }
+        }
     }
 
     expand_selected_crop(&model->quads[expected_count - 2u]);

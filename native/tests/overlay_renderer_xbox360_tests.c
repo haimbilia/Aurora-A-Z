@@ -254,13 +254,13 @@ int main(void)
         !close_enough(g_draw_vertices[0][0].y, 0.0f) ||
         g_draw_vertices[0][0].u != 1017 ||
         g_draw_vertices[0][0].v != 57 ||
-        !close_enough(g_draw_vertices[2][0].x, 141.0f) ||
+        !close_enough(g_draw_vertices[2][0].x, 209.0f) ||
         !close_enough(g_draw_vertices[2][0].y, 343.0f) ||
-        g_draw_vertices[2][0].u != 0 ||
+        g_draw_vertices[2][0].u != 68 ||
         g_draw_vertices[2][0].v != 20 ||
         g_draw_vertices[2][2].u != 998 ||
         g_draw_vertices[2][2].v != 53 ||
-        g_draw_vertices[2][3].u != 0 ||
+        g_draw_vertices[2][3].u != 68 ||
         g_draw_vertices[2][3].v != 53 ||
         g_draw_vertices[4][0].u != 0 ||
         g_draw_vertices[4][2].u != 68 ||

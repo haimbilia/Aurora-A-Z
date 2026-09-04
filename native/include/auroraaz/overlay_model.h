@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define AZ_OVERLAY_MAX_QUADS 5u
+#define AZ_OVERLAY_MAX_QUADS 7u
 
 typedef enum AzOverlayLayer {
     AZ_OVERLAY_LAYER_DIM = 0,

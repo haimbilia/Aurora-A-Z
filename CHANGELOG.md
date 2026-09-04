@@ -5,6 +5,8 @@
 - Center the transient selector vertically, dim the complete viewport, enlarge
   the full-opacity selection, and animate the chosen item growing and fading
   after release.
+- Split the inactive row and its shadow around the enlarged selection so the
+  original small glyph is not visible underneath it.
 - Add `ALL` to the selector. It removes only Aurora's active alphabetical
   `NameFilter`, preserving XBLA or any other QuickView and non-name filters.
 - Record the production hardware pass for the nonblocking ContentLauncher

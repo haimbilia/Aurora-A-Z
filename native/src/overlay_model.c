@@ -12,6 +12,7 @@
 #define AZ_COLOR_SELECTED 0xFFFFFFFFu
 #define AZ_ACTIVE_SELECTED_SCALE 1.28f
 #define AZ_EXIT_SELECTED_SCALE 2.18f
+#define AZ_SELECTED_GAP_PADDING 2.0f
 
 static float minimum(float left, float right)
 {
@@ -68,6 +69,37 @@ static void add_quad(
     quad->color = color;
     quad->layer = layer;
     ++model->count;
+}
+
+static void add_row_segment(
+    AzOverlayModel *model,
+    float row_x,
+    float row_y,
+    float scale,
+    float source_start,
+    float source_end,
+    float offset_x,
+    float offset_y,
+    uint32_t color,
+    AzOverlayLayer layer)
+{
+    if (!(source_end > source_start)) {
+        return;
+    }
+
+    add_quad(
+        model,
+        row_x + (source_start * scale) + offset_x,
+        row_y + offset_y,
+        (source_end - source_start) * scale,
+        (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP) *
+            scale,
+        source_start,
+        (float)AZ_GLYPH_ATLAS_TEXT_TOP,
+        source_end - source_start,
+        (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
+        color,
+        layer);
 }
 
 void az_overlay_model_build(
@@ -146,33 +178,6 @@ void az_overlay_model_build(
         with_alpha(AZ_COLOR_DIM, opacity),
         AZ_OVERLAY_LAYER_DIM);
 
-    if (selector_active != 0u) {
-        add_quad(
-            model,
-            row_x + shadow_x,
-            row_y + shadow_y,
-            row_width,
-            row_height,
-            0.0f,
-            (float)AZ_GLYPH_ATLAS_TEXT_TOP,
-            (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
-            (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
-            AZ_COLOR_SHADOW,
-            AZ_OVERLAY_LAYER_SHADOW);
-        add_quad(
-            model,
-            row_x,
-            row_y,
-            row_width,
-            row_height,
-            0.0f,
-            (float)AZ_GLYPH_ATLAS_TEXT_TOP,
-            (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
-            (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
-            AZ_COLOR_INACTIVE,
-            AZ_OVERLAY_LAYER_ROW);
-    }
-
     display_index = selector_active != 0u ?
         selected_index : exit_animation_index;
     if (display_index < AZ_GLYPH_COUNT) {
@@ -187,6 +192,37 @@ void az_overlay_model_build(
         float selected_height;
         float selected_x;
         float selected_y;
+
+        if (selector_active != 0u) {
+            const float gap_start = glyph->source_x >
+                (uint16_t)AZ_SELECTED_GAP_PADDING ?
+                (float)glyph->source_x - AZ_SELECTED_GAP_PADDING : 0.0f;
+            const float glyph_end =
+                (float)glyph->source_x + (float)glyph->advance;
+            const float gap_end = glyph_end + AZ_SELECTED_GAP_PADDING <
+                (float)AZ_GLYPH_ATLAS_ROW_ADVANCE ?
+                glyph_end + AZ_SELECTED_GAP_PADDING :
+                (float)AZ_GLYPH_ATLAS_ROW_ADVANCE;
+
+            add_row_segment(
+                model, row_x, row_y, scale,
+                0.0f, gap_start, shadow_x, shadow_y,
+                AZ_COLOR_SHADOW, AZ_OVERLAY_LAYER_SHADOW);
+            add_row_segment(
+                model, row_x, row_y, scale,
+                gap_end, (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
+                shadow_x, shadow_y,
+                AZ_COLOR_SHADOW, AZ_OVERLAY_LAYER_SHADOW);
+            add_row_segment(
+                model, row_x, row_y, scale,
+                0.0f, gap_start, 0.0f, 0.0f,
+                AZ_COLOR_INACTIVE, AZ_OVERLAY_LAYER_ROW);
+            add_row_segment(
+                model, row_x, row_y, scale,
+                gap_end, (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
+                0.0f, 0.0f,
+                AZ_COLOR_INACTIVE, AZ_OVERLAY_LAYER_ROW);
+        }
 
         selected_scale = selector_active != 0u ?
             AZ_ACTIVE_SELECTED_SCALE :
