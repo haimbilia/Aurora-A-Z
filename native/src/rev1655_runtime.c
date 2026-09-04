@@ -49,6 +49,7 @@
 #define AZ_XUI_ELEMENT_SET_OPACITY_ORDINAL 894u
 #define AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL 915u
 #define AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL 921u
+#define AZ_XUI_ELEMENT_TREE_HAS_FOCUS_ORDINAL 994u
 #define AZ_XUI_ELEMENT_GET_DESCENDANT_BY_ID_ORDINAL 2111u
 #define AZ_XAM_INPUT_GET_STATE_ORDINAL 401u
 #define AZ_ICON_UI_TICK_INTERVAL 30u
@@ -111,6 +112,7 @@ typedef int32_t (*AzXuiSetTextFn)(uint32_t, const uint16_t *);
 typedef int32_t (*AzXuiSetOpacityFn)(uint32_t, float);
 typedef int32_t (*AzXuiSetImagePathFn)(uint32_t, const uint16_t *);
 typedef int32_t (*AzXuiHasFocusFn)(uint32_t);
+typedef int32_t (*AzXuiTreeHasFocusFn)(uint32_t);
 typedef struct AzXInputGamepadState {
     uint16_t buttons;
     uint8_t left_trigger;
@@ -197,6 +199,7 @@ typedef struct AzRev1655Runtime {
     AzXuiSetOpacityFn xui_set_opacity;
     AzXuiSetImagePathFn xui_set_image_path;
     AzXuiHasFocusFn xui_has_focus;
+    AzXuiTreeHasFocusFn xui_tree_has_focus;
     AzXamInputGetStateFn xam_input_get_state;
     volatile uint32_t worker_thread_id;
     volatile uint32_t filter_bind_result;
@@ -1762,6 +1765,24 @@ static uint8_t module_settings_focused_mode(
     return 0u;
 }
 
+/* The resource root itself does not receive focus. Aurora keeps focus on a
+ * child radio row, so use the XUI tree query for page ownership. */
+static uint8_t module_settings_page_has_tree_focus(uint32_t module_scene)
+{
+    uint32_t module_host;
+
+    if (module_scene == 0u || g_runtime.xui_tree_has_focus == NULL) {
+        return 0u;
+    }
+    if (g_runtime.xui_tree_has_focus(module_scene) == 1) {
+        return 1u;
+    }
+    module_host = live_module_settings_controller_member(
+        AZ_REV1655_MODULE_HOST_HANDLE_OFFSET);
+    return module_host != 0u &&
+        g_runtime.xui_tree_has_focus(module_host) == 1 ? 1u : 0u;
+}
+
 static int32_t find_module_list_icon(
     uint32_t root,
     const uint16_t *expected_title,
@@ -1846,13 +1867,15 @@ static uint8_t resolve_icon_xui(void)
     void *set_opacity = NULL;
     void *set_image = NULL;
     void *has_focus = NULL;
+    void *tree_has_focus = NULL;
 
     if (g_runtime.xui_get_parent != NULL &&
         g_runtime.xui_get_child_by_id != NULL &&
         g_runtime.xui_set_text != NULL &&
         g_runtime.xui_set_opacity != NULL &&
         g_runtime.xui_set_image_path != NULL &&
-        g_runtime.xui_has_focus != NULL) {
+        g_runtime.xui_has_focus != NULL &&
+        g_runtime.xui_tree_has_focus != NULL) {
         return 1u;
     }
     if (FAILED(XexGetModuleHandle("xam.xex", &xam)) || xam == NULL ||
@@ -1876,9 +1899,13 @@ static uint8_t resolve_icon_xui(void)
             xam, AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL, &set_image)) ||
         FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL, &has_focus)) ||
+        FAILED(XexGetProcedureAddress(
+            xam, AZ_XUI_ELEMENT_TREE_HAS_FOCUS_ORDINAL,
+            &tree_has_focus)) ||
         child_by_id == NULL || first == NULL || next == NULL || parent == NULL ||
         descendant == NULL || text == NULL || set_text == NULL ||
-        set_opacity == NULL || set_image == NULL || has_focus == NULL) {
+        set_opacity == NULL || set_image == NULL || has_focus == NULL ||
+        tree_has_focus == NULL) {
         return 0u;
     }
     g_runtime.xui_get_first_child = (AzXuiGetChildFn)(uintptr_t)first;
@@ -1895,6 +1922,8 @@ static uint8_t resolve_icon_xui(void)
     g_runtime.xui_set_image_path =
         (AzXuiSetImagePathFn)(uintptr_t)set_image;
     g_runtime.xui_has_focus = (AzXuiHasFocusFn)(uintptr_t)has_focus;
+    g_runtime.xui_tree_has_focus =
+        (AzXuiTreeHasFocusFn)(uintptr_t)tree_has_focus;
     return 1u;
 }
 
@@ -1953,7 +1982,8 @@ static void module_ui_tick(void *context)
         radio_has_focus = module_settings_focused_mode(
             module_scene, &focused_mode);
     }
-    g_runtime.settings_dialog_active = radio_has_focus;
+    g_runtime.settings_dialog_active =
+        module_settings_page_has_tree_focus(module_scene);
     if (radio_has_focus != 0u) {
         g_runtime.settings_selection = focused_mode;
     }
@@ -2080,12 +2110,13 @@ static uint8_t module_settings_ui_input(
         return 0u;
     }
     scene = live_module_settings_scene_handle();
-    if (scene == 0u ||
-        module_settings_focused_mode(scene, &mode) == 0u) {
+    if (scene == 0u || module_settings_page_has_tree_focus(scene) == 0u) {
         return 0u;
     }
     g_runtime.settings_dialog_active = 1u;
-    g_runtime.settings_selection = mode;
+    if (module_settings_focused_mode(scene, &mode) != 0u) {
+        g_runtime.settings_selection = mode;
+    }
     if (keystroke->virtual_key == AZ_VK_PAD_B &&
         (keystroke->flags & AZ_KEYSTROKE_KEYDOWN) != 0u) {
         g_runtime.settings_dialog_active = 0u;
@@ -2128,6 +2159,7 @@ static uint8_t module_settings_ui_input(
         return 0u;
     }
 
+    mode = g_runtime.settings_selection;
     if (az_module_settings_request_mode(mode) == 0u) {
         return 0u;
     }
@@ -3351,6 +3383,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     g_runtime.xui_set_opacity = NULL;
     g_runtime.xui_set_image_path = NULL;
     g_runtime.xui_has_focus = NULL;
+    g_runtime.xui_tree_has_focus = NULL;
     g_runtime.xam_input_get_state = NULL;
     store_u32(&g_runtime.worker_thread_id, 0u);
     store_u32(
