@@ -18,6 +18,11 @@
 #define AZ_INPUT_LIFECYCLE_SHUTDOWN 0x80000000u
 #define AZ_INPUT_LIFECYCLE_CONTROL_MASK \
     (AZ_INPUT_LIFECYCLE_RESETTING | AZ_INPUT_LIFECYCLE_SHUTDOWN)
+#define AZ_INPUT_CONSUMED_R3 (1u << 1u)
+#define AZ_INPUT_CONSUMED_DIRECTIONS \
+    ((1u << 2u) | (1u << 3u) | (1u << 4u) | (1u << 5u))
+#define AZ_HELD_REPEAT_INITIAL_TICKS 18u
+#define AZ_HELD_REPEAT_INTERVAL_TICKS 4u
 
 typedef char AzObservationCapacityMustBePowerOfTwo[
     (AZ_INPUT_DETOUR_OBSERVATION_CAPACITY != 0u &&
@@ -98,6 +103,11 @@ typedef struct AzInputDetourBridge {
     void *ui_tick_context;
     AzRev1655UiInput ui_input;
     void *ui_input_context;
+    AzRev1655HeldDirectionPoll held_direction_poll;
+    void *held_direction_context;
+    uint32_t held_direction_ticks;
+    int32_t held_direction;
+    uint8_t selector_user_index;
     volatile uint32_t browse_jump_pending;
     volatile uint32_t browse_jump_in_flight;
     volatile uint32_t browse_jump_gcm;
@@ -305,6 +315,85 @@ static void update_coverflow_scope(uint32_t input_frame)
         publication.result);
 }
 
+static void reset_held_direction(void)
+{
+    g_input_bridge.held_direction = 0;
+    g_input_bridge.held_direction_ticks = 0u;
+}
+
+static void repeat_held_direction(uint32_t input_frame)
+{
+    AzInputGate gate;
+    AzSelectorCommand command;
+    AzSelectorResult result;
+    int32_t direction;
+
+    if (g_input_bridge.held_direction_poll == NULL ||
+        requested_stage_from_lifecycle() != AZ_INPUT_DETOUR_CONSUME ||
+        selector_prerequisites_are_verified() == 0u ||
+        g_input_bridge.runtime.stage != AZ_INPUT_STAGE_CONSUME_VERIFIED ||
+        g_input_bridge.runtime.selector.mode != AZ_MODE_SELECTING ||
+        (g_input_bridge.runtime.consumed_controls & AZ_INPUT_CONSUMED_R3) == 0u ||
+        (g_input_bridge.runtime.consumed_controls &
+            AZ_INPUT_CONSUMED_DIRECTIONS) == 0u ||
+        g_input_bridge.selector_user_index >= 4u) {
+        reset_held_direction();
+        return;
+    }
+
+    gate.input_frame = input_frame;
+    gate.image_verified = bool_from_atomic(&g_input_bridge.image_verified);
+    gate.input_hook_verified =
+        bool_from_atomic(&g_input_bridge.input_hook_verified);
+    gate.scene_allows_capture =
+        bool_from_atomic(&g_input_bridge.scene_allows_capture);
+    if (az_input_scope_is_active(
+            &g_input_bridge.runtime.coverflow, &gate) == 0u) {
+        reset_held_direction();
+        return;
+    }
+
+    direction = g_input_bridge.held_direction_poll(
+        g_input_bridge.held_direction_context,
+        g_input_bridge.selector_user_index);
+    if (direction < 0) {
+        direction = -1;
+        command = AZ_COMMAND_PREVIOUS;
+    }
+    else if (direction > 0) {
+        direction = 1;
+        command = AZ_COMMAND_NEXT;
+    }
+    else {
+        reset_held_direction();
+        return;
+    }
+
+    if (direction != g_input_bridge.held_direction) {
+        g_input_bridge.held_direction = direction;
+        g_input_bridge.held_direction_ticks = 0u;
+        return;
+    }
+
+    ++g_input_bridge.held_direction_ticks;
+    if (g_input_bridge.held_direction_ticks <
+            AZ_HELD_REPEAT_INITIAL_TICKS ||
+        ((g_input_bridge.held_direction_ticks -
+            AZ_HELD_REPEAT_INITIAL_TICKS) %
+            AZ_HELD_REPEAT_INTERVAL_TICKS) != 0u) {
+        return;
+    }
+
+    result = az_selector_dispatch(
+        &g_input_bridge.runtime.selector,
+        command,
+        g_input_bridge.runtime.edge_behavior,
+        1u);
+    if (result.handled != 0u) {
+        publish_selector();
+    }
+}
+
 static AzInputStage select_effective_stage(AzInputDetourStage requested)
 {
     if (g_input_bridge.runtime.stage == AZ_INPUT_STAGE_CONSUME_VERIFIED &&
@@ -449,6 +538,10 @@ void az_rev1655_input_detour_reset(void)
     g_input_bridge.ui_tick_context = NULL;
     g_input_bridge.ui_input = NULL;
     g_input_bridge.ui_input_context = NULL;
+    g_input_bridge.held_direction_poll = NULL;
+    g_input_bridge.held_direction_context = NULL;
+    reset_held_direction();
+    g_input_bridge.selector_user_index = 0xFFu;
     store_u32(&g_input_bridge.browse_jump_pending, 0u);
     store_u32(&g_input_bridge.browse_jump_in_flight, 0u);
     store_u32(&g_input_bridge.browse_jump_gcm, 0u);
@@ -777,6 +870,19 @@ void az_rev1655_input_detour_configure_ui_input(
     g_input_bridge.ui_input = input;
 }
 
+void az_rev1655_input_detour_configure_held_direction_poll(
+    AzRev1655HeldDirectionPoll poll,
+    void *context)
+{
+    if (shutdown_is_requested() != 0u ||
+        load_u32(&g_input_bridge.in_flight) != 0u) {
+        return;
+    }
+    g_input_bridge.held_direction_context = context;
+    g_input_bridge.held_direction_poll = poll;
+    reset_held_direction();
+}
+
 uint8_t az_rev1655_input_detour_publish_browse_jump(
     uintptr_t game_content_manager,
     uint32_t target_index,
@@ -940,6 +1046,7 @@ uint32_t az_rev1655_input_detour_c(
     if (shutdown_is_requested() == 0u && g_input_bridge.ui_tick != NULL) {
         g_input_bridge.ui_tick(g_input_bridge.ui_tick_context);
     }
+    repeat_held_direction(input_frame);
 
     if (result != AZ_REV1655_INPUT_RESULT_SUCCESS) {
         (void)__atomic_sub_fetch(
@@ -1039,6 +1146,18 @@ uint32_t az_rev1655_input_detour_c(
         &g_input_bridge.runtime,
         &original_key,
         &gate);
+
+    if (decision.consume != 0u &&
+        decision.translation.control == AZ_INPUT_CONTROL_R3) {
+        if (decision.translation.event == AZ_INPUT_EVENT_PRESS) {
+            g_input_bridge.selector_user_index = original_key.user_index;
+            reset_held_direction();
+        }
+        else if (decision.translation.event == AZ_INPUT_EVENT_RELEASE) {
+            g_input_bridge.selector_user_index = 0xFFu;
+            reset_held_direction();
+        }
+    }
 
     if (decision.consume != 0u &&
         decision.selector_result.request_filter != 0u) {

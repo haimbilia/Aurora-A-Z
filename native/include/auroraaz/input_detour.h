@@ -74,6 +74,10 @@ typedef void (*AzRev1655UiTick)(void *context);
 typedef uint8_t (*AzRev1655UiInput)(
     void *context,
     const AzInputKeystroke *keystroke);
+/* Returns -1 for left, +1 for right, or 0 for neutral/not available. */
+typedef int32_t (*AzRev1655HeldDirectionPoll)(
+    void *context,
+    uint8_t user_index);
 
 typedef struct AzInputDetourObservation {
     uint32_t serial;
@@ -198,6 +202,13 @@ void az_rev1655_input_detour_configure_ui_tick(
  * result clears the keystroke before Aurora processes it. */
 void az_rev1655_input_detour_configure_ui_input(
     AzRev1655UiInput input,
+    void *context);
+
+/* Optional raw-state poll used to synthesize held-direction repeats while
+ * R3 owns the selector. Keystroke APIs do not report repeat events on every
+ * dashboard/kernel combination. */
+void az_rev1655_input_detour_configure_held_direction_poll(
+    AzRev1655HeldDirectionPoll poll,
     void *context);
 
 /* Worker-thread producer; the callback itself runs on the next main poll. */

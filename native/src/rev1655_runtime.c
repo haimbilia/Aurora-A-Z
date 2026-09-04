@@ -50,7 +50,12 @@
 #define AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL 915u
 #define AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL 921u
 #define AZ_XUI_ELEMENT_GET_DESCENDANT_BY_ID_ORDINAL 2111u
+#define AZ_XAM_INPUT_GET_STATE_ORDINAL 401u
 #define AZ_ICON_UI_TICK_INTERVAL 30u
+#define AZ_XINPUT_GAMEPAD_DPAD_LEFT 0x0004u
+#define AZ_XINPUT_GAMEPAD_DPAD_RIGHT 0x0008u
+#define AZ_XINPUT_GAMEPAD_RIGHT_THUMB 0x0080u
+#define AZ_XINPUT_LEFT_THUMB_DEADZONE 12000
 #define AZ_BROWSE_LIST_MANAGER_SINGLETON_ADDRESS 0x8223FF30u
 #define AZ_BROWSE_LIST_LOOKUP_ADDRESS 0x8223FFB0u
 #define AZ_BROWSE_GCM_SINGLETON_ADDRESS 0x82223060u
@@ -106,6 +111,21 @@ typedef int32_t (*AzXuiSetTextFn)(uint32_t, const uint16_t *);
 typedef int32_t (*AzXuiSetOpacityFn)(uint32_t, float);
 typedef int32_t (*AzXuiSetImagePathFn)(uint32_t, const uint16_t *);
 typedef int32_t (*AzXuiHasFocusFn)(uint32_t);
+typedef struct AzXInputGamepadState {
+    uint16_t buttons;
+    uint8_t left_trigger;
+    uint8_t right_trigger;
+    int16_t left_thumb_x;
+    int16_t left_thumb_y;
+    int16_t right_thumb_x;
+    int16_t right_thumb_y;
+} AzXInputGamepadState;
+typedef struct AzXInputState {
+    uint32_t packet_number;
+    AzXInputGamepadState gamepad;
+} AzXInputState;
+typedef uint32_t (*AzXamInputGetStateFn)(
+    uint32_t, uint32_t, AzXInputState *);
 #endif
 
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
@@ -177,6 +197,7 @@ typedef struct AzRev1655Runtime {
     AzXuiSetOpacityFn xui_set_opacity;
     AzXuiSetImagePathFn xui_set_image_path;
     AzXuiHasFocusFn xui_has_focus;
+    AzXamInputGetStateFn xam_input_get_state;
     volatile uint32_t worker_thread_id;
     volatile uint32_t filter_bind_result;
     volatile uint32_t filter_probe_result;
@@ -1638,6 +1659,48 @@ static int32_t find_live_descendant(
     return -1;
 }
 
+static int32_t find_live_text_descendant(
+    uint32_t root,
+    const uint16_t *text,
+    uint32_t text_length,
+    uint32_t *result)
+{
+    uint32_t stack[96];
+    uint32_t stack_count = 0u;
+    uint32_t visited = 0u;
+
+    if (root == 0u || text == NULL || result == NULL ||
+        g_runtime.xui_get_text == NULL) {
+        return -1;
+    }
+    *result = 0u;
+    stack[stack_count++] = root;
+    while (stack_count != 0u && visited < 256u) {
+        uint32_t current = stack[--stack_count];
+        const uint16_t *current_text = NULL;
+        uint32_t child = 0u;
+
+        ++visited;
+        if (g_runtime.xui_get_text(current, &current_text) >= 0 &&
+            target_utf16_equals(current_text, text, text_length) != 0u) {
+            *result = current;
+            return 0;
+        }
+        if (g_runtime.xui_get_first_child(current, &child) < 0) {
+            continue;
+        }
+        while (child != 0u && stack_count < 96u) {
+            uint32_t next = 0u;
+            stack[stack_count++] = child;
+            if (g_runtime.xui_get_next(child, &next) < 0 || next == child) {
+                break;
+            }
+            child = next;
+        }
+    }
+    return -1;
+}
+
 static uint32_t live_module_settings_controller_member(uint32_t offset)
 {
     uint32_t controller = az_module_settings_live_controller();
@@ -1657,21 +1720,117 @@ static uint32_t live_module_settings_controller_member(uint32_t offset)
     return member;
 }
 
-static uint8_t module_settings_page_has_focus(uint32_t module_scene)
+static uint8_t module_settings_focused_mode(
+    uint32_t module_scene,
+    uint32_t *mode)
 {
-    uint32_t module_host;
+    static const uint16_t browse_id[] = {
+        'B','r','o','w','s','e','M','o','d','e',0
+    };
+    static const uint16_t filter_id[] = {
+        'F','i','l','t','e','r','M','o','d','e',0
+    };
+    static const uint16_t browse_text[] = {
+        'B','r','o','w','s','e',0
+    };
+    static const uint16_t filter_text[] = {
+        'F','i','l','t','e','r',0
+    };
+    uint32_t browse = 0u;
+    uint32_t filter = 0u;
 
-    if (g_runtime.xui_has_focus == NULL) {
+    if (module_scene == 0u || mode == NULL ||
+        g_runtime.xui_has_focus == NULL) {
         return 0u;
     }
-    if (module_scene != 0u &&
-        g_runtime.xui_has_focus(module_scene) == 1) {
+    if (find_live_descendant(module_scene, browse_id, &browse) < 0) {
+        (void)find_live_text_descendant(
+            module_scene, browse_text, 6u, &browse);
+    }
+    if (find_live_descendant(module_scene, filter_id, &filter) < 0) {
+        (void)find_live_text_descendant(
+            module_scene, filter_text, 6u, &filter);
+    }
+    if (browse != 0u && g_runtime.xui_has_focus(browse) == 1) {
+        *mode = AZ_MODULE_SETTINGS_MODE_BROWSE;
         return 1u;
     }
-    module_host = live_module_settings_controller_member(
-        AZ_REV1655_MODULE_HOST_HANDLE_OFFSET);
-    return module_host != 0u &&
-        g_runtime.xui_has_focus(module_host) == 1 ? 1u : 0u;
+    if (filter != 0u && g_runtime.xui_has_focus(filter) == 1) {
+        *mode = AZ_MODULE_SETTINGS_MODE_FILTER;
+        return 1u;
+    }
+    return 0u;
+}
+
+static int32_t find_module_list_icon(
+    uint32_t root,
+    const uint16_t *expected_title,
+    uint32_t title_length,
+    const uint16_t *icon_id,
+    uint32_t *result)
+{
+    uint32_t title = 0u;
+    uint32_t parent;
+    uint32_t depth;
+
+    if (find_live_text_descendant(
+            root, expected_title, title_length, &title) < 0) {
+        return -1;
+    }
+    parent = title;
+    for (depth = 0u; parent != 0u && depth < 5u; ++depth) {
+        uint32_t next_parent = 0u;
+
+        if (find_live_descendant(parent, icon_id, result) >= 0 &&
+            *result != 0u) {
+            return 0;
+        }
+        if (g_runtime.xui_get_parent(parent, &next_parent) < 0 ||
+            next_parent == parent) {
+            break;
+        }
+        parent = next_parent;
+    }
+    *result = 0u;
+    return -1;
+}
+
+static int32_t poll_held_direction(void *context, uint8_t user_index)
+{
+    AzXInputState state;
+    HMODULE xam = NULL;
+    void *procedure = NULL;
+    uint8_t left;
+    uint8_t right;
+
+    (void)context;
+    if (user_index >= 4u) {
+        return 0;
+    }
+    if (g_runtime.xam_input_get_state == NULL) {
+        if (FAILED(XexGetModuleHandle("xam.xex", &xam)) || xam == NULL ||
+            FAILED(XexGetProcedureAddress(
+                xam, AZ_XAM_INPUT_GET_STATE_ORDINAL, &procedure)) ||
+            procedure == NULL) {
+            return 0;
+        }
+        g_runtime.xam_input_get_state =
+            (AzXamInputGetStateFn)(uintptr_t)procedure;
+    }
+
+    memset(&state, 0, sizeof(state));
+    if (g_runtime.xam_input_get_state(user_index, 0u, &state) != 0u ||
+        (state.gamepad.buttons & AZ_XINPUT_GAMEPAD_RIGHT_THUMB) == 0u) {
+        return 0;
+    }
+    left = ((state.gamepad.buttons & AZ_XINPUT_GAMEPAD_DPAD_LEFT) != 0u ||
+        state.gamepad.left_thumb_x < -AZ_XINPUT_LEFT_THUMB_DEADZONE) ? 1u : 0u;
+    right = ((state.gamepad.buttons & AZ_XINPUT_GAMEPAD_DPAD_RIGHT) != 0u ||
+        state.gamepad.left_thumb_x > AZ_XINPUT_LEFT_THUMB_DEADZONE) ? 1u : 0u;
+    if (left == right) {
+        return 0;
+    }
+    return left != 0u ? -1 : 1;
 }
 
 static uint8_t resolve_icon_xui(void)
@@ -1741,9 +1900,6 @@ static uint8_t resolve_icon_xui(void)
 
 static void module_ui_tick(void *context)
 {
-    static const uint16_t title_id[] = {
-        'T','i','t','l','e','P','r','e','s','e','n','t','e','r',0
-    };
     static const uint16_t icon_id[] = {
         'I','c','o','n','P','r','e','s','e','n','t','e','r',0
     };
@@ -1772,11 +1928,11 @@ static void module_ui_tick(void *context)
     };
     uint32_t ticks;
     uint32_t list = 0u;
-    uint32_t item = 0u;
-    uint32_t count;
     uint32_t module_scene;
     uint32_t scene_generation;
+    uint32_t focused_mode = AZ_MODULE_SETTINGS_MODE_BROWSE;
     uint8_t xui_ready;
+    uint8_t radio_has_focus = 0u;
 
     (void)context;
     scene_generation = az_module_settings_scene_generation();
@@ -1793,9 +1949,13 @@ static void module_ui_tick(void *context)
         g_runtime.settings_a_owned = 0u;
     }
     xui_ready = resolve_icon_xui();
-    if (module_scene == 0u || xui_ready == 0u ||
-        module_settings_page_has_focus(module_scene) == 0u) {
-        g_runtime.settings_dialog_active = 0u;
+    if (module_scene != 0u && xui_ready != 0u) {
+        radio_has_focus = module_settings_focused_mode(
+            module_scene, &focused_mode);
+    }
+    g_runtime.settings_dialog_active = radio_has_focus;
+    if (radio_has_focus != 0u) {
+        g_runtime.settings_selection = focused_mode;
     }
     if (g_runtime.settings_dialog_active != 0u &&
         xui_ready != 0u) {
@@ -1872,6 +2032,15 @@ static void module_ui_tick(void *context)
         store_u32(&g_runtime.icon_apply_result, 2u);
         return;
     }
+    if (g_runtime.settings_dialog_active != 0u) {
+        uint32_t module_icon = live_module_settings_controller_member(
+            AZ_REV1655_MODULE_ICON_HANDLE_OFFSET);
+        if (module_icon == 0u ||
+            g_runtime.xui_set_image_path(module_icon, icon_path) < 0) {
+            store_u32(&g_runtime.icon_apply_result, 7u);
+            return;
+        }
+    }
     list = live_module_settings_controller_member(
         AZ_REV1655_MODULE_LIST_HANDLE_OFFSET);
     if (list == 0u) {
@@ -1879,52 +2048,24 @@ static void module_ui_tick(void *context)
         return;
     }
     {
-        if (g_runtime.settings_dialog_active != 0u) {
-            uint32_t module_icon = live_module_settings_controller_member(
-                AZ_REV1655_MODULE_ICON_HANDLE_OFFSET);
-            if (module_icon == 0u ||
-                g_runtime.xui_set_image_path(module_icon, icon_path) < 0) {
-                store_u32(&g_runtime.icon_apply_result, 7u);
-                return;
-            }
-        }
-    }
-    if (g_runtime.xui_get_first_child(list, &item) < 0 || item == 0u) {
-        store_u32(&g_runtime.icon_apply_result, 5u);
-        return;
-    }
-    for (count = 0u; item != 0u && count < 32u; ++count) {
-        uint32_t title = 0u;
-        const uint16_t *title_text = NULL;
+        uint32_t icon = 0u;
 
-        if (find_live_descendant(item, title_id, &title) >= 0 &&
-            g_runtime.xui_get_text(title, &title_text) >= 0 &&
-            target_utf16_equals(
-                title_text,
+        if (find_module_list_icon(
+                list,
                 expected_title,
-                AZ_MODULE_SETTINGS_LABEL_LENGTH) != 0u) {
-            uint32_t icon = 0u;
-
-            if (find_live_descendant(item, icon_id, &icon) < 0) {
-                store_u32(&g_runtime.icon_apply_result, 6u);
-                return;
-            }
-            if (g_runtime.xui_set_image_path(icon, icon_path) < 0) {
-                store_u32(&g_runtime.icon_apply_result, 7u);
-                return;
-            }
-            store_u32(&g_runtime.icon_apply_result, 8u);
+                AZ_MODULE_SETTINGS_LABEL_LENGTH,
+                icon_id,
+                &icon) < 0) {
+            store_u32(&g_runtime.icon_apply_result, 5u);
             return;
         }
-        {
-            uint32_t next = 0u;
-            if (g_runtime.xui_get_next(item, &next) < 0 || next == item) {
-                break;
-            }
-            item = next;
+        if (g_runtime.xui_set_image_path(icon, icon_path) < 0) {
+            store_u32(&g_runtime.icon_apply_result, 7u);
+            return;
         }
+        store_u32(&g_runtime.icon_apply_result, 8u);
+        return;
     }
-    store_u32(&g_runtime.icon_apply_result, 5u);
 }
 
 static uint8_t module_settings_ui_input(
@@ -1939,10 +2080,12 @@ static uint8_t module_settings_ui_input(
         return 0u;
     }
     scene = live_module_settings_scene_handle();
-    if (scene == 0u || g_runtime.settings_dialog_active == 0u ||
-        module_settings_page_has_focus(scene) == 0u) {
+    if (scene == 0u ||
+        module_settings_focused_mode(scene, &mode) == 0u) {
         return 0u;
     }
+    g_runtime.settings_dialog_active = 1u;
+    g_runtime.settings_selection = mode;
     if (keystroke->virtual_key == AZ_VK_PAD_B &&
         (keystroke->flags & AZ_KEYSTROKE_KEYDOWN) != 0u) {
         g_runtime.settings_dialog_active = 0u;
@@ -1985,7 +2128,6 @@ static uint8_t module_settings_ui_input(
         return 0u;
     }
 
-    mode = g_runtime.settings_selection;
     if (az_module_settings_request_mode(mode) == 0u) {
         return 0u;
     }
@@ -2991,6 +3133,8 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         &module_ui_tick, NULL);
     az_rev1655_input_detour_configure_ui_input(
         &module_settings_ui_input, NULL);
+    az_rev1655_input_detour_configure_held_direction_poll(
+        &poll_held_direction, NULL);
     az_module_settings_detour_reset();
     az_rev1655_input_detour_publish_verification(1u, 0u, 0u, 0u);
     create_result = az_rev1655_thread_create(
@@ -3207,6 +3351,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     g_runtime.xui_set_opacity = NULL;
     g_runtime.xui_set_image_path = NULL;
     g_runtime.xui_has_focus = NULL;
+    g_runtime.xam_input_get_state = NULL;
     store_u32(&g_runtime.worker_thread_id, 0u);
     store_u32(
         &g_runtime.filter_bind_result,

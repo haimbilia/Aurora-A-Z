@@ -17,6 +17,9 @@ static uint8_t browse_apply_result = 1u;
 static uint32_t ui_tick_calls = 0u;
 static uint32_t ui_input_calls = 0u;
 static uint16_t ui_input_owned_key = 0u;
+static int32_t held_direction = 0;
+static uint32_t held_poll_calls = 0u;
+static uint8_t held_poll_user = 0xFFu;
 
 static uint32_t dispatch_main(AzInputKeystroke *key);
 static void release_main(uint16_t virtual_key);
@@ -71,6 +74,14 @@ static uint8_t ui_input(void *context, const AzInputKeystroke *key)
     CHECK(context == (void *)(uintptr_t)0xAA55u);
     ++ui_input_calls;
     return key != NULL && key->virtual_key == ui_input_owned_key ? 1u : 0u;
+}
+
+static int32_t poll_held_direction(void *context, uint8_t user_index)
+{
+    CHECK(context == (void *)(uintptr_t)0xA55Au);
+    ++held_poll_calls;
+    held_poll_user = user_index;
+    return held_direction;
 }
 
 static AzInputKeystroke make_key(uint16_t virtual_key, uint16_t flags)
@@ -544,6 +555,57 @@ static void test_ui_input_can_own_main_keystroke(void)
     CHECK(ui_input_calls == 2u);
 }
 
+static void test_raw_state_poll_repeats_held_direction(void)
+{
+    AzInputKeystroke key;
+    AzSelectorState selector;
+    uint32_t tick;
+
+    az_rev1655_input_detour_reset();
+    held_direction = 0;
+    held_poll_calls = 0u;
+    held_poll_user = 0xFFu;
+    az_rev1655_input_detour_publish_verification(1u, 1u, 1u, 1u);
+    az_rev1655_input_detour_confirm_controls(AZ_INPUT_VERIFIED_REQUIRED);
+    az_rev1655_input_detour_configure_held_direction_poll(
+        &poll_held_direction, (void *)(uintptr_t)0xA55Au);
+    CHECK(az_rev1655_input_detour_request_stage(
+        AZ_INPUT_DETOUR_CONSUME) == AZ_INPUT_DETOUR_OK);
+
+    arm_next_input();
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
+    key.user_index = 2u;
+    (void)dispatch_main(&key);
+
+    held_direction = 1;
+    arm_next_input();
+    key = make_key(AZ_VK_PAD_DPAD_RIGHT, AZ_KEYSTROKE_KEYDOWN);
+    key.user_index = 2u;
+    (void)dispatch_main(&key);
+    az_rev1655_input_detour_snapshot_selector(&selector);
+    CHECK(selector.selected_index == 1u);
+
+    original_result = 1u;
+    for (tick = 0u; tick < 18u; ++tick) {
+        arm_next_input();
+        (void)dispatch_main(&key);
+    }
+    az_rev1655_input_detour_snapshot_selector(&selector);
+    CHECK(selector.selected_index == 1u);
+
+    arm_next_input();
+    (void)dispatch_main(&key);
+    original_result = AZ_REV1655_INPUT_RESULT_SUCCESS;
+    az_rev1655_input_detour_snapshot_selector(&selector);
+    CHECK(selector.selected_index == 2u);
+    CHECK(held_poll_calls >= 18u);
+    CHECK(held_poll_user == 2u);
+
+    held_direction = 0;
+    release_main(AZ_VK_PAD_DPAD_RIGHT);
+    release_main(AZ_VK_PAD_RTHUMB_PRESS);
+}
+
 int main(void)
 {
     test_stage_gates_and_observe();
@@ -557,6 +619,7 @@ int main(void)
     test_browse_jump_validation();
     test_ui_tick_runs_only_on_main_poll();
     test_ui_input_can_own_main_keystroke();
+    test_raw_state_poll_repeats_held_direction();
     /* One-way shutdown must be the final test that resets global state. */
     test_shutdown_is_one_way_and_drains_owned_key();
 
