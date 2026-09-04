@@ -4,8 +4,11 @@
 
 - Bind settings input and icon updates to Aurora's instantiated module scene
   instead of the cached XUI template; walk its live ancestors to update both
-  the module header and list-row icon. Fall back to a bounded native child-tree
-  walk because the retail descendant helper does not resolve these XUR IDs.
+  the module header and list-row icon, with a bounded native child-tree lookup
+  fallback.
+- Capture the instantiated settings handle at Aurora's post-`XuiSceneCreate`
+  instruction; the loader's `r31+0x70` slot is stack-local and cannot be read
+  later from the input callback.
 - Replace the freezing system Browse/Filter popup with an embedded native XUI
   page hosted in Aurora's normal Configure Modules panel, like FTP and Nova.
 - Reapply the embedded repository icon after Aurora asynchronously populates

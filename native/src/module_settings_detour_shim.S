@@ -10,7 +10,6 @@ az_rev1655_module_settings_direct_detour_entry:
     mflr %r12
     stwu %r1, -112(%r1)
     stw %r12, 104(%r1)
-    mr %r3, %r31
     bl az_module_settings_scene_path
     mr %r30, %r3
     lwz %r12, 104(%r1)
@@ -18,6 +17,24 @@ az_rev1655_module_settings_direct_detour_entry:
     mtlr %r12
     lis %r11, 0x822c
     ori %r11, %r11, 0x8bf0
+    mtctr %r11
+    bctr
+
+    .globl az_rev1655_module_settings_scene_capture_detour_entry
+az_rev1655_module_settings_scene_capture_detour_entry:
+    /* Capture the live scene handle while Aurora's loader stack frame still
+     * owns its XuiSceneCreate output slot at r31+0x70. */
+    lwz %r3, 0x70(%r31)
+    mflr %r12
+    stwu %r1, -112(%r1)
+    stw %r12, 104(%r1)
+    bl az_module_settings_capture_scene
+    lwz %r12, 104(%r1)
+    addi %r1, %r1, 112
+    mtlr %r12
+    lwz %r3, 0x70(%r31)
+    lis %r11, 0x822c
+    ori %r11, %r11, 0x8c3c
     mtctr %r11
     bctr
 

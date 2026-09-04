@@ -56,16 +56,17 @@ C++ scene classes. Browse and Filter are ordinary native XUI buttons. The input
 detour consumes A only when either button owns focus and queues the selected
 mode to the worker; file I/O never occurs on the UI thread.
 
-At dispatcher entry, `r31` is the live module-settings controller. After
-Aurora creates the embedded scene, its instantiated `HXUIOBJ` is stored at
-controller offset `+0x70`. The detour captures that controller and all control
-lookup, focus testing, and status updates use the live handle. The resource
+At dispatcher entry, `r31` is Aurora's temporary loader stack frame—not a
+persistent controller. `XuiSceneCreate` writes the instantiated `HXUIOBJ` to
+the frame's `+0x70` output slot. A second exact-signature detour at
+`0x822C8C38` captures that handle immediately after creation and before the
+loader returns; retaining the stack address is invalid. All control lookup,
+focus testing, and status updates use the captured live handle. The resource
 cache handle is only a template and must never be used for interaction. A
 bounded `XuiElementGetParent` walk from the embedded scene reaches the live
 settings container, where `ModuleIcon`, `ModuleList`, and the Aurora A-Z row's
-`IconPresenter` receive the embedded icon. Rev1655's late
-`XuiElementGetDescendantById` export does not resolve the generated XUR's IDs
-on hardware, so lookup falls back to a bounded walk using the standard
+`IconPresenter` receive the embedded icon. Lookup falls back to a bounded walk
+using the standard
 `XuiElementGetChildById`, `XuiElementGetFirstChild`, and `XuiElementGetNext`
 exports.
 

@@ -19,6 +19,7 @@
 #define REV1655_FONT_END_RVA 0x0047E390u
 #define REV1655_CONTENT_LAUNCH_RVA 0x00294DD0u
 #define REV1655_MODULE_SETTINGS_RVA 0x002C8B88u
+#define REV1655_MODULE_SETTINGS_SCENE_RVA 0x002C8C38u
 
 static int failures = 0;
 
@@ -55,6 +56,11 @@ static const uint8_t k_content_launch_signature[16] = {
 static const uint8_t k_module_settings_signature[16] = {
     0x2F, 0x1E, 0x00, 0x01, 0x41, 0x9A, 0x01, 0x5C,
     0x2F, 0x1E, 0x00, 0x02, 0x41, 0x9A, 0x00, 0x54
+};
+
+static const uint8_t k_module_settings_scene_signature[16] = {
+    0x80, 0x7F, 0x00, 0x70, 0x48, 0x54, 0x68, 0x0D,
+    0x2F, 0x03, 0x00, 0x01, 0x40, 0x9A, 0x00, 0x48
 };
 
 static const uint8_t k_sha256_empty[32] = {
@@ -163,6 +169,9 @@ static uint8_t *make_synthetic_image(void)
         k_content_launch_signature, sizeof(k_content_launch_signature));
     memcpy(image + REV1655_MODULE_SETTINGS_RVA,
         k_module_settings_signature, sizeof(k_module_settings_signature));
+    memcpy(image + REV1655_MODULE_SETTINGS_SCENE_RVA,
+        k_module_settings_scene_signature,
+        sizeof(k_module_settings_scene_signature));
     return image;
 }
 
@@ -448,6 +457,13 @@ static void test_fail_closed_gate(void)
     bytes[REV1655_MODULE_SETTINGS_RVA +
         sizeof(k_module_settings_signature) - 1u] ^= 1u;
 
+    bytes[REV1655_MODULE_SETTINGS_SCENE_RVA +
+        sizeof(k_module_settings_scene_signature) - 1u] ^= 1u;
+    CHECK(az_rev1655_hook_gate_validate(&image, &permit) ==
+        AZ_REV1655_HOOK_GATE_BAD_MODULE_SETTINGS_SCENE_SIGNATURE);
+    bytes[REV1655_MODULE_SETTINGS_SCENE_RVA +
+        sizeof(k_module_settings_scene_signature) - 1u] ^= 1u;
+
     image.virtual_address += 4u;
     CHECK(az_rev1655_hook_gate_validate(&image, &permit) ==
         AZ_REV1655_HOOK_GATE_BAD_IMAGE_BASE);
@@ -617,6 +633,9 @@ static void test_exact_fixture(const char *path)
     check_resolved_site(permit, &image,
         AZ_REV1655_HOOK_SITE_MODULE_SETTINGS, 0x822C8B88u,
         0x2F1E0001u, 16u);
+    check_resolved_site(permit, &image,
+        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS_SCENE, 0x822C8C38u,
+        0x807F0070u, 16u);
     CHECK(az_rev1655_hook_gate_site(permit,
         AZ_REV1655_HOOK_SITE_COUNT) == NULL);
 

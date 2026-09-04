@@ -39,6 +39,7 @@
 #define AZ_M2B_FONT_END_TARGET_ADDRESS 0x8247E390u
 #define AZ_CONTENT_LAUNCH_TARGET_ADDRESS 0x82294DD0u
 #define AZ_MODULE_SETTINGS_TARGET_ADDRESS 0x822C8B88u
+#define AZ_MODULE_SETTINGS_SCENE_TARGET_ADDRESS 0x822C8C38u
 #define AZ_XUI_ELEMENT_GET_CHILD_BY_ID_ORDINAL 810u
 #define AZ_XUI_ELEMENT_GET_FIRST_CHILD_ORDINAL 811u
 #define AZ_XUI_ELEMENT_GET_NEXT_ORDINAL 816u
@@ -133,6 +134,7 @@ typedef struct AzRev1655Runtime {
     AzLiveHook font_end_hook;
     AzLiveHook content_launch_hook;
     AzLiveHook module_settings_hook;
+    AzLiveHook module_settings_scene_hook;
     AzOverlayRenderer renderer;
     HANDLE worker_thread;
     volatile uint32_t state;
@@ -1567,22 +1569,7 @@ static uint8_t target_utf16_equals(
 
 static uint32_t live_module_settings_scene_handle(void)
 {
-    uint32_t controller = az_module_settings_controller();
-    uint32_t scene = 0u;
-    uint32_t scene_slot;
-
-    if (controller == 0u || controller > 0xFFFFFF8Fu) {
-        return 0u;
-    }
-    scene_slot = controller + 0x70u;
-    if (filter_address_range_is_valid(
-            NULL,
-            (const void *)(uintptr_t)scene_slot,
-            sizeof(scene)) == 0u) {
-        return 0u;
-    }
-    memcpy(&scene, (const void *)(uintptr_t)scene_slot, sizeof(scene));
-    return scene;
+    return az_module_settings_live_scene();
 }
 
 static int32_t find_live_descendant(
@@ -2077,7 +2064,8 @@ static AzRev1655RuntimeResult validate_overlay_sites(
     AzRev1655ResolvedHookSite *render_menu,
     AzRev1655ResolvedHookSite *font_end,
     AzRev1655ResolvedHookSite *content_launch,
-    AzRev1655ResolvedHookSite *module_settings)
+    AzRev1655ResolvedHookSite *module_settings,
+    AzRev1655ResolvedHookSite *module_settings_scene)
 {
     const AzRev1655HookPermit *permit = NULL;
     const AzRev1655HookSiteDescriptor *descriptor;
@@ -2092,7 +2080,8 @@ static AzRev1655RuntimeResult validate_overlay_sites(
     AzRev1655HookGateResult gate_result;
 
     if (image == NULL || render_menu == NULL || font_end == NULL ||
-        content_launch == NULL || module_settings == NULL) {
+        content_launch == NULL || module_settings == NULL ||
+        module_settings_scene == NULL) {
         return AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED;
     }
 
@@ -2171,6 +2160,24 @@ static AzRev1655RuntimeResult validate_overlay_sites(
         module_settings->expected_instruction !=
             AZ_REV1655_MODULE_SETTINGS_FIRST_INSTRUCTION ||
         module_settings->complete_signature_size !=
+            (size_t)AZ_RENDER_SIGNATURE_SIZE) {
+        return AZ_REV1655_RUNTIME_SETTINGS_SITE_REJECTED;
+    }
+
+    descriptor = az_rev1655_hook_gate_site(
+        permit,
+        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS_SCENE);
+    if (descriptor == NULL ||
+        az_rev1655_hook_gate_resolve_site(
+            permit,
+            descriptor,
+            image,
+            module_settings_scene) != AZ_REV1655_HOOK_GATE_OK ||
+        module_settings_scene->target_address !=
+            AZ_MODULE_SETTINGS_SCENE_TARGET_ADDRESS ||
+        module_settings_scene->expected_instruction !=
+            AZ_REV1655_MODULE_SETTINGS_SCENE_FIRST_INSTRUCTION ||
+        module_settings_scene->complete_signature_size !=
             (size_t)AZ_RENDER_SIGNATURE_SIZE) {
         return AZ_REV1655_RUNTIME_SETTINGS_SITE_REJECTED;
     }
@@ -2614,6 +2621,8 @@ static uint32_t input_observe_worker(void *context)
         az_rev1655_input_detour_begin_shutdown();
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
         remove_overlay_hook_for_title_exit(
+            &g_runtime.module_settings_scene_hook, "ModuleSettingsScene");
+        remove_overlay_hook_for_title_exit(
             &g_runtime.module_settings_hook, "ModuleSettings");
         remove_overlay_hook_for_title_exit(
             &g_runtime.content_launch_hook, "ContentLauncher");
@@ -2785,6 +2794,7 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     AzRev1655ResolvedHookSite font_end_site;
     AzRev1655ResolvedHookSite content_launch_site;
     AzRev1655ResolvedHookSite module_settings_site;
+    AzRev1655ResolvedHookSite module_settings_scene_site;
     AzRev1655RenderDetourBindings bindings;
     AzRev1655RuntimeResult validation;
     AzOverlayRendererResult renderer_result;
@@ -2831,7 +2841,8 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         &render_menu_site,
         &font_end_site,
         &content_launch_site,
-        &module_settings_site);
+        &module_settings_site,
+        &module_settings_scene_site);
     if (validation != AZ_REV1655_RUNTIME_OK) {
         DbgPrint("AuroraAZ: overlay integration sites rejected\n");
         return validation;
@@ -2982,6 +2993,17 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         (const void *)(uintptr_t)
             &az_rev1655_module_settings_direct_detour_entry,
         &g_runtime.module_settings_hook);
+    if (hook_result != AZ_HOOK_RUNTIME_OK) {
+        retain_published_hooks_fail_closed(1u);
+        return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+    }
+
+    hook_result = az_live_hook_install_direct(
+        module_settings_scene_site.target_address,
+        module_settings_scene_site.expected_instruction,
+        (const void *)(uintptr_t)
+            &az_rev1655_module_settings_scene_capture_detour_entry,
+        &g_runtime.module_settings_scene_hook);
     if (hook_result != AZ_HOOK_RUNTIME_OK) {
         retain_published_hooks_fail_closed(1u);
         return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
