@@ -3,9 +3,9 @@
 
     .globl az_rev1655_module_settings_direct_detour_entry
 az_rev1655_module_settings_direct_detour_entry:
-    /* Aurora has no settings scene for module key 7 (NETDBG). Route only that
-     * key through the normal stock scene-loading path with our embedded XUR. */
-    cmpwi %r30, 7
+    /* Key 8 is the separately registered Aurora A-Z wrapper. Route only that
+     * entry through the normal stock scene-loading path with our embedded XUR. */
+    cmpwi %r30, 8
     bne .Laz_module_settings_resume
     mflr %r12
     stwu %r1, -112(%r1)

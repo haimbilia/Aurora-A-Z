@@ -26,6 +26,11 @@ extern "C" {
 #define AZ_REV1655_WRAPPER_POLICY_OFFSET 0x5Cu
 #define AZ_REV1655_WRAPPER_READY_OFFSET 0xA4u
 #define AZ_REV1655_WRAPPER_RESIDENT_POLICY 3u
+#define AZ_REV1655_MAP_CREATE_HINT_ADDRESS 0x8238E6F0u
+#define AZ_REV1655_MAP_INSERT_ADDRESS 0x82227638u
+#define AZ_REV1655_NETDBG_CONSTRUCT_ADDRESS 0x8238E848u
+#define AZ_REV1655_NETDBG_RESOLVE_ADDRESS 0x82389650u
+#define AZ_REV1655_ALLOCATE_ADDRESS 0x8295DC10u
 
 typedef struct AzModuleRegistryPair {
     uint32_t key;
@@ -87,6 +92,13 @@ AzModuleRegistryResult az_module_registry_register_aurora_az(
     uint32_t *registered_wrapper);
 
 const char *az_module_registry_result_name(AzModuleRegistryResult result);
+
+#if defined(AURORAAZ_XBOX360)
+/* Uses only the verified Rev1655 addresses above. Call only after
+ * az_rev1655_runtime_pin_module has accepted and pinned key 7. */
+AzModuleRegistryResult az_rev1655_module_registry_register_default(
+    uint32_t *registered_wrapper);
+#endif
 
 #ifdef __cplusplus
 }

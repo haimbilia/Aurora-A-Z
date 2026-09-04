@@ -19,6 +19,7 @@
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
 #include <auroraaz/m2a_input_telemetry.h>
+#include <auroraaz/module_registry_injection.h>
 #include <auroraaz/module_settings_detour.h>
 #include <auroraaz/netdbg_bootstrap.h>
 #include <auroraaz/netdbg_lifetime_rev1655.h>
@@ -1551,40 +1552,6 @@ static AzRev1655BrowseResult bind_browse_consumer(void)
     host.publish_jump = &browse_publish_jump;
     return az_rev1655_browse_consumer_bind(
         &g_runtime.browse_consumer, &host);
-}
-
-static uint8_t rename_netdbg_module_row(void)
-{
-    uint32_t wrapper_address = load_u32(
-        &g_runtime.netdbg_wrapper_address);
-    uint8_t *label;
-    uint32_t storage_address;
-    uint32_t capacity;
-    uint16_t *storage;
-
-    if (wrapper_address == 0u || filter_address_range_is_valid(
-            NULL,
-            (void *)(uintptr_t)wrapper_address,
-            AZ_REV1655_NETDBG_LABEL_OFFSET +
-                AZ_REV1655_AURORA_STRING_SIZE) == 0u) {
-        return 0u;
-    }
-    label = (uint8_t *)(uintptr_t)(
-        wrapper_address + AZ_REV1655_NETDBG_LABEL_OFFSET);
-    memcpy(&capacity, label + 0x14u, sizeof(capacity));
-    if (capacity < 8u || capacity > 1024u) {
-        return 0u;
-    }
-    memcpy(&storage_address, label, sizeof(storage_address));
-    storage = (uint16_t *)(uintptr_t)storage_address;
-    if (filter_address_range_is_valid(
-            NULL,
-            storage,
-            ((size_t)capacity + 1u) * sizeof(uint16_t)) == 0u) {
-        return 0u;
-    }
-    return az_module_settings_write_label(
-        label, storage, capacity + 1u);
 }
 
 static uint8_t target_utf16_equals(
@@ -3154,11 +3121,22 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     if (validation != AZ_REV1655_RUNTIME_OK) {
         return validation;
     }
-    store_u32(
-        &g_runtime.module_label_result,
-        rename_netdbg_module_row() != 0u ? 1u : 2u);
-    if (load_u32(&g_runtime.module_label_result) != 1u) {
-        DbgPrint("AuroraAZ: Configure Modules row rename failed\n");
+    {
+        uint32_t registered_wrapper = 0u;
+        AzModuleRegistryResult registry_result =
+            az_rev1655_module_registry_register_default(&registered_wrapper);
+
+        store_u32(
+            &g_runtime.module_label_result,
+            (registry_result == AZ_MODULE_REGISTRY_OK ||
+             registry_result == AZ_MODULE_REGISTRY_ALREADY_PRESENT) &&
+                    registered_wrapper != 0u ? 1u : 2u);
+        if (load_u32(&g_runtime.module_label_result) != 1u) {
+            DbgPrint(
+                "AuroraAZ: separate module registration failed: %s\n",
+                az_module_registry_result_name(registry_result));
+            return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+        }
     }
     store_u32(
         &g_runtime.icon_cache_result,

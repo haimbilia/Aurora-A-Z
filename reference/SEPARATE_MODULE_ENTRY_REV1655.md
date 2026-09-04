@@ -1,7 +1,7 @@
 # Separate Configure Modules entry — Rev1655
 
-Status: implementation scaffolded and host-tested; **not enabled in a release
-build or deployed to hardware**.
+Status: target bindings and the key-8 scene route are implemented and
+host-tested; **not compiled into an Xbox release or deployed to hardware**.
 
 ## Goal
 
@@ -77,7 +77,12 @@ Aurora A-Z          key 8  custom settings scene
 
 `native/src/module_registry_injection.c` implements the guarded registration
 sequence through an address-based binding table. Its host tests prove normal,
-unready-source, and repeated-registration paths. The target bindings and
-runtime invocation are intentionally not wired yet: that final step must be
-reviewed alongside the key-8 scene-dispatch detour and tested on hardware as a
-single controlled canary.
+unready-source, and repeated-registration paths. The Xbox binding calls only
+the recovered Rev1655 functions above, and `rev1655_runtime.c` invokes it
+before installing the module settings hooks. The assembly settings detour now
+routes key 8 rather than key 7.
+
+The remaining release gate is a clean OpenXeChain cross-compile followed by a
+telemetry-only hardware canary. This development machine currently lacks the
+expected `/opt/openxechain/bin/clang`, so no binary is considered releasable
+from this checkout yet.
