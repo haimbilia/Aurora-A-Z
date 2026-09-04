@@ -34,6 +34,7 @@ m2a_sources=(
     "${repo_root}/native/src/overlay_model.c"
     "${repo_root}/native/src/operation_mode.c"
     "${repo_root}/native/src/module_settings_detour.c"
+    "${repo_root}/native/src/module_registry_injection.c"
     "${repo_root}/native/src/module_settings_detour_shim.S"
     "${repo_root}/native/src/overlay_renderer_xbox360.c"
     "${repo_root}/native/src/render_detours.c"

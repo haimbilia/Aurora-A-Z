@@ -12,6 +12,7 @@ add_library(auroraaz_core STATIC
     src/input_hook.c
     src/layout.c
     src/module_settings_detour.c
+    src/module_registry_injection.c
     src/overlay_model.c
     src/operation_mode.c
     src/ppc.c
@@ -56,6 +57,11 @@ if(BUILD_TESTING)
     add_executable(auroraaz_module_settings_detour_tests
         tests/module_settings_detour_tests.c)
     target_link_libraries(auroraaz_module_settings_detour_tests
+        PRIVATE auroraaz_core)
+
+    add_executable(auroraaz_module_registry_injection_tests
+        tests/module_registry_injection_tests.c)
+    target_link_libraries(auroraaz_module_registry_injection_tests
         PRIVATE auroraaz_core)
 
     add_executable(auroraaz_ppc_tests tests/ppc_tests.c)
@@ -190,6 +196,7 @@ if(BUILD_TESTING)
         auroraaz_overlay_model_tests
         auroraaz_operation_mode_tests
         auroraaz_module_settings_detour_tests
+        auroraaz_module_registry_injection_tests
         auroraaz_ppc_tests
         auroraaz_rev1655_hook_gate_tests
         auroraaz_hook_runtime_tests
@@ -226,6 +233,8 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_overlay_model_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_operation_mode_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_module_settings_detour_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_module_registry_injection_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_ppc_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_rev1655_hook_gate_tests
@@ -278,6 +287,9 @@ if(BUILD_TESTING)
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
         target_compile_options(auroraaz_module_settings_detour_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_module_registry_injection_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
         target_compile_options(auroraaz_ppc_tests PRIVATE
@@ -339,6 +351,8 @@ if(BUILD_TESTING)
         COMMAND auroraaz_operation_mode_tests)
     add_test(NAME auroraaz_module_settings_detour_tests
         COMMAND auroraaz_module_settings_detour_tests)
+    add_test(NAME auroraaz_module_registry_injection_tests
+        COMMAND auroraaz_module_registry_injection_tests)
     add_test(NAME auroraaz_ppc_tests COMMAND auroraaz_ppc_tests)
     add_test(NAME auroraaz_rev1655_hook_gate_tests
         COMMAND auroraaz_rev1655_hook_gate_tests
