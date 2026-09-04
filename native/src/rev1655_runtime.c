@@ -179,6 +179,8 @@ typedef struct AzRev1655Runtime {
     AzRev1655BrowseConsumer browse_consumer;
     uint8_t settings_dialog_active;
     uint8_t settings_a_owned;
+    uint8_t settings_preview_active;
+    uint8_t settings_preview_mode;
     uint32_t settings_scene_generation_seen;
     uint32_t settings_selection;
     volatile uint32_t settings_resolve_result;
@@ -320,7 +322,7 @@ static char g_m3c_marker_path[] =
 static char g_operation_mode_path[] =
     "game:\\Data\\AuroraAZ.ini";
 static char g_icon_cache_path[] =
-    "game:\\Data\\AuroraAZ-icon.png";
+    "game:\\Data\\AuroraAZ-icon-v3.png";
 static char g_settings_xur_cache_path[] =
     "game:\\Data\\AuroraAZ_Settings.xur";
 
@@ -1991,7 +1993,7 @@ static void module_ui_tick(void *context)
     static const uint16_t icon_path[] = {
         'f','i','l','e',':','/','/','g','a','m','e',':','/','D','a','t','a','/',
         'A','u','r','o','r','a',
-        'A','Z','-','i','c','o','n','.','p','n','g',0
+        'A','Z','-','i','c','o','n','-','v','3','.','p','n','g',0
     };
     static const uint16_t mode_status_id[] = {
         'M','o','d','e','S','t','a','t','u','s',0
@@ -2029,6 +2031,7 @@ static void module_ui_tick(void *context)
                     AZ_MODULE_SETTINGS_MODE_BROWSE;
         g_runtime.settings_dialog_active = 1u;
         g_runtime.settings_a_owned = 0u;
+        g_runtime.settings_preview_active = 0u;
     }
     xui_ready = resolve_icon_xui();
     if (module_scene != 0u && xui_ready != 0u) {
@@ -2045,9 +2048,27 @@ static void module_ui_tick(void *context)
         uint32_t child_index;
         uint32_t browse_mark = 0u;
         uint32_t filter_mark = 0u;
-        uint8_t filter_mode =
-            load_u32(&g_runtime.operation_mode) ==
-                (uint32_t)AZ_OPERATION_MODE_FILTER ? 1u : 0u;
+        uint8_t filter_mode;
+        uint32_t saved_mode = load_u32(&g_runtime.operation_mode);
+
+        /* A is consumed by our settings handler, so Aurora never toggles the
+         * checkbox itself.  Keep a UI-only preview until the worker has
+         * committed the selected mode; this makes the radio dot switch in the
+         * same frame as A rather than after reopening the page. */
+        if (g_runtime.settings_preview_active != 0u) {
+            filter_mode = g_runtime.settings_preview_mode ==
+                AZ_MODULE_SETTINGS_MODE_FILTER ? 1u : 0u;
+            if ((filter_mode != 0u && saved_mode ==
+                    (uint32_t)AZ_OPERATION_MODE_FILTER) ||
+                (filter_mode == 0u && saved_mode ==
+                    (uint32_t)AZ_OPERATION_MODE_BROWSE)) {
+                g_runtime.settings_preview_active = 0u;
+            }
+        }
+        else {
+            filter_mode = saved_mode == (uint32_t)AZ_OPERATION_MODE_FILTER ?
+                1u : 0u;
+        }
         const uint16_t *status_text =
             filter_mode != 0u ? filter_status : browse_status;
 
@@ -2176,6 +2197,7 @@ static uint8_t module_settings_ui_input(
         (keystroke->flags & AZ_KEYSTROKE_KEYDOWN) != 0u) {
         g_runtime.settings_dialog_active = 0u;
         g_runtime.settings_a_owned = 0u;
+        g_runtime.settings_preview_active = 0u;
         return 0u;
     }
     if ((keystroke->flags &
@@ -2218,6 +2240,8 @@ static uint8_t module_settings_ui_input(
     if (az_module_settings_request_mode(mode) == 0u) {
         return 0u;
     }
+    g_runtime.settings_preview_mode = (uint8_t)mode;
+    g_runtime.settings_preview_active = 1u;
     g_runtime.settings_a_owned = 1u;
     store_u32(&g_runtime.settings_call_result, 0u);
     return 1u;
@@ -3414,6 +3438,8 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
         sizeof(g_runtime.browse_consumer));
     g_runtime.settings_dialog_active = 0u;
     g_runtime.settings_a_owned = 0u;
+    g_runtime.settings_preview_active = 0u;
+    g_runtime.settings_preview_mode = AZ_MODULE_SETTINGS_MODE_BROWSE;
     g_runtime.settings_scene_generation_seen = 0u;
     g_runtime.settings_selection =
         load_u32(&g_runtime.operation_mode) ==
