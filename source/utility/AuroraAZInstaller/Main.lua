@@ -5,8 +5,6 @@ scriptDescription = "Installs or updates the Aurora A-Z coverflow selector"
 scriptIcon = "icon.png"
 scriptPermissions = { "filesystem" }
 
--- Keep AuroraAZ.xex next to this Main.lua in User\Scripts\AuroraAZInstaller.
-local source = Script.GetBasePath() .. "AuroraAZ.xex"
 local live = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex"
 local backup = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex.before-aurora-az"
 local staged = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex.auroraaz-staged"
@@ -16,6 +14,9 @@ local function fail(message)
 end
 
 local function install()
+    -- Aurora evaluates top-level metadata before it exposes Script.  Resolve
+    -- the package path only after the user launches this script.
+    local source = Script.GetBasePath() .. "AuroraAZ.xex"
     if not FileSystem.FileExists(source) then
         fail("AuroraAZ.xex is missing from this script's folder.")
         return
