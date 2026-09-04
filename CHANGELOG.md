@@ -2,10 +2,11 @@
 
 ## Unreleased
 
-- Add an exact-build `ContentLauncher` boundary hook that synchronously revokes
-  input, cancels filter work, restores all four hooks, and exits the worker
-  before Aurora continues a game or XEX launch. Hardware proved the earlier
-  ordinal-3 shutdown callback is not invoked before the failing handoff.
+- Add an exact-build `ContentLauncher` boundary hook that asynchronously
+  revokes input, cancels filter work, restores all four hooks, and exits the
+  worker while Aurora gathers launch information. A synchronous wait froze the
+  launcher at 0%, and hardware proved the earlier ordinal-3 callback is not
+  invoked before the failing handoff.
 - Redirect development to the requested on-coverflow selector.
 - Add lossless stock XUR/XUI conversion using XUIHelper and Aurora extensions.
 - Add an open PowerShell XZP builder/extractor with verified 418-file round trip.

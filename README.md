@@ -47,9 +47,10 @@ release candidate: an isolated A/B test proved that its still-running worker
 blocked normal title handoff. Hardware then disproved ordinal 3 as a launch
 notification: the shutdown-capable follow-up still black-screened and its
 persisted marker recorded zero shutdown requests. The current lab candidate
-instead intercepts the exact Rev1655 `ContentLauncher` entry, synchronously
-restores all four hooks and exits its worker, then resumes Aurora's original
-launcher. It must pass game/XEX launch testing before any production install.
+instead intercepts the exact Rev1655 `ContentLauncher` entry, signals its
+worker to restore all four hooks and exit, then immediately resumes
+Aurora's original launcher. It must pass game/XEX launch testing before any
+production install.
 
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary

@@ -4,7 +4,7 @@
     .globl az_rev1655_content_launch_direct_detour_entry
 az_rev1655_content_launch_direct_detour_entry:
     /* Preserve Aurora's two constructor arguments and its caller LR while
-     * the C bridge synchronously closes the plugin runtime. */
+     * the C bridge starts non-blocking plugin cleanup. */
     mflr %r12
     stwu %r1, -112(%r1)
     stw %r3, 92(%r1)
@@ -13,7 +13,7 @@ az_rev1655_content_launch_direct_detour_entry:
     bl az_rev1655_content_launch_detour_c
 
     /* Emulate the displaced mflr r12 and resume at the original prologue's
-     * second instruction. The launch hook has already restored itself. */
+     * second instruction. The worker restores the hook asynchronously. */
     lwz %r3, 92(%r1)
     lwz %r4, 96(%r1)
     lwz %r12, 104(%r1)

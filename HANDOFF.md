@@ -78,10 +78,20 @@ shutdown request, but hardware still black-screened. After reboot its v5
 marker recorded `shutdown_requests=0` and runtime state `RUNNING`, proving
 Aurora does not call ordinal 3 before the failing handoff. The next candidate
 therefore gates and intercepts the exact Rev1655 `ContentLauncher` entry at
-`0x82294DD0`. It synchronously requests shutdown, waits for the worker to
-cancel filtering and restore the ContentLauncher, Font::End, RenderMenu, and
-input hooks, then resumes the original function at `0x82294DD4`. This remains
-lab-only until the same game and XEX launch A/B gates pass.
+`0x82294DD0`. The first implementation requested shutdown and waited for the
+worker before resuming at `0x82294DD4`; hardware froze at `Gathering
+information 0%`. Waiting on the launcher thread is therefore forbidden. The
+revised bridge only signals the worker and immediately resumes Aurora, giving
+cleanup the information-gathering interval to cancel filtering, restore the
+ContentLauncher, Font::End, RenderMenu, and input hooks, and exit
+asynchronously. This remains lab-only until the same game and XEX launch A/B
+gates pass.
+
+After reboot, the frozen synchronous candidate's persisted v5 marker decoded
+with `shutdown_requests=1` and runtime state `CLOSED`. That proves the boundary
+fired and the worker finished cleanup; the freeze was caused by holding the
+launcher thread across that cleanup, not by a missed hook or a worker that
+remained running.
 
 ### Current console state
 

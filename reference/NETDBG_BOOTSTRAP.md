@@ -64,8 +64,13 @@ Ordinal 3 is not a usable pre-launch notification. A shutdown-capable build
 still black-screened during title handoff, and the persisted v5 runtime marker
 after reboot recorded `shutdown_requests=0` and state `RUNNING`. The active
 lifecycle experiment instead hooks the exact Rev1655 `ContentLauncher` entry
-at `0x82294DD0`, synchronously closes the runtime, restores that entry and the
-three feature hooks, and resumes original execution at `0x82294DD4`.
+at `0x82294DD0`. Hardware showed that waiting for the worker on the launcher
+thread freezes at `Gathering information 0%`, so the boundary bridge signals
+cleanup and resumes original execution at `0x82294DD4` immediately. The worker
+restores that entry and the three feature hooks asynchronously.
+The synchronous candidate's persisted v5 marker contained
+`shutdown_requests=1` and runtime state `CLOSED`, proving the boundary and
+worker both completed even though Aurora's progress UI remained frozen at 0%.
 
 The build requires an ordinal-only PE export table (`NONAME`) containing
 exactly ordinals 2, 3, 4, and 5. That check alone is not sufficient: pinned

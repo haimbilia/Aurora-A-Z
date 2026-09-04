@@ -7,8 +7,8 @@ typedef char AzContentLaunchContinuationMustMatch[
 
 void az_rev1655_content_launch_detour_c(void)
 {
-    /* Record the boundary interception, then synchronously restore every
-     * Aurora hook before the original launcher continues. */
+    /* Start cleanup at the earliest proven launch boundary, but never block
+     * Aurora's UI/launcher thread. The worker restores every hook and exits
+     * while ContentLauncher performs its normal information-gathering pass. */
     az_rev1655_runtime_request_shutdown();
-    az_rev1655_runtime_shutdown();
 }
