@@ -35,9 +35,11 @@ functional unless it satisfies every acceptance criterion below on Aurora
   then restarting Aurora.
 - Disabling or uninstalling must require only removing or renaming the installed
   `Plugins\NetDbgDll.xex` and restarting Aurora.
-- The production plugin must not require a companion script, configuration
-  file, asset directory, database row, QuickView, patched skin, patched
-  `Aurora.xex`, or `launch.ini` change.
+- The production plugin must not require a companion script, preinstalled
+  configuration file, asset directory, database row, QuickView, patched skin,
+  patched `Aurora.xex`, or `launch.ini` change. The installed payload remains
+  one XEX. After first use, the plugin may generate one small settings file
+  under Aurora's `Data` directory to persist the selected operating mode.
 - Runtime filtering must remain in memory. It must not persist A-Z QuickViews
   or other Aurora A-Z-owned records in the user's database.
 - Aurora A-Z must supply the complete, verified Network Debugger ordinal ABI;
@@ -72,7 +74,39 @@ functional unless it satisfies every acceptance criterion below on Aurora
   absent; a black screen, delayed handoff, or required shutdown is a release
   blocker.
 
+## Operating mode setting
+
+- Aurora A-Z appears under Aurora's **Settings -> Configure Modules** screen,
+  using the otherwise occupied `NETDBG` module row without adding or modifying
+  a skin resource.
+- Activating that row opens a plugin-owned, skin-independent settings overlay
+  with exactly two choices: `Browse` and `Filter`.
+- `Browse` is the default for a missing, invalid, or unsupported settings file.
+- Saving a choice persists it across Aurora restarts. A torn or invalid write
+  must fail safely back to `Browse` without preventing Aurora from starting.
+- Opening, navigating, saving, or cancelling the settings overlay must not
+  change the current QuickView, alphabet selection, or coverflow selection.
+- The settings UI must not repurpose R3 or RB. Those controls retain their
+  coverflow behavior outside the settings screen.
+
+## Browse-mode semantics
+
+- In `Browse` mode, releasing a changed selection moves the coverflow to the
+  first title in the current active list whose displayed name belongs to the
+  chosen initial-character group. It does not rebuild or replace the list.
+- Browse mode searches only the current QuickView result, naturally preserving
+  its non-alphabetical constraints.
+- `ALL` moves to the first title in the current active list. It does not change
+  the current QuickView or any filter.
+- `#`, `A` through `Z`, case handling, and empty-match classification are the
+  same as Filter mode.
+- If the chosen group has no match, the current selection remains unchanged.
+- Browse mode must not invoke Aurora's sort/filter/swap worker and should feel
+  immediate on a library of at least 2,000 titles.
+
 ## Filtering semantics
+
+These rules apply when the saved operating mode is `Filter`:
 
 - `ALL` removes only an active `NameFilter` predicate. It must preserve the
   current QuickView and every non-name predicate, so selecting `ALL` while the
@@ -84,8 +118,7 @@ functional unless it satisfies every acceptance criterion below on Aurora
   character.
 - `#` matches empty names and titles whose first character is not `A` through
   `Z`, including titles beginning with a digit, whitespace, or punctuation.
-- Applying a letter updates the visible coverflow contents; it does not merely
-  jump the cursor within an unfiltered list.
+- Applying a letter updates the visible coverflow contents.
 - An empty match is valid and displays an empty coverflow without an error.
 
 ## Input-state contract
@@ -116,8 +149,9 @@ Navigation clamps at `ALL` and `Z`; it does not wrap.
 5. While holding R3, press left-stick Left once. `ALL` is highlighted and the
    coverflow does not move.
 6. While holding R3, highlight a known letter and release R3. The alphabet
-   hides, only matching titles remain visible, and normal coverflow navigation
-   resumes.
+   hides and normal coverflow navigation resumes. In Browse mode the selection
+   jumps to the first match without changing the title count; in Filter mode
+   only matching titles remain visible.
 7. Press RB from the coverflow. Aurora's normal QuickView menu opens unchanged.
 8. Repeat tests 1 through 7 with Aurora's Default skin and at least one
    third-party skin. The controls and filtering behavior remain identical.
@@ -136,12 +170,22 @@ Navigation clamps at `ALL` and `Z`; it does not wrap.
     multi-second delay when completion is already observable.
 14. Launch a known-good game and a known-good XEX application, return to
     Aurora, and repeat. Every title handoff must complete normally.
-15. Activate the XBLA QuickView, apply a letter, then select `ALL` by moving
+15. In Filter mode, activate the XBLA QuickView, apply a letter, then select `ALL` by moving
     away from it and back before releasing R3. All XBLA titles return, while
     non-XBLA titles remain excluded and Aurora's QuickView stays on XBLA.
 16. Release a changed selection and verify the row vanishes immediately while
-    only the selected item grows and fades away; filtering begins without
-    waiting for the animation.
+    only the selected item grows and fades away; the selected Browse/Filter
+    action begins without waiting for the animation.
+17. Open Settings -> Configure Modules -> Aurora A-Z. Switch between Browse
+    and Filter, restart Aurora after each choice, and verify that the choice is
+    restored.
+18. In Browse mode, select a letter and verify that the full title count is
+    unchanged, the coverflow moves to the first matching title, and no
+    `Sorting Game List` / `Filter Game List` cycle is logged.
+19. In Browse mode under XBLA QuickView, select a letter and then `ALL`.
+    Verify both jumps remain inside XBLA and do not expose non-XBLA titles.
+20. In Browse mode, choose a group with no match and verify that the current
+    cover remains selected.
 
 ## Explicitly non-compliant implementations
 
@@ -149,7 +193,8 @@ Navigation clamps at `ALL` and `Z`; it does not wrap.
 - Opening or restyling Aurora's normal QuickView menu instead of selecting on
   the coverflow.
 - Reusing Aurora's stock name-filter screen.
-- Moving the coverflow cursor to a title without filtering the visible list.
+- Providing cursor-jump behavior while the saved mode is `Filter`, or
+  rebuilding the list while the saved mode is `Browse`.
 - Supporting only D-pad navigation or only left-stick navigation.
 - Requiring a specially patched skin, modifying `Default.xzp`, or distributing
   a replacement `.xzp`.

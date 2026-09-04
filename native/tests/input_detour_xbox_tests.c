@@ -9,6 +9,11 @@
 
 static int failures = 0;
 static uint32_t original_result = AZ_REV1655_INPUT_RESULT_SUCCESS;
+static uint32_t browse_apply_calls = 0u;
+static uintptr_t browse_apply_gcm = (uintptr_t)0u;
+static uint32_t browse_apply_target = 0u;
+static uint32_t browse_apply_count = 0u;
+static uint8_t browse_apply_result = 1u;
 
 static uint32_t dispatch_main(AzInputKeystroke *key);
 static void release_main(uint16_t virtual_key);
@@ -36,6 +41,20 @@ uint32_t az_rev1655_input_original_fallback(
     (void)flags;
     (void)keystroke;
     return original_result;
+}
+
+static uint8_t apply_browse_jump(
+    void *context,
+    uintptr_t game_content_manager,
+    uint32_t target_index,
+    uint32_t item_count)
+{
+    CHECK(context == (void *)(uintptr_t)0x1655u);
+    ++browse_apply_calls;
+    browse_apply_gcm = game_content_manager;
+    browse_apply_target = target_index;
+    browse_apply_count = item_count;
+    return browse_apply_result;
 }
 
 static AzInputKeystroke make_key(uint16_t virtual_key, uint16_t flags)
@@ -312,6 +331,9 @@ static void test_shutdown_is_one_way_and_drains_owned_key(void)
     az_rev1655_input_detour_publish_verification(1u, 1u, 1u, 1u);
     az_rev1655_input_detour_confirm_controls(AZ_INPUT_VERIFIED_REQUIRED);
     az_rev1655_input_detour_set_scene_allows_capture(1u);
+    az_rev1655_input_detour_configure_browse_jump(
+        &apply_browse_jump,
+        (void *)(uintptr_t)0x1655u);
     CHECK(az_rev1655_input_detour_request_stage(
         AZ_INPUT_DETOUR_CONSUME) == AZ_INPUT_DETOUR_OK);
     CHECK(az_rev1655_input_detour_shutdown_ready() == 0u);
@@ -329,8 +351,13 @@ static void test_shutdown_is_one_way_and_drains_owned_key(void)
      * the filter request and that owned release pending across shutdown. */
     release_main(AZ_VK_PAD_RTHUMB_PRESS);
 
+    CHECK(az_rev1655_input_detour_publish_browse_jump(
+        (uintptr_t)0x82345678u, 0u, 1u) == 1u);
+
     az_rev1655_input_detour_begin_shutdown();
     CHECK(az_rev1655_input_detour_shutdown_ready() == 0u);
+    CHECK(az_rev1655_input_detour_publish_browse_jump(
+        (uintptr_t)0x82345678u, 0u, 1u) == 0u);
 
     CHECK(az_rev1655_input_detour_take_filter_request(&filter_index) ==
         AZ_INPUT_DETOUR_OK);
@@ -403,6 +430,64 @@ static void test_resident_return_layout_contract(void)
     CHECK(AZ_HOOK_ADMISSION_OFFSET + 8 <= AZ_HOOK_SLOT_SIZE);
 }
 
+static void test_browse_jump_runs_once_on_main_thread_poll(void)
+{
+    AzInputKeystroke key;
+    AzInputDetourStatus status;
+
+    az_rev1655_input_detour_reset();
+    browse_apply_calls = 0u;
+    browse_apply_gcm = (uintptr_t)0u;
+    browse_apply_target = 0u;
+    browse_apply_count = 0u;
+    browse_apply_result = 1u;
+    az_rev1655_input_detour_configure_browse_jump(
+        &apply_browse_jump,
+        (void *)(uintptr_t)0x1655u);
+
+    CHECK(az_rev1655_input_detour_publish_browse_jump(
+        (uintptr_t)0x82345678u, 43u, 100u) == 1u);
+    CHECK(az_rev1655_input_detour_publish_browse_jump(
+        (uintptr_t)0x82345678u, 44u, 100u) == 0u);
+
+    /* Aurora can report no keystroke on this poll; browse movement still
+     * belongs on the main input thread and must not wait for a key event. */
+    original_result = 1u;
+    key = make_key(0u, 0u);
+    (void)dispatch_main(&key);
+    original_result = AZ_REV1655_INPUT_RESULT_SUCCESS;
+
+    CHECK(browse_apply_calls == 1u);
+    CHECK(browse_apply_gcm == (uintptr_t)0x82345678u);
+    CHECK(browse_apply_target == 43u);
+    CHECK(browse_apply_count == 100u);
+    (void)dispatch_main(&key);
+    CHECK(browse_apply_calls == 1u);
+
+    az_rev1655_input_detour_snapshot_status(&status);
+    CHECK(status.browse_jump_queued == 1u);
+    CHECK(status.browse_jump_applied == 1u);
+    CHECK(status.browse_jump_rejected == 1u);
+    CHECK(status.browse_jump_pending == 0u);
+    CHECK(status.browse_jump_in_flight == 0u);
+}
+
+static void test_browse_jump_validation(void)
+{
+    AzInputDetourStatus status;
+
+    az_rev1655_input_detour_reset();
+    az_rev1655_input_detour_configure_browse_jump(
+        &apply_browse_jump,
+        (void *)(uintptr_t)0x1655u);
+    CHECK(az_rev1655_input_detour_publish_browse_jump(
+        (uintptr_t)0u, 0u, 1u) == 0u);
+    CHECK(az_rev1655_input_detour_publish_browse_jump(
+        (uintptr_t)0x82345678u, 1u, 1u) == 0u);
+    az_rev1655_input_detour_snapshot_status(&status);
+    CHECK(status.browse_jump_pending == 0u);
+}
+
 int main(void)
 {
     test_stage_gates_and_observe();
@@ -412,6 +497,8 @@ int main(void)
     test_revoked_verification_only_drains();
     test_invalid_pointer_range_fails_closed();
     test_resident_return_layout_contract();
+    test_browse_jump_runs_once_on_main_thread_poll();
+    test_browse_jump_validation();
     /* One-way shutdown must be the final test that resets global state. */
     test_shutdown_is_one_way_and_drains_owned_key();
 

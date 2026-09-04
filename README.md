@@ -1,5 +1,9 @@
 # Aurora A-Z
 
+<p align="center">
+  <img src="icon.png" alt="Aurora A-Z icon" width="180">
+</p>
+
 Aurora A-Z is a skin-agnostic, on-coverflow alphabetical selector for the
 Aurora dashboard on Xbox 360. The target UI is a transient
 `ALL # A B ... Z` row centered over a dimmed coverflow, shown only while R3 is
@@ -7,17 +11,19 @@ held, with controller navigation
 and selection directly from the main coverflow. It works without modifying or
 replacing the selected Aurora skin.
 
-The production artifact is strictly one self-contained file,
+The production artifact and installed payload are strictly one self-contained file,
 `AuroraAZ.xex`. All runtime resources are embedded. Installation must not
 require Lua scripts, QuickViews, database records, loose assets, skin files,
 changes to `Aurora.xex`, or changes to `launch.ini`.
+The repository icon is release-page artwork only and is not copied to Aurora.
 
 ## Required interaction
 
 The normative controller and filtering behavior is defined in
 [`REQUIREMENTS.md`](REQUIREMENTS.md). In short: hold R3 to reveal the
 on-coverflow selector at `ALL`; while holding it, D-pad Left/Right and left-stick
-Left/Right move the highlight; release R3 to filter and hide the row. Aurora
+Left/Right move the highlight; release R3 to apply the selected Browse/Filter
+action and hide the row. Aurora
 A-Z never consumes A, and RB retains Aurora's normal QuickView menu. A quick
 R3 press/release without moving the highlight cancels without filtering.
 
@@ -25,9 +31,18 @@ R3 press/release without moving the highlight cancels without filtering.
 the active QuickView and other filters. On release, the row vanishes and the
 selected item grows while fading out; this animation never delays filtering.
 
+Aurora A-Z supports two persistent operating modes from **Settings ->
+Configure Modules -> Aurora A-Z**. `Browse` (the default) jumps to the first
+matching title in the current QuickView without rebuilding the list. `Filter`
+retains the existing behavior and shows only matching titles. The plugin may
+generate a small settings file under `Data` after the user saves a mode; this
+is runtime state, not a second installation payload.
+
 The architectural constraints that follow from these requirements are recorded
 in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md), and the reviewed Rev1655
+Browse/settings ABI is in
+[`reference/BROWSE_MODE_REV1655.md`](reference/BROWSE_MODE_REV1655.md).
 
 ## Current status
 

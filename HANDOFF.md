@@ -9,15 +9,19 @@ native bootstrap status below supersedes the earlier failed-attempt notes.
 
 ## 1. Status right now
 
-The nonblocking ContentLauncher build at commit `d1cfced` passed on production
-hardware on 2026-09-04. Its GitHub Actions run was `33820492994`; the deployed
-artifact SHA-256 was
-`409369CD513FE9BB5E475BA1261FA09FCA9E8000571563DA6149A3E686B0D94A`.
-Hold-R3 selection, repeated filtering, and a normal game launch all worked.
-That file is the rollback baseline in production and must not be replaced by
-an unverified polish build. Current polish work is lab-first and adds the
-vertically centered dimmed `ALL # A ... Z` row, enlarged highlight, release
-grow/fade animation, and scoped removal of only the alphabetical `NameFilter`.
+The polished one-file build at commit `ee93a9d` is the current production
+rollback baseline. Hardware confirmed its centered dimmed `ALL # A ... Z`
+row, enlarged highlight without the duplicate small glyph, release animation,
+repeated filtering, and normal game launch. Do not replace it with an
+unverified candidate.
+
+Current work adds a persistent Browse/Filter choice under Settings ->
+Configure Modules -> Aurora A-Z. Browse is the default and scans Aurora's
+already-sorted active QuickView vector, then hands a direct first-match jump
+back to the main UI thread; it does not rebuild the list. The exact ABI and
+safety gates are documented in `reference/BROWSE_MODE_REV1655.md`. This work
+must pass native CI and the lab Browse/settings/title-launch gates before any
+production deployment.
 
 The legacy A-Z experiment has been removed from the console. A read-only pull
 of the live `settings.db` on 2026-09-02 confirmed the stock 7 QuickViews, zero

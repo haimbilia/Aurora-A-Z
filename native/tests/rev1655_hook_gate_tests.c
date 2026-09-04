@@ -18,6 +18,7 @@
 #define REV1655_RENDER_MENU_RVA 0x00358A08u
 #define REV1655_FONT_END_RVA 0x0047E390u
 #define REV1655_CONTENT_LAUNCH_RVA 0x00294DD0u
+#define REV1655_MODULE_SETTINGS_RVA 0x002C8CE8u
 
 static int failures = 0;
 
@@ -49,6 +50,11 @@ static const uint8_t k_font_end_signature[16] = {
 static const uint8_t k_content_launch_signature[16] = {
     0x7D, 0x88, 0x02, 0xA6, 0x48, 0x6D, 0x2E, 0xF5,
     0x94, 0x21, 0xFF, 0x60, 0x3D, 0x60, 0x82, 0x13
+};
+
+static const uint8_t k_module_settings_signature[16] = {
+    0x38, 0xA0, 0x00, 0x01, 0x80, 0x7A, 0x00, 0x04,
+    0x57, 0x24, 0x00, 0x3E, 0x48, 0x56, 0x0E, 0x55
 };
 
 static const uint8_t k_sha256_empty[32] = {
@@ -155,6 +161,8 @@ static uint8_t *make_synthetic_image(void)
         k_font_end_signature, sizeof(k_font_end_signature));
     memcpy(image + REV1655_CONTENT_LAUNCH_RVA,
         k_content_launch_signature, sizeof(k_content_launch_signature));
+    memcpy(image + REV1655_MODULE_SETTINGS_RVA,
+        k_module_settings_signature, sizeof(k_module_settings_signature));
     return image;
 }
 
@@ -433,6 +441,13 @@ static void test_fail_closed_gate(void)
     bytes[REV1655_CONTENT_LAUNCH_RVA +
         sizeof(k_content_launch_signature) - 1u] ^= 1u;
 
+    bytes[REV1655_MODULE_SETTINGS_RVA +
+        sizeof(k_module_settings_signature) - 1u] ^= 1u;
+    CHECK(az_rev1655_hook_gate_validate(&image, &permit) ==
+        AZ_REV1655_HOOK_GATE_BAD_MODULE_SETTINGS_SIGNATURE);
+    bytes[REV1655_MODULE_SETTINGS_RVA +
+        sizeof(k_module_settings_signature) - 1u] ^= 1u;
+
     image.virtual_address += 4u;
     CHECK(az_rev1655_hook_gate_validate(&image, &permit) ==
         AZ_REV1655_HOOK_GATE_BAD_IMAGE_BASE);
@@ -594,6 +609,8 @@ static void test_exact_fixture(const char *path)
         AZ_REV1655_HOOK_SITE_FONT_END, 0x8247E390u, 16u);
     check_resolved_site(permit, &image,
         AZ_REV1655_HOOK_SITE_CONTENT_LAUNCH, 0x82294DD0u, 16u);
+    check_resolved_site(permit, &image,
+        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS, 0x822C8CE8u, 16u);
     CHECK(az_rev1655_hook_gate_site(permit,
         AZ_REV1655_HOOK_SITE_COUNT) == NULL);
 

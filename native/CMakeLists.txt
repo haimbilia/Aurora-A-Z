@@ -11,7 +11,9 @@ add_library(auroraaz_core STATIC
     src/input.c
     src/input_hook.c
     src/layout.c
+    src/module_settings_detour.c
     src/overlay_model.c
+    src/operation_mode.c
     src/ppc.c
     src/rev1655_hook_gate.c
     src/selector.c
@@ -46,6 +48,15 @@ if(BUILD_TESTING)
 
     add_executable(auroraaz_overlay_model_tests tests/overlay_model_tests.c)
     target_link_libraries(auroraaz_overlay_model_tests PRIVATE auroraaz_core)
+
+    add_executable(auroraaz_operation_mode_tests
+        tests/operation_mode_tests.c)
+    target_link_libraries(auroraaz_operation_mode_tests PRIVATE auroraaz_core)
+
+    add_executable(auroraaz_module_settings_detour_tests
+        tests/module_settings_detour_tests.c)
+    target_link_libraries(auroraaz_module_settings_detour_tests
+        PRIVATE auroraaz_core)
 
     add_executable(auroraaz_ppc_tests tests/ppc_tests.c)
     target_link_libraries(auroraaz_ppc_tests PRIVATE auroraaz_core)
@@ -107,6 +118,12 @@ if(BUILD_TESTING)
         tests/filter_consumer_xbox360_tests.c
         src/filter_consumer_xbox360.c)
     target_link_libraries(auroraaz_filter_consumer_xbox360_tests
+        PRIVATE auroraaz_core)
+
+    add_executable(auroraaz_browse_consumer_rev1655_tests
+        tests/browse_consumer_rev1655_tests.c
+        src/browse_consumer_rev1655.c)
+    target_link_libraries(auroraaz_browse_consumer_rev1655_tests
         PRIVATE auroraaz_core)
 
     add_executable(auroraaz_input_detour_xbox_tests
@@ -171,6 +188,8 @@ if(BUILD_TESTING)
         auroraaz_glyph_atlas_tests
         auroraaz_hook_plan_tests
         auroraaz_overlay_model_tests
+        auroraaz_operation_mode_tests
+        auroraaz_module_settings_detour_tests
         auroraaz_ppc_tests
         auroraaz_rev1655_hook_gate_tests
         auroraaz_hook_runtime_tests
@@ -178,6 +197,7 @@ if(BUILD_TESTING)
         auroraaz_netdbg_bootstrap_tests
         auroraaz_netdbg_lifetime_rev1655_tests
         auroraaz_filter_consumer_xbox360_tests
+        auroraaz_browse_consumer_rev1655_tests
         auroraaz_input_detour_xbox_tests
         auroraaz_overlay_renderer_xbox360_tests
         auroraaz_render_detours_tests
@@ -204,6 +224,9 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_glyph_atlas_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_hook_plan_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_overlay_model_tests PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_operation_mode_tests PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_module_settings_detour_tests
+            PRIVATE /W4 /WX)
         target_compile_options(auroraaz_ppc_tests PRIVATE /W4 /WX)
         target_compile_options(auroraaz_rev1655_hook_gate_tests
             PRIVATE /W4 /WX)
@@ -216,6 +239,8 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_netdbg_lifetime_rev1655_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_filter_consumer_xbox360_tests
+            PRIVATE /W4 /WX)
+        target_compile_options(auroraaz_browse_consumer_rev1655_tests
             PRIVATE /W4 /WX)
         target_compile_options(auroraaz_input_detour_xbox_tests
             PRIVATE /W4 /WX)
@@ -249,6 +274,12 @@ if(BUILD_TESTING)
         target_compile_options(auroraaz_overlay_model_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
+        target_compile_options(auroraaz_operation_mode_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_module_settings_detour_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
         target_compile_options(auroraaz_ppc_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
@@ -268,6 +299,9 @@ if(BUILD_TESTING)
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
         target_compile_options(auroraaz_filter_consumer_xbox360_tests PRIVATE
+            -Wall -Wextra -Wconversion -Werror -Wpedantic
+        )
+        target_compile_options(auroraaz_browse_consumer_rev1655_tests PRIVATE
             -Wall -Wextra -Wconversion -Werror -Wpedantic
         )
         target_compile_options(auroraaz_input_detour_xbox_tests PRIVATE
@@ -301,6 +335,10 @@ if(BUILD_TESTING)
     add_test(NAME auroraaz_glyph_atlas_tests COMMAND auroraaz_glyph_atlas_tests)
     add_test(NAME auroraaz_hook_plan_tests COMMAND auroraaz_hook_plan_tests)
     add_test(NAME auroraaz_overlay_model_tests COMMAND auroraaz_overlay_model_tests)
+    add_test(NAME auroraaz_operation_mode_tests
+        COMMAND auroraaz_operation_mode_tests)
+    add_test(NAME auroraaz_module_settings_detour_tests
+        COMMAND auroraaz_module_settings_detour_tests)
     add_test(NAME auroraaz_ppc_tests COMMAND auroraaz_ppc_tests)
     add_test(NAME auroraaz_rev1655_hook_gate_tests
         COMMAND auroraaz_rev1655_hook_gate_tests
@@ -316,6 +354,8 @@ if(BUILD_TESTING)
     add_test(NAME auroraaz_filter_consumer_xbox360_tests
         COMMAND auroraaz_filter_consumer_xbox360_tests
             "${CMAKE_CURRENT_SOURCE_DIR}/../original/Aurora.exe")
+    add_test(NAME auroraaz_browse_consumer_rev1655_tests
+        COMMAND auroraaz_browse_consumer_rev1655_tests)
     add_test(NAME auroraaz_input_detour_xbox_tests
         COMMAND auroraaz_input_detour_xbox_tests)
     add_test(NAME auroraaz_overlay_renderer_xbox360_tests

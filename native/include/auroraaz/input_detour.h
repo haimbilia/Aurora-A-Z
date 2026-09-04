@@ -60,6 +60,17 @@ typedef uint32_t (*AzRev1655InputWrapper)(
     uint32_t flags,
     AzInputKeystroke *keystroke);
 
+/*
+ * Browse-mode scanning happens on the plugin worker. The resulting movement
+ * is handed back to Aurora's main input thread through this callback; the
+ * callback must revalidate the live GameContentManager before moving.
+ */
+typedef uint8_t (*AzRev1655BrowseJumpApply)(
+    void *context,
+    uintptr_t game_content_manager,
+    uint32_t target_index,
+    uint32_t item_count);
+
 typedef struct AzInputDetourObservation {
     uint32_t serial;
     uint32_t input_frame;
@@ -87,6 +98,9 @@ typedef struct AzInputDetourStatus {
     uint32_t reentrant_calls;
     uint32_t observation_drops;
     uint32_t filter_queue_busy;
+    uint32_t browse_jump_queued;
+    uint32_t browse_jump_applied;
+    uint32_t browse_jump_rejected;
     uint32_t in_flight;
     uint32_t consumed_controls;
     uint32_t pending_filter;
@@ -96,6 +110,8 @@ typedef struct AzInputDetourStatus {
     uint8_t filter_consumer_verified;
     uint8_t scene_allows_capture;
     uint8_t filter_in_flight;
+    uint8_t browse_jump_pending;
+    uint8_t browse_jump_in_flight;
     uint8_t shutdown_requested;
 } AzInputDetourStatus;
 
@@ -159,6 +175,17 @@ AzInputDetourResult az_rev1655_input_detour_take_filter_request(
     uint8_t *filter_index);
 
 void az_rev1655_input_detour_finish_filter_request(void);
+
+/* Configure before installing the input hook. Passing NULL disables jumps. */
+void az_rev1655_input_detour_configure_browse_jump(
+    AzRev1655BrowseJumpApply apply,
+    void *context);
+
+/* Worker-thread producer; the callback itself runs on the next main poll. */
+uint8_t az_rev1655_input_detour_publish_browse_jump(
+    uintptr_t game_content_manager,
+    uint32_t target_index,
+    uint32_t item_count);
 
 void az_rev1655_input_detour_snapshot_selector(AzSelectorState *selector);
 void az_rev1655_input_detour_snapshot_status(AzInputDetourStatus *status);

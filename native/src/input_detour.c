@@ -91,6 +91,16 @@ typedef struct AzInputDetourBridge {
     volatile uint32_t reentrant_calls;
     volatile uint32_t observation_drops;
     volatile uint32_t filter_queue_busy;
+    AzRev1655BrowseJumpApply browse_jump_apply;
+    void *browse_jump_context;
+    volatile uint32_t browse_jump_pending;
+    volatile uint32_t browse_jump_in_flight;
+    volatile uint32_t browse_jump_gcm;
+    volatile uint32_t browse_jump_target;
+    volatile uint32_t browse_jump_count;
+    volatile uint32_t browse_jump_queued;
+    volatile uint32_t browse_jump_applied;
+    volatile uint32_t browse_jump_rejected;
 } AzInputDetourBridge;
 
 static AzInputDetourBridge g_input_bridge;
@@ -182,6 +192,51 @@ static uint8_t filter_is_busy(void)
     return (load_u32(&g_input_bridge.pending_filter) !=
                 AZ_INPUT_DETOUR_NO_FILTER_REQUEST ||
             load_u32(&g_input_bridge.filter_in_flight) != 0u) ? 1u : 0u;
+}
+
+static void apply_pending_browse_jump(void)
+{
+    AzRev1655BrowseJumpApply apply;
+    void *context;
+    uintptr_t gcm;
+    uint32_t target;
+    uint32_t count;
+
+    uint32_t ready = 1u;
+
+    if (!__atomic_compare_exchange_n(
+            &g_input_bridge.browse_jump_pending,
+            &ready,
+            0u,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        return;
+    }
+    if (shutdown_is_requested() != 0u) {
+        (void)increment_u32(&g_input_bridge.browse_jump_rejected);
+        return;
+    }
+
+    apply = g_input_bridge.browse_jump_apply;
+    context = g_input_bridge.browse_jump_context;
+    gcm = (uintptr_t)load_u32(&g_input_bridge.browse_jump_gcm);
+    target = load_u32(&g_input_bridge.browse_jump_target);
+    count = load_u32(&g_input_bridge.browse_jump_count);
+    if (apply == NULL || gcm == (uintptr_t)0u || count == 0u ||
+        target >= count) {
+        (void)increment_u32(&g_input_bridge.browse_jump_rejected);
+        return;
+    }
+
+    store_u32(&g_input_bridge.browse_jump_in_flight, 1u);
+    if (apply(context, gcm, target, count) != 0u) {
+        (void)increment_u32(&g_input_bridge.browse_jump_applied);
+    }
+    else {
+        (void)increment_u32(&g_input_bridge.browse_jump_rejected);
+    }
+    store_u32(&g_input_bridge.browse_jump_in_flight, 0u);
 }
 
 static uint8_t snapshot_render(AzRenderPublication *publication)
@@ -382,6 +437,16 @@ void az_rev1655_input_detour_reset(void)
     store_u32(&g_input_bridge.reentrant_calls, 0u);
     store_u32(&g_input_bridge.observation_drops, 0u);
     store_u32(&g_input_bridge.filter_queue_busy, 0u);
+    g_input_bridge.browse_jump_apply = NULL;
+    g_input_bridge.browse_jump_context = NULL;
+    store_u32(&g_input_bridge.browse_jump_pending, 0u);
+    store_u32(&g_input_bridge.browse_jump_in_flight, 0u);
+    store_u32(&g_input_bridge.browse_jump_gcm, 0u);
+    store_u32(&g_input_bridge.browse_jump_target, 0u);
+    store_u32(&g_input_bridge.browse_jump_count, 0u);
+    store_u32(&g_input_bridge.browse_jump_queued, 0u);
+    store_u32(&g_input_bridge.browse_jump_applied, 0u);
+    store_u32(&g_input_bridge.browse_jump_rejected, 0u);
 
     lifecycle = AZ_INPUT_LIFECYCLE_RESETTING;
     (void)__atomic_compare_exchange_n(
@@ -528,6 +593,7 @@ void az_rev1655_input_detour_begin_shutdown(void)
     store_u32(&g_input_bridge.input_hook_verified, 0u);
     store_u32(&g_input_bridge.render_hook_verified, 0u);
     store_u32(&g_input_bridge.filter_consumer_verified, 0u);
+    store_u32(&g_input_bridge.browse_jump_pending, 0u);
 }
 
 uint8_t az_rev1655_input_detour_shutdown_ready(void)
@@ -540,6 +606,8 @@ uint8_t az_rev1655_input_detour_shutdown_ready(void)
         load_u32(&g_input_bridge.pending_filter) !=
             AZ_INPUT_DETOUR_NO_FILTER_REQUEST ||
         load_u32(&g_input_bridge.filter_in_flight) != 0u ||
+        load_u32(&g_input_bridge.browse_jump_pending) != 0u ||
+        load_u32(&g_input_bridge.browse_jump_in_flight) != 0u ||
         load_u32(&g_input_bridge.render_write_lock) != 0u) {
         return 0u;
     }
@@ -651,6 +719,60 @@ void az_rev1655_input_detour_finish_filter_request(void)
     store_u32(&g_input_bridge.filter_in_flight, 0u);
 }
 
+void az_rev1655_input_detour_configure_browse_jump(
+    AzRev1655BrowseJumpApply apply,
+    void *context)
+{
+    if (shutdown_is_requested() != 0u ||
+        load_u32(&g_input_bridge.browse_jump_pending) != 0u ||
+        load_u32(&g_input_bridge.browse_jump_in_flight) != 0u) {
+        return;
+    }
+    g_input_bridge.browse_jump_context = context;
+    g_input_bridge.browse_jump_apply = apply;
+}
+
+uint8_t az_rev1655_input_detour_publish_browse_jump(
+    uintptr_t game_content_manager,
+    uint32_t target_index,
+    uint32_t item_count)
+{
+    uint32_t expected = 0u;
+
+    if (shutdown_is_requested() != 0u ||
+        g_input_bridge.browse_jump_apply == NULL ||
+        game_content_manager == (uintptr_t)0u ||
+        game_content_manager > (uintptr_t)UINT32_MAX ||
+        item_count == 0u || target_index >= item_count) {
+        (void)increment_u32(&g_input_bridge.browse_jump_rejected);
+        return 0u;
+    }
+
+    if (!__atomic_compare_exchange_n(
+            &g_input_bridge.browse_jump_pending,
+            &expected,
+            2u,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        (void)increment_u32(&g_input_bridge.browse_jump_rejected);
+        return 0u;
+    }
+    store_u32(
+        &g_input_bridge.browse_jump_gcm,
+        (uint32_t)game_content_manager);
+    store_u32(&g_input_bridge.browse_jump_target, target_index);
+    store_u32(&g_input_bridge.browse_jump_count, item_count);
+    if (shutdown_is_requested() != 0u) {
+        store_u32(&g_input_bridge.browse_jump_pending, 0u);
+        (void)increment_u32(&g_input_bridge.browse_jump_rejected);
+        return 0u;
+    }
+    store_u32(&g_input_bridge.browse_jump_pending, 1u);
+    (void)increment_u32(&g_input_bridge.browse_jump_queued);
+    return 1u;
+}
+
 void az_rev1655_input_detour_snapshot_selector(AzSelectorState *selector)
 {
     uint32_t packed;
@@ -694,6 +816,12 @@ void az_rev1655_input_detour_snapshot_status(AzInputDetourStatus *status)
     status->observation_drops =
         load_u32(&g_input_bridge.observation_drops);
     status->filter_queue_busy = load_u32(&g_input_bridge.filter_queue_busy);
+    status->browse_jump_queued =
+        load_u32(&g_input_bridge.browse_jump_queued);
+    status->browse_jump_applied =
+        load_u32(&g_input_bridge.browse_jump_applied);
+    status->browse_jump_rejected =
+        load_u32(&g_input_bridge.browse_jump_rejected);
     status->in_flight = load_u32(&g_input_bridge.in_flight);
     status->consumed_controls = load_u32(
         &g_input_bridge.consumed_controls_snapshot);
@@ -709,6 +837,10 @@ void az_rev1655_input_detour_snapshot_status(AzInputDetourStatus *status)
         bool_from_atomic(&g_input_bridge.scene_allows_capture);
     status->filter_in_flight =
         bool_from_atomic(&g_input_bridge.filter_in_flight);
+    status->browse_jump_pending =
+        bool_from_atomic(&g_input_bridge.browse_jump_pending);
+    status->browse_jump_in_flight =
+        bool_from_atomic(&g_input_bridge.browse_jump_in_flight);
     status->shutdown_requested = shutdown_is_requested();
 }
 
@@ -755,6 +887,7 @@ uint32_t az_rev1655_input_detour_c(
     (void)increment_u32(&g_input_bridge.main_calls);
     input_frame = increment_u32(&g_input_bridge.input_frame);
     update_coverflow_scope(input_frame);
+    apply_pending_browse_jump();
 
     if (result != AZ_REV1655_INPUT_RESULT_SUCCESS) {
         (void)__atomic_sub_fetch(

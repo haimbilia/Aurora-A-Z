@@ -10,6 +10,7 @@
 #include <xecore/xboxkrnl.h>
 
 #include <auroraaz/compatibility.h>
+#include <auroraaz/browse_consumer_rev1655.h>
 #include <auroraaz/content_launch_detour.h>
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
 #include <auroraaz/filter_consumer_xbox360.h>
@@ -18,9 +19,11 @@
 #include <auroraaz/image.h>
 #include <auroraaz/input_detour.h>
 #include <auroraaz/m2a_input_telemetry.h>
+#include <auroraaz/module_settings_detour.h>
 #include <auroraaz/netdbg_bootstrap.h>
 #include <auroraaz/netdbg_lifetime_rev1655.h>
 #include <auroraaz/overlay_renderer_xbox360.h>
+#include <auroraaz/operation_mode.h>
 #include <auroraaz/render_detours.h>
 #include <auroraaz/rev1655_hook_gate.h>
 #include <auroraaz/rev1655_runtime.h>
@@ -35,6 +38,24 @@
 #define AZ_M2B_RENDER_MENU_TARGET_ADDRESS 0x82358A08u
 #define AZ_M2B_FONT_END_TARGET_ADDRESS 0x8247E390u
 #define AZ_CONTENT_LAUNCH_TARGET_ADDRESS 0x82294DD0u
+#define AZ_MODULE_SETTINGS_TARGET_ADDRESS 0x822C8CE8u
+#define AZ_XAM_SHOW_MESSAGE_BOX_ORDINAL 0x2CAu
+#define AZ_ERROR_IO_PENDING 997u
+#define AZ_BROWSE_LIST_MANAGER_SINGLETON_ADDRESS 0x8223FF30u
+#define AZ_BROWSE_LIST_LOOKUP_ADDRESS 0x8223FFB0u
+#define AZ_BROWSE_GCM_SINGLETON_ADDRESS 0x82223060u
+#define AZ_BROWSE_MOVE_LOWER_ADDRESS 0x8234BC68u
+#define AZ_BROWSE_MOVE_HIGHER_ADDRESS 0x8234C148u
+#define AZ_BROWSE_ACTIVE_MAP_OFFSET 0x74u
+#define AZ_BROWSE_HELPER_OFFSET 0x550u
+#define AZ_BROWSE_CURRENT_INDEX_OFFSET 0x584u
+#define AZ_BROWSE_LAYOUT_OFFSET 0x21B8u
+#define AZ_BROWSE_ENABLED_OFFSET 0x225Cu
+#define AZ_BROWSE_BLOCKED_OFFSET 0x225Eu
+#define AZ_BROWSE_READY_OFFSET 0x225Fu
+#define AZ_BROWSE_HELPER_MODEL_OFFSET 0x14u
+#define AZ_BROWSE_HELPER_SPEED_OFFSET 0x24u
+#define AZ_BROWSE_HELPER_MOVING_OFFSET 0x3Cu
 #define AZ_INPUT_SIGNATURE_SIZE 20u
 #define AZ_RENDER_SIGNATURE_SIZE 16u
 #define AZ_OBSERVATION_DRAIN_BUDGET 8u
@@ -55,6 +76,33 @@
 #define AZ_FILTER_APPLY_FAILED 3u
 #define AZ_FILTER_FALLBACK_COOLDOWN_TICKS 160u
 #define AZ_FILTER_IDLE_STABLE_TICKS 4u
+
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+typedef struct AzSettingsOverlapped {
+    volatile uint32_t result;
+    uint32_t length;
+    uint32_t context;
+    uint32_t event;
+    uint32_t completion_routine;
+    uint32_t completion_context;
+    uint32_t extended_error;
+} AzSettingsOverlapped;
+
+typedef struct AzSettingsMessageResult {
+    uint32_t button_pressed;
+} AzSettingsMessageResult;
+
+typedef uint32_t (*AzShowMessageBoxFn)(
+    uint32_t,
+    const wchar_t *,
+    const wchar_t *,
+    uint32_t,
+    const wchar_t **,
+    uint32_t,
+    uint32_t,
+    AzSettingsMessageResult *,
+    AzSettingsOverlapped *);
+#endif
 
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
 #define AZ_FILTER_GCM_SINGLETON_ADDRESS 0x82223060u
@@ -83,6 +131,7 @@ typedef struct AzRev1655Runtime {
     AzLiveHook render_menu_hook;
     AzLiveHook font_end_hook;
     AzLiveHook content_launch_hook;
+    AzLiveHook module_settings_hook;
     AzOverlayRenderer renderer;
     HANDLE worker_thread;
     volatile uint32_t state;
@@ -90,8 +139,17 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t observations_logged;
     volatile uint32_t lifetime_state;
     volatile uint32_t pinned_ordinal4_export;
+    volatile uint32_t netdbg_wrapper_address;
     volatile uint32_t shutdown_requests;
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+    volatile uint32_t operation_mode;
+    volatile uint32_t browse_bind_result;
+    volatile uint32_t browse_step_result;
+    AzRev1655BrowseConsumer browse_consumer;
+    AzShowMessageBoxFn show_message_box;
+    AzSettingsOverlapped settings_overlapped;
+    AzSettingsMessageResult settings_result;
+    uint8_t settings_dialog_active;
     volatile uint32_t worker_thread_id;
     volatile uint32_t filter_bind_result;
     volatile uint32_t filter_probe_result;
@@ -169,6 +227,8 @@ static char g_render_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M2b.bin";
 static char g_filter_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M3b-filter.bin";
+static char g_operation_mode_path[] =
+    "game:\\Data\\AuroraAZ.ini";
 
 /* xecorelib exports ordinal 748 but does not yet declare the prototype. */
 extern int32_t XamIsUIActive(void);
@@ -242,6 +302,7 @@ static uint8_t write_complete_file(
 void az_rev1655_runtime_test_reset_lifetime(void)
 {
     store_u32(&g_runtime.pinned_ordinal4_export, 0u);
+    store_u32(&g_runtime.netdbg_wrapper_address, 0u);
     store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_UNPINNED);
 }
 
@@ -291,6 +352,61 @@ static uint8_t read_complete_file(
         bytes_read == size &&
         close_succeeded != 0 ? 1u : 0u;
 }
+
+#if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+static uint8_t read_operation_mode(AzOperationMode *mode)
+{
+    uint8_t bytes[AZ_OPERATION_MODE_CONFIG_MAX_SIZE + 1u];
+    HANDLE file;
+    uint32_t bytes_read = 0u;
+    int read_succeeded;
+    int close_succeeded;
+
+    if (mode == NULL) {
+        return 0u;
+    }
+    *mode = AZ_OPERATION_MODE_BROWSE;
+    file = CreateFileA(
+        g_operation_mode_path,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (file == NULL || file == INVALID_HANDLE_VALUE) {
+        return 0u;
+    }
+    read_succeeded = ReadFile(
+        file,
+        bytes,
+        (uint32_t)sizeof(bytes),
+        &bytes_read,
+        NULL);
+    close_succeeded = CloseHandle(file);
+    if (read_succeeded == 0 || close_succeeded == 0 ||
+        bytes_read > AZ_OPERATION_MODE_CONFIG_MAX_SIZE) {
+        return 0u;
+    }
+    *mode = az_operation_mode_parse(bytes, (size_t)bytes_read);
+    return 1u;
+}
+
+static uint8_t write_operation_mode(AzOperationMode mode)
+{
+    char bytes[AZ_OPERATION_MODE_CONFIG_MAX_SIZE];
+    size_t size = az_operation_mode_serialize(
+        mode, bytes, sizeof(bytes));
+
+    if (size == 0u || size > (size_t)UINT32_MAX) {
+        return 0u;
+    }
+    return write_complete_file(
+        g_operation_mode_path,
+        (const uint8_t *)bytes,
+        (uint32_t)size);
+}
+#endif
 
 /* Continue the serial space left by an earlier title session. Without this,
  * a valid stale slot with a larger generation could outrank the new run. */
@@ -680,6 +796,8 @@ typedef int32_t (*AzFilterRegistryLookupFn)(
 typedef int32_t (*AzFilterScheduleFn)(
     void *, const AzRev1655FilterContext38 *,
     const AzRev1655FilterWork74 *, uint32_t);
+typedef void *(*AzBrowseListLookupFn)(void *, const uint32_t *);
+typedef uint32_t (*AzBrowseMoveFn)(void *, void *, uint32_t, float);
 
 static uint8_t filter_address_range_is_valid(
     void *context,
@@ -1039,6 +1157,314 @@ static AzRev1655FilterConsumerResult bind_filter_consumer_pristine(
         worker_thread_id,
         &host);
 }
+
+static AzInputDetourResult browse_take_request(
+    void *context,
+    uint8_t *filter_index)
+{
+    return filter_take_request(context, filter_index);
+}
+
+static void browse_finish_request(void *context)
+{
+    filter_finish_request(context);
+}
+
+static void *browse_gcm_singleton(void *context)
+{
+    (void)context;
+    return ((AzFilterSingletonFn)(uintptr_t)
+        AZ_BROWSE_GCM_SINGLETON_ADDRESS)();
+}
+
+static uint8_t browse_active_list(
+    void *context,
+    AzRev1655BrowseList *list)
+{
+    uint8_t *manager;
+    void *vector;
+    uint32_t key = 2u;
+    uint32_t begin_address;
+    uint32_t end_address;
+
+    if (list == NULL) {
+        return 0u;
+    }
+    list->begin = NULL;
+    list->end = NULL;
+    manager = (uint8_t *)((AzFilterSingletonFn)(uintptr_t)
+        AZ_BROWSE_LIST_MANAGER_SINGLETON_ADDRESS)();
+    if (filter_address_range_is_valid(
+            context,
+            manager,
+            AZ_BROWSE_ACTIVE_MAP_OFFSET + sizeof(uint32_t)) == 0u) {
+        return 0u;
+    }
+    vector = ((AzBrowseListLookupFn)(uintptr_t)
+        AZ_BROWSE_LIST_LOOKUP_ADDRESS)(
+            manager + AZ_BROWSE_ACTIVE_MAP_OFFSET, &key);
+    if (filter_address_range_is_valid(
+            context, vector, sizeof(uint32_t) * 2u) == 0u) {
+        return 0u;
+    }
+    memcpy(&begin_address, vector, sizeof(begin_address));
+    memcpy(
+        &end_address,
+        (const uint8_t *)vector + sizeof(uint32_t),
+        sizeof(end_address));
+    if (end_address < begin_address ||
+        ((begin_address | end_address) & 3u) != 0u) {
+        return 0u;
+    }
+    list->begin = (const AzRev1655BrowseItem *)(uintptr_t)begin_address;
+    list->end = (const AzRev1655BrowseItem *)(uintptr_t)end_address;
+    return 1u;
+}
+
+static uint8_t browse_publish_jump(
+    void *context,
+    void *gcm,
+    uint32_t target_index,
+    uint32_t item_count)
+{
+    (void)context;
+    return az_rev1655_input_detour_publish_browse_jump(
+        (uintptr_t)gcm, target_index, item_count);
+}
+
+static uint8_t browse_apply_jump(
+    void *context,
+    uintptr_t published_gcm,
+    uint32_t target_index,
+    uint32_t item_count)
+{
+    uint8_t *gcm;
+    uint8_t *helper;
+    void *layout;
+    uint32_t model;
+    uint32_t moving;
+    uint32_t current_index;
+    uint32_t distance;
+    float speed;
+    AzBrowseMoveFn move;
+
+    (void)context;
+    gcm = (uint8_t *)browse_gcm_singleton(NULL);
+    if ((uintptr_t)gcm != published_gcm || item_count == 0u ||
+        target_index >= item_count ||
+        filter_address_range_is_valid(
+            NULL, gcm, AZ_BROWSE_READY_OFFSET + 1u) == 0u ||
+        gcm[AZ_BROWSE_BLOCKED_OFFSET] == 1u ||
+        gcm[AZ_BROWSE_READY_OFFSET] == 0u ||
+        gcm[AZ_BROWSE_ENABLED_OFFSET] == 0u) {
+        return 0u;
+    }
+
+    memcpy(&layout, gcm + AZ_BROWSE_LAYOUT_OFFSET, sizeof(layout));
+    helper = gcm + AZ_BROWSE_HELPER_OFFSET;
+    if (layout == NULL || filter_address_range_is_valid(
+            NULL,
+            helper,
+            AZ_BROWSE_HELPER_MOVING_OFFSET + sizeof(uint32_t)) == 0u) {
+        return 0u;
+    }
+    memcpy(
+        &model,
+        helper + AZ_BROWSE_HELPER_MODEL_OFFSET,
+        sizeof(model));
+    memcpy(
+        &moving,
+        helper + AZ_BROWSE_HELPER_MOVING_OFFSET,
+        sizeof(moving));
+    memcpy(
+        &current_index,
+        gcm + AZ_BROWSE_CURRENT_INDEX_OFFSET,
+        sizeof(current_index));
+    memcpy(
+        &speed,
+        helper + AZ_BROWSE_HELPER_SPEED_OFFSET,
+        sizeof(speed));
+    if (model == 0u || moving != 0u || current_index >= item_count) {
+        return 0u;
+    }
+    if (target_index == current_index) {
+        return 1u;
+    }
+
+    if (target_index < current_index) {
+        distance = current_index - target_index;
+        move = (AzBrowseMoveFn)(uintptr_t)AZ_BROWSE_MOVE_LOWER_ADDRESS;
+    }
+    else {
+        distance = target_index - current_index;
+        move = (AzBrowseMoveFn)(uintptr_t)AZ_BROWSE_MOVE_HIGHER_ADDRESS;
+    }
+    return move(helper, layout, distance, speed) != 0u ? 1u : 0u;
+}
+
+static AzRev1655BrowseResult bind_browse_consumer(void)
+{
+    AzRev1655BrowseHostOps host;
+
+    memset(&host, 0, sizeof(host));
+    host.context = NULL;
+    host.coverflow_is_interactive = &filter_coverflow_is_interactive;
+    host.address_range_is_valid = &filter_address_range_is_valid;
+    host.take_request = &browse_take_request;
+    host.finish_request = &browse_finish_request;
+    host.gcm_singleton = &browse_gcm_singleton;
+    host.active_list = &browse_active_list;
+    host.string_view = &filter_string_view;
+    host.publish_jump = &browse_publish_jump;
+    return az_rev1655_browse_consumer_bind(
+        &g_runtime.browse_consumer, &host);
+}
+
+static uint8_t rename_netdbg_module_row(void)
+{
+    uint32_t wrapper_address = load_u32(
+        &g_runtime.netdbg_wrapper_address);
+    AzRev1655AuroraString *label;
+    static const char name[] = "Aurora A-Z";
+
+    if (wrapper_address == 0u || filter_address_range_is_valid(
+            NULL,
+            (void *)(uintptr_t)wrapper_address,
+            AZ_REV1655_NETDBG_LABEL_OFFSET +
+                AZ_REV1655_AURORA_STRING_SIZE) == 0u) {
+        return 0u;
+    }
+    label = (AzRev1655AuroraString *)(uintptr_t)(
+        wrapper_address + AZ_REV1655_NETDBG_LABEL_OFFSET);
+    return ((AzFilterStringAssignFn)(uintptr_t)
+        AZ_FILTER_STRING_ASSIGN_ADDRESS)(
+            label, name, (uint32_t)(sizeof(name) - 1u)) == label ? 1u : 0u;
+}
+
+static void publish_consumer_gate_for_mode(AzOperationMode mode)
+{
+    uint8_t consumer_ready;
+
+    if (mode == AZ_OPERATION_MODE_BROWSE) {
+        consumer_ready = load_u32(&g_runtime.browse_bind_result) ==
+            (uint32_t)AZ_REV1655_BROWSE_IDLE ? 1u : 0u;
+    }
+    else {
+        consumer_ready = load_u32(&g_runtime.filter_apply_state) ==
+            AZ_FILTER_APPLY_ARMED ? 1u : 0u;
+    }
+    az_rev1655_input_detour_publish_verification(
+        1u, 1u, 1u, consumer_ready);
+    az_rev1655_input_detour_confirm_controls(AZ_INPUT_VERIFIED_REQUIRED);
+    (void)az_rev1655_input_detour_request_stage(
+        AZ_INPUT_DETOUR_CONSUME);
+}
+
+static void apply_operation_mode(AzOperationMode mode)
+{
+    mode = az_operation_mode_sanitize((uint32_t)mode);
+    if (write_operation_mode(mode) == 0u) {
+        DbgPrint("AuroraAZ: could not persist operation mode\n");
+    }
+    store_u32(&g_runtime.operation_mode, (uint32_t)mode);
+    publish_consumer_gate_for_mode(mode);
+    DbgPrint(
+        "AuroraAZ: operation mode=%s\n",
+        az_operation_mode_name(mode));
+}
+
+static uint8_t resolve_settings_message_box(void)
+{
+    HMODULE xam = NULL;
+    void *procedure = NULL;
+
+    if (g_runtime.show_message_box != NULL) {
+        return 1u;
+    }
+    if (FAILED(XexGetModuleHandle("xam.xex", &xam)) || xam == NULL ||
+        FAILED(XexGetProcedureAddress(
+            xam,
+            AZ_XAM_SHOW_MESSAGE_BOX_ORDINAL,
+            &procedure)) ||
+        procedure == NULL) {
+        return 0u;
+    }
+    g_runtime.show_message_box =
+        (AzShowMessageBoxFn)(uintptr_t)procedure;
+    return 1u;
+}
+
+static void finish_settings_dialog(void)
+{
+    if (g_runtime.settings_result.button_pressed == 0u) {
+        apply_operation_mode(AZ_OPERATION_MODE_BROWSE);
+    }
+    else if (g_runtime.settings_result.button_pressed == 1u) {
+        apply_operation_mode(AZ_OPERATION_MODE_FILTER);
+    }
+    g_runtime.settings_dialog_active = 0u;
+}
+
+static void settings_worker_step(void)
+{
+    static const wchar_t title[] = L"Aurora A-Z";
+    static const wchar_t message[] =
+        L"Choose how letter selection works.\n\n"
+        L"Browse jumps instantly to the first matching title.\n"
+        L"Filter shows only matching titles and can take longer.";
+    static const wchar_t browse[] = L"Browse";
+    static const wchar_t filter[] = L"Filter";
+    static const wchar_t cancel[] = L"Cancel";
+    static const wchar_t *buttons[] = {browse, filter, cancel};
+    uint32_t call_result;
+    uint32_t focus;
+
+    if (g_runtime.settings_dialog_active != 0u) {
+        if (__atomic_load_n(
+                &g_runtime.settings_overlapped.result,
+                __ATOMIC_ACQUIRE) != AZ_ERROR_IO_PENDING) {
+            finish_settings_dialog();
+        }
+        return;
+    }
+    if (az_module_settings_detour_take_request() == 0u) {
+        return;
+    }
+    if (resolve_settings_message_box() == 0u) {
+        DbgPrint("AuroraAZ: settings dialog API unavailable\n");
+        return;
+    }
+
+    memset(&g_runtime.settings_overlapped, 0,
+        sizeof(g_runtime.settings_overlapped));
+    memset(&g_runtime.settings_result, 0,
+        sizeof(g_runtime.settings_result));
+    g_runtime.settings_overlapped.result = AZ_ERROR_IO_PENDING;
+    focus = load_u32(&g_runtime.operation_mode) ==
+        (uint32_t)AZ_OPERATION_MODE_FILTER ? 1u : 0u;
+    call_result = g_runtime.show_message_box(
+        0u,
+        title,
+        message,
+        3u,
+        buttons,
+        focus,
+        0u,
+        &g_runtime.settings_result,
+        &g_runtime.settings_overlapped);
+    if (call_result != 0u && call_result != AZ_ERROR_IO_PENDING) {
+        DbgPrint(
+            "AuroraAZ: settings dialog failed=%u\n",
+            (unsigned int)call_result);
+        return;
+    }
+    g_runtime.settings_dialog_active = 1u;
+    if (__atomic_load_n(
+            &g_runtime.settings_overlapped.result,
+            __ATOMIC_ACQUIRE) != AZ_ERROR_IO_PENDING) {
+        finish_settings_dialog();
+    }
+}
 #endif
 
 static AzRev1655RuntimeResult validate_input_site(
@@ -1147,7 +1573,8 @@ static AzRev1655RuntimeResult validate_overlay_sites(
     const AzRev1655LoadedImage *image,
     AzRev1655ResolvedHookSite *render_menu,
     AzRev1655ResolvedHookSite *font_end,
-    AzRev1655ResolvedHookSite *content_launch)
+    AzRev1655ResolvedHookSite *content_launch,
+    AzRev1655ResolvedHookSite *module_settings)
 {
     const AzRev1655HookPermit *permit = NULL;
     const AzRev1655HookSiteDescriptor *descriptor;
@@ -1162,7 +1589,7 @@ static AzRev1655RuntimeResult validate_overlay_sites(
     AzRev1655HookGateResult gate_result;
 
     if (image == NULL || render_menu == NULL || font_end == NULL ||
-        content_launch == NULL) {
+        content_launch == NULL || module_settings == NULL) {
         return AZ_REV1655_RUNTIME_RENDER_SITE_REJECTED;
     }
 
@@ -1225,6 +1652,24 @@ static AzRev1655RuntimeResult validate_overlay_sites(
         content_launch->complete_signature_size !=
             (size_t)AZ_RENDER_SIGNATURE_SIZE) {
         return AZ_REV1655_RUNTIME_LAUNCH_SITE_REJECTED;
+    }
+
+    descriptor = az_rev1655_hook_gate_site(
+        permit,
+        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS);
+    if (descriptor == NULL ||
+        az_rev1655_hook_gate_resolve_site(
+            permit,
+            descriptor,
+            image,
+            module_settings) != AZ_REV1655_HOOK_GATE_OK ||
+        module_settings->target_address !=
+            AZ_MODULE_SETTINGS_TARGET_ADDRESS ||
+        module_settings->expected_instruction !=
+            AZ_REV1655_MODULE_SETTINGS_FIRST_INSTRUCTION ||
+        module_settings->complete_signature_size !=
+            (size_t)AZ_RENDER_SIGNATURE_SIZE) {
+        return AZ_REV1655_RUNTIME_SETTINGS_SITE_REJECTED;
     }
 
     return AZ_REV1655_RUNTIME_OK;
@@ -1303,6 +1748,9 @@ AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
     store_u32(
         &g_runtime.pinned_ordinal4_export,
         expected_ordinal4_export);
+    store_u32(
+        &g_runtime.netdbg_wrapper_address,
+        lifetime_status.wrapper_address);
     store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_PINNED);
     return AZ_REV1655_RUNTIME_OK;
 }
@@ -1498,6 +1946,7 @@ static uint32_t input_observe_worker(void *context)
         (void)drain_observation_pass();
         flush_input_telemetry(0u);
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        settings_worker_step();
         if (load_u32(&g_runtime.filter_bind_result) ==
                 (uint32_t)AZ_REV1655_FILTER_CONSUMER_IDLE &&
             (load_u32(&g_runtime.filter_probe_result) ==
@@ -1514,23 +1963,32 @@ static uint32_t input_observe_worker(void *context)
                 /* Hardware probe passed. Arm asynchronous applies.  Each
                  * successful schedule revokes the gate until Aurora's work
                  * queue has remained idle beyond the conservative cooldown. */
-                az_rev1655_input_detour_publish_verification(
-                    1u, 1u, 1u, 1u);
-                az_rev1655_input_detour_confirm_controls(
-                    AZ_INPUT_VERIFIED_REQUIRED);
-                if (az_rev1655_input_detour_request_stage(
-                        AZ_INPUT_DETOUR_CONSUME) == AZ_INPUT_DETOUR_OK) {
-                    store_u32(
-                        &g_runtime.filter_apply_state,
-                        AZ_FILTER_APPLY_ARMED);
-                    g_runtime.filter_cooldown_ticks = 0u;
-                    g_runtime.filter_idle_ticks = 0u;
-                    g_runtime.filter_activity_seen = 0u;
-                }
+                store_u32(
+                    &g_runtime.filter_apply_state,
+                    AZ_FILTER_APPLY_ARMED);
+                g_runtime.filter_cooldown_ticks = 0u;
+                g_runtime.filter_idle_ticks = 0u;
+                g_runtime.filter_activity_seen = 0u;
+                publish_consumer_gate_for_mode(
+                    (AzOperationMode)load_u32(
+                        &g_runtime.operation_mode));
             }
             flush_filter_probe_telemetry();
         }
-        if (load_u32(&g_runtime.filter_apply_state) ==
+        if (load_u32(&g_runtime.operation_mode) ==
+                (uint32_t)AZ_OPERATION_MODE_BROWSE &&
+            load_u32(&g_runtime.browse_bind_result) ==
+                (uint32_t)AZ_REV1655_BROWSE_IDLE) {
+            const AzRev1655BrowseResult browse_result =
+                az_rev1655_browse_consumer_worker_step(
+                    &g_runtime.browse_consumer);
+            store_u32(
+                &g_runtime.browse_step_result,
+                (uint32_t)browse_result);
+        }
+        if (load_u32(&g_runtime.operation_mode) ==
+                (uint32_t)AZ_OPERATION_MODE_FILTER &&
+            load_u32(&g_runtime.filter_apply_state) ==
             AZ_FILTER_APPLY_ARMED) {
             const AzRev1655FilterConsumerResult step_result =
                 az_rev1655_filter_consumer_worker_step(
@@ -1572,7 +2030,9 @@ static uint32_t input_observe_worker(void *context)
                 flush_filter_probe_telemetry();
             }
         }
-        else if (load_u32(&g_runtime.filter_apply_state) ==
+        else if (load_u32(&g_runtime.operation_mode) ==
+                     (uint32_t)AZ_OPERATION_MODE_FILTER &&
+                 load_u32(&g_runtime.filter_apply_state) ==
                  AZ_FILTER_APPLY_COOLDOWN) {
             uint8_t queue_idle;
 
@@ -1639,12 +2099,17 @@ static uint32_t input_observe_worker(void *context)
         if (load_u32(&g_runtime.stage) ==
             (uint32_t)AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY) {
             az_overlay_renderer_begin_unload(&g_runtime.renderer);
+            (void)az_rev1655_browse_consumer_cancel(
+                &g_runtime.browse_consumer);
             (void)az_rev1655_filter_consumer_worker_cancel(
                 &g_runtime.filter_consumer);
         }
 #endif
+        az_module_settings_detour_begin_shutdown();
         az_rev1655_input_detour_begin_shutdown();
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+        remove_overlay_hook_for_title_exit(
+            &g_runtime.module_settings_hook, "ModuleSettings");
         remove_overlay_hook_for_title_exit(
             &g_runtime.content_launch_hook, "ContentLauncher");
         remove_overlay_hook_for_title_exit(
@@ -1814,6 +2279,7 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     AzRev1655ResolvedHookSite render_menu_site;
     AzRev1655ResolvedHookSite font_end_site;
     AzRev1655ResolvedHookSite content_launch_site;
+    AzRev1655ResolvedHookSite module_settings_site;
     AzRev1655RenderDetourBindings bindings;
     AzRev1655RuntimeResult validation;
     AzOverlayRendererResult renderer_result;
@@ -1823,6 +2289,7 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     AzInputDetourResult input_result;
     AzRev1655ThreadCreateResult create_result;
     AzRev1655FilterConsumerResult filter_bind_result;
+    AzRev1655BrowseResult browse_bind_result;
     const AzRev1655HookPermit *revision_permit = NULL;
     uint32_t wait_tick;
     HANDLE worker_thread = NULL;
@@ -1832,11 +2299,15 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     if (validation != AZ_REV1655_RUNTIME_OK) {
         return validation;
     }
+    if (rename_netdbg_module_row() == 0u) {
+        DbgPrint("AuroraAZ: Configure Modules row rename failed\n");
+    }
     validation = validate_overlay_sites(
         &image,
         &render_menu_site,
         &font_end_site,
-        &content_launch_site);
+        &content_launch_site,
+        &module_settings_site);
     if (validation != AZ_REV1655_RUNTIME_OK) {
         DbgPrint("AuroraAZ: overlay integration sites rejected\n");
         return validation;
@@ -1890,6 +2361,9 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         return AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED;
     }
     az_rev1655_input_detour_reset();
+    az_rev1655_input_detour_configure_browse_jump(
+        &browse_apply_jump, NULL);
+    az_module_settings_detour_reset();
     az_rev1655_input_detour_publish_verification(1u, 0u, 0u, 0u);
     create_result = az_rev1655_thread_create(
         (void *)(uintptr_t)&input_observe_worker,
@@ -1926,6 +2400,10 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     store_u32(
         &g_runtime.filter_bind_result,
         (uint32_t)filter_bind_result);
+    browse_bind_result = bind_browse_consumer();
+    store_u32(
+        &g_runtime.browse_bind_result,
+        (uint32_t)browse_bind_result);
 
     hook_result = az_live_hook_install_direct(
         input_site.target_address,
@@ -1970,11 +2448,28 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
     }
 
+    hook_result = az_live_hook_install_direct(
+        module_settings_site.target_address,
+        module_settings_site.expected_instruction,
+        (const void *)(uintptr_t)
+            &az_rev1655_module_settings_direct_detour_entry,
+        &g_runtime.module_settings_hook);
+    if (hook_result != AZ_HOOK_RUNTIME_OK) {
+        retain_published_hooks_fail_closed(1u);
+        return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+    }
+
     /* M2a hardware telemetry already proved every requested virtual key. The
      * selector may own only held R3 and horizontal navigation. A remains
      * entirely Aurora-owned; releasing R3 commits only after the independently
      * gated filter worker is verified. */
-    az_rev1655_input_detour_publish_verification(1u, 1u, 1u, 0u);
+    az_rev1655_input_detour_publish_verification(
+        1u,
+        1u,
+        1u,
+        load_u32(&g_runtime.operation_mode) ==
+                (uint32_t)AZ_OPERATION_MODE_BROWSE &&
+            browse_bind_result == AZ_REV1655_BROWSE_IDLE ? 1u : 0u);
     az_rev1655_input_detour_confirm_controls(AZ_INPUT_VERIFIED_REQUIRED);
     input_result = az_rev1655_input_detour_request_stage(
         AZ_INPUT_DETOUR_CONSUME);
@@ -2030,6 +2525,25 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
 
     store_u32(&g_runtime.observations_logged, 0u);
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
+    {
+        AzOperationMode mode = AZ_OPERATION_MODE_BROWSE;
+        (void)read_operation_mode(&mode);
+        store_u32(&g_runtime.operation_mode, (uint32_t)mode);
+    }
+    store_u32(
+        &g_runtime.browse_bind_result,
+        (uint32_t)AZ_REV1655_BROWSE_BAD_BINDINGS);
+    store_u32(
+        &g_runtime.browse_step_result,
+        (uint32_t)AZ_REV1655_BROWSE_IDLE);
+    memset(&g_runtime.browse_consumer, 0,
+        sizeof(g_runtime.browse_consumer));
+    g_runtime.show_message_box = NULL;
+    memset(&g_runtime.settings_overlapped, 0,
+        sizeof(g_runtime.settings_overlapped));
+    memset(&g_runtime.settings_result, 0,
+        sizeof(g_runtime.settings_result));
+    g_runtime.settings_dialog_active = 0u;
     store_u32(&g_runtime.worker_thread_id, 0u);
     store_u32(
         &g_runtime.filter_bind_result,
@@ -2191,6 +2705,8 @@ const char *az_rev1655_runtime_result_name(AzRev1655RuntimeResult result)
         return "render-detour-failed";
     case AZ_REV1655_RUNTIME_LAUNCH_SITE_REJECTED:
         return "launch-site-rejected";
+    case AZ_REV1655_RUNTIME_SETTINGS_SITE_REJECTED:
+        return "settings-site-rejected";
     default:
         return "unknown";
     }
