@@ -56,7 +56,7 @@ selected item grows while fading out; this animation never delays filtering.
 
 ## Switching mode
 
-While holding **R3** with the A-Z row open, tap **LT** to switch between Browse
+While holding **R3** with the A-Z row open, click **L3** to switch between Browse
 and Filter mode. The row updates immediately (`ALL` is present only in Filter
 mode) and the choice is saved for future selections. This avoids relying on
 Aurora's fixed Configure Modules UI.

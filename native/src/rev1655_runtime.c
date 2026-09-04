@@ -179,7 +179,7 @@ typedef struct AzRev1655Runtime {
     AzRev1655BrowseConsumer browse_consumer;
     uint8_t settings_dialog_active;
     uint8_t settings_a_owned;
-    uint8_t mode_toggle_lt_owned;
+    uint8_t mode_toggle_l3_owned;
     uint8_t settings_preview_active;
     uint8_t settings_preview_mode;
     uint32_t settings_scene_generation_seen;
@@ -2191,24 +2191,26 @@ static uint8_t module_settings_ui_input(
     if (keystroke == NULL) {
         return 0u;
     }
-    if (keystroke->virtual_key == AZ_VK_PAD_LTRIGGER) {
+    /* The selector exists only while R3 is held. L3 is therefore an explicit
+     * R3+L3 chord here, never a global controller shortcut. */
+    if (keystroke->virtual_key == AZ_VK_PAD_LTHUMB_PRESS) {
         az_rev1655_input_detour_snapshot_selector(&selector);
         if (selector.mode != AZ_MODE_SELECTING) {
-            g_runtime.mode_toggle_lt_owned = 0u;
+            g_runtime.mode_toggle_l3_owned = 0u;
             return 0u;
         }
         if ((keystroke->flags & AZ_KEYSTROKE_KEYUP) != 0u) {
-            if (g_runtime.mode_toggle_lt_owned == 0u) {
+            if (g_runtime.mode_toggle_l3_owned == 0u) {
                 return 0u;
             }
-            g_runtime.mode_toggle_lt_owned = 0u;
+            g_runtime.mode_toggle_l3_owned = 0u;
             return 1u;
         }
         if ((keystroke->flags & AZ_KEYSTROKE_REPEAT) != 0u) {
-            return g_runtime.mode_toggle_lt_owned;
+            return g_runtime.mode_toggle_l3_owned;
         }
         if ((keystroke->flags & AZ_KEYSTROKE_KEYDOWN) == 0u ||
-            g_runtime.mode_toggle_lt_owned != 0u) {
+            g_runtime.mode_toggle_l3_owned != 0u) {
             return 0u;
         }
         mode = load_u32(&g_runtime.operation_mode) ==
@@ -2218,7 +2220,7 @@ static uint8_t module_settings_ui_input(
         if (az_module_settings_request_mode(mode) == 0u) {
             return 0u;
         }
-        g_runtime.mode_toggle_lt_owned = 1u;
+        g_runtime.mode_toggle_l3_owned = 1u;
         return 1u;
     }
     scene = live_module_settings_scene_handle();
@@ -3470,7 +3472,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
         sizeof(g_runtime.browse_consumer));
     g_runtime.settings_dialog_active = 0u;
     g_runtime.settings_a_owned = 0u;
-    g_runtime.mode_toggle_lt_owned = 0u;
+    g_runtime.mode_toggle_l3_owned = 0u;
     g_runtime.settings_preview_active = 0u;
     g_runtime.settings_preview_mode = AZ_MODULE_SETTINGS_MODE_BROWSE;
     g_runtime.settings_scene_generation_seen = 0u;
