@@ -15,13 +15,18 @@ row, enlarged highlight without the duplicate small glyph, release animation,
 repeated filtering, and normal game launch. Do not replace it with an
 unverified candidate.
 
-Current work adds a persistent Browse/Filter choice under Settings ->
-Configure Modules -> Aurora A-Z. Browse is the default and scans Aurora's
-already-sorted active QuickView vector, then hands a direct first-match jump
-back to the main UI thread; it does not rebuild the list. The exact ABI and
-safety gates are documented in `reference/BROWSE_MODE_REV1655.md`. This work
-must pass native CI and the lab Browse/settings/title-launch gates before any
-production deployment.
+Browse mode and the module row now work on production hardware. Browse scans
+Aurora's already-sorted active QuickView vector, then hands a direct first-match
+jump back to the main UI thread; it does not rebuild the list. The first
+settings implementation used a system message box and froze Aurora after a
+selection, so it is rejected. The current candidate hooks the key-7 dispatcher
+at `0x822C8B88` and loads an embedded, classless settings XUR into Aurora's
+normal `ModuleHost`, matching the FTP/Nova page integration. Browse and Filter
+buttons queue persistence to the worker so the UI thread performs no file I/O.
+The same candidate continuously reapplies the embedded `icon.png` artwork to
+the Aurora A-Z module row because Aurora may asynchronously restore the stock
+Network Debugger icon after the row is first populated. Exact ABI details are
+in `reference/BROWSE_MODE_REV1655.md`.
 
 The legacy A-Z experiment has been removed from the console. A read-only pull
 of the live `settings.db` on 2026-09-02 confirmed the stock 7 QuickViews, zero

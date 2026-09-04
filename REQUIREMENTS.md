@@ -68,7 +68,9 @@ functional unless it satisfies every acceptance criterion below on Aurora
   dimming disappears. The animation must not delay or gate filter scheduling.
 - Pressing and releasing R3 without changing the highlight is a no-op: it
   hides the alphabet and must not apply `ALL` or rebuild the coverflow.
-- Aurora A-Z must never consume, clear, or assign any action to A.
+- The on-coverflow selector must never consume, clear, or assign any action to
+  A. The embedded Configure Modules page may consume A only while its Browse or
+  Filter control owns focus.
 - RB continues to open Aurora's unmodified QuickView menu.
 - Launching a game or XEX must behave identically with Aurora A-Z installed or
   absent; a black screen, delayed handoff, or required shutdown is a release
@@ -79,8 +81,9 @@ functional unless it satisfies every acceptance criterion below on Aurora
 - Aurora A-Z appears under Aurora's **Settings -> Configure Modules** screen,
   using the otherwise occupied `NETDBG` module row without adding or modifying
   a skin resource.
-- Activating that row opens a plugin-owned, skin-independent settings overlay
-  with exactly two choices: `Browse` and `Filter`.
+- Activating that row opens a plugin-owned, skin-independent page embedded in
+  Aurora's normal module-settings host, with exactly two choices: `Browse` and
+  `Filter`. It must not use a system message box or separate popup.
 - `Browse` is the default for a missing, invalid, or unsupported settings file.
 - Saving a choice persists it across Aurora restarts. A torn or invalid write
   must fail safely back to `Browse` without preventing Aurora from starting.

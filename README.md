@@ -33,11 +33,14 @@ the active QuickView and other filters. On release, the row vanishes and the
 selected item grows while fading out; this animation never delays filtering.
 
 Aurora A-Z supports two persistent operating modes from **Settings ->
-Configure Modules -> Aurora A-Z**. `Browse` (the default) jumps to the first
+Configure Modules -> Aurora A-Z**. Its Browse and Filter controls are embedded
+directly in Aurora's normal module-settings panel, like the built-in FTP and
+Nova pages; no system popup is used. `Browse` (the default) jumps to the first
 matching title in the current QuickView without rebuilding the list. `Filter`
-retains the existing behavior and shows only matching titles. The plugin may
-generate a small settings file under `Data` after the user saves a mode; this
-is runtime state, not a second installation payload.
+retains the existing behavior and shows only matching titles. Press A on a
+mode to save it immediately. The plugin may generate its embedded settings
+resource, icon cache, and a small mode file under `Data` at runtime; these are
+not additional installation payloads.
 
 The architectural constraints that follow from these requirements are recorded
 in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
@@ -55,10 +58,12 @@ SHA-256
 It is installed as the single `Plugins\NetDbgDll.xex` payload and has launched
 a game successfully without the earlier black-screen or 0% gathering freeze.
 
-The current unreleased polish work adds the centered dimmed `ALL # A ... Z`
-presentation, enlarged highlight, release animation, and alphabetical-only
-`ALL` semantics. It remains a lab candidate until native CI, screenshot review,
-filter tests, and game/XEX launch regression tests pass.
+The production hardware baseline has the centered dimmed `ALL # A ... Z`
+presentation, enlarged highlight, release animation, alphabetical-only `ALL`
+semantics, instant Browse mode, repeated Filter mode, and safe game launching.
+The current candidate replaces the freezing system settings popup with an
+embedded native module page and refreshes the module row with the repository
+`icon.png` artwork.
 
 The hold-R3 filtering interaction now works on hardware, including cancel on
 an unmoved R3 tap and completion-based re-arming. Commit `57dd888` is not a
@@ -180,8 +185,7 @@ in-memory hooks and must fail closed on unsupported builds. Database changes
 must remain transactional and reversible. Keep FTP access available during
 early hardware tests.
 
-Experimental XEX builds are tested only from a separately launchable
-`Hdd1:\AuroraAZLab\` copy. The normal boot path must remain on the known-good
-`Hdd1:\Aurora\Aurora.xex`; no development canary is copied into the production
-plugin directory. See `reference/NETDBG_BOOTSTRAP.md` for the hash, upload,
-NOVA verification, and recoverable rollback gates.
+Production updates require a verified native CI artifact, a hash check, and a
+timestamped backup of the existing `Hdd1:\Aurora\Plugins\NetDbgDll.xex` before
+the staged replacement. See `reference/NETDBG_BOOTSTRAP.md` for the loader and
+rollback contract.

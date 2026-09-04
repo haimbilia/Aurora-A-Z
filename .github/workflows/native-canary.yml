@@ -13,12 +13,14 @@ on:
       - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
       - scripts/generate-embedded-icon.py
+      - scripts/generate-embedded-settings.py
       - icon.png
       - scripts/decode-m2a-input.py
       - scripts/analyze-live-image.py
       - scripts/tests/test_analyze_live_image.py
       - scripts/tests/test_decode_m2a_input.py
       - scripts/tests/test_xex_exports.py
+      - scripts/tests/test_generate_embedded_settings.py
       - .github/workflows/native-canary.yml
   pull_request:
     paths:
@@ -29,12 +31,14 @@ on:
       - scripts/openxechain-synthxex-image-base.patch
       - scripts/xex_exports.py
       - scripts/generate-embedded-icon.py
+      - scripts/generate-embedded-settings.py
       - icon.png
       - scripts/decode-m2a-input.py
       - scripts/analyze-live-image.py
       - scripts/tests/test_analyze_live_image.py
       - scripts/tests/test_decode_m2a_input.py
       - scripts/tests/test_xex_exports.py
+      - scripts/tests/test_generate_embedded_settings.py
       - .github/workflows/native-canary.yml
 
 permissions:

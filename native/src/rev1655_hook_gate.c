@@ -20,7 +20,7 @@
 #define AZ_REV1655_RENDER_MENU_RVA 0x00358A08u
 #define AZ_REV1655_FONT_END_RVA 0x0047E390u
 #define AZ_REV1655_CONTENT_LAUNCH_RVA 0x00294DD0u
-#define AZ_REV1655_MODULE_SETTINGS_RVA 0x002C8CE8u
+#define AZ_REV1655_MODULE_SETTINGS_RVA 0x002C8B88u
 #define AZ_REV1655_PERMIT_SEAL 0x415A1655u
 
 struct AzRev1655HookPermit {
@@ -151,8 +151,8 @@ static const uint8_t k_content_launch_signature[16] = {
 };
 
 static const uint8_t k_module_settings_signature[16] = {
-    0x38, 0xA0, 0x00, 0x01, 0x80, 0x7A, 0x00, 0x04,
-    0x57, 0x24, 0x00, 0x3E, 0x48, 0x56, 0x0E, 0x55
+    0x2F, 0x1E, 0x00, 0x01, 0x41, 0x9A, 0x01, 0x5C,
+    0x2F, 0x1E, 0x00, 0x02, 0x41, 0x9A, 0x00, 0x54
 };
 
 static const struct AzRev1655HookSiteDescriptor k_sites[] = {

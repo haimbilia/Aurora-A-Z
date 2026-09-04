@@ -3,21 +3,26 @@
 
     .globl az_rev1655_module_settings_direct_detour_entry
 az_rev1655_module_settings_direct_detour_entry:
-    /* At Aurora's existing completion tail, r30 is still key 7 only for the
-     * NetDbg row. Queue our popup, then let Aurora complete its own task. */
+    /* Aurora has no settings scene for module key 7 (NETDBG). Route only that
+     * key through the normal stock scene-loading path with our embedded XUR. */
     cmpwi %r30, 7
     bne .Laz_module_settings_resume
     mflr %r12
     stwu %r1, -112(%r1)
     stw %r12, 104(%r1)
-    bl az_rev1655_module_settings_detour_c
+    bl az_module_settings_scene_path
+    mr %r30, %r3
     lwz %r12, 104(%r1)
     addi %r1, %r1, 112
     mtlr %r12
+    lis %r11, 0x822c
+    ori %r11, %r11, 0x8bf0
+    mtctr %r11
+    bctr
 
 .Laz_module_settings_resume:
-    li %r5, 1
+    cmpwi %cr6, %r30, 1
     lis %r11, 0x822c
-    ori %r11, %r11, 0x8cec
+    ori %r11, %r11, 0x8b8c
     mtctr %r11
     bctr

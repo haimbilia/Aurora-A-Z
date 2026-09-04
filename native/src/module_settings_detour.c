@@ -5,7 +5,7 @@
 #include <auroraaz/module_settings_detour.h>
 
 typedef struct AzModuleSettingsBridge {
-    volatile uint32_t pending;
+    volatile uint32_t pending_mode;
     volatile uint32_t disabled;
     volatile uint32_t hook_calls;
     volatile uint32_t requests_taken;
@@ -41,7 +41,7 @@ uint8_t az_module_settings_write_label(
 
 void az_module_settings_detour_reset(void)
 {
-    __atomic_store_n(&g_settings_bridge.pending, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_settings_bridge.pending_mode, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.disabled, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.hook_calls, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.requests_taken, 0u, __ATOMIC_RELEASE);
@@ -50,27 +50,63 @@ void az_module_settings_detour_reset(void)
 void az_module_settings_detour_begin_shutdown(void)
 {
     __atomic_store_n(&g_settings_bridge.disabled, 1u, __ATOMIC_RELEASE);
-    __atomic_store_n(&g_settings_bridge.pending, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_settings_bridge.pending_mode, 0u, __ATOMIC_RELEASE);
 }
 
-uint8_t az_module_settings_detour_take_request(void)
+const uint16_t *az_module_settings_scene_path(void)
 {
-    uint8_t taken;
+    static const uint16_t path[] = {
+        (uint16_t)'g', (uint16_t)'a', (uint16_t)'m', (uint16_t)'e',
+        (uint16_t)':', (uint16_t)'\\', (uint16_t)'D', (uint16_t)'a',
+        (uint16_t)'t', (uint16_t)'a', (uint16_t)'\\',
+        (uint16_t)'A', (uint16_t)'u', (uint16_t)'r', (uint16_t)'o',
+        (uint16_t)'r', (uint16_t)'a', (uint16_t)'A', (uint16_t)'Z',
+        (uint16_t)'_', (uint16_t)'S', (uint16_t)'e', (uint16_t)'t',
+        (uint16_t)'t', (uint16_t)'i', (uint16_t)'n', (uint16_t)'g',
+        (uint16_t)'s', (uint16_t)'.', (uint16_t)'x', (uint16_t)'u',
+        (uint16_t)'r', 0u
+    };
 
-    if (__atomic_load_n(
+    (void)__atomic_add_fetch(
+        &g_settings_bridge.hook_calls, 1u, __ATOMIC_ACQ_REL);
+    return path;
+}
+
+uint8_t az_module_settings_request_mode(uint32_t mode)
+{
+    if (mode > AZ_MODULE_SETTINGS_MODE_FILTER ||
+        __atomic_load_n(
             &g_settings_bridge.disabled,
             __ATOMIC_ACQUIRE) != 0u) {
         return 0u;
     }
-    taken = __atomic_exchange_n(
-        &g_settings_bridge.pending,
-        0u,
-        __ATOMIC_ACQ_REL) != 0u ? 1u : 0u;
-    if (taken != 0u) {
-        (void)__atomic_add_fetch(
-            &g_settings_bridge.requests_taken, 1u, __ATOMIC_ACQ_REL);
+    __atomic_store_n(
+        &g_settings_bridge.pending_mode,
+        mode + 1u,
+        __ATOMIC_RELEASE);
+    return 1u;
+}
+
+uint8_t az_module_settings_take_mode_request(uint32_t *mode)
+{
+    uint32_t pending;
+
+    if (mode == NULL || __atomic_load_n(
+            &g_settings_bridge.disabled,
+            __ATOMIC_ACQUIRE) != 0u) {
+        return 0u;
     }
-    return taken;
+    pending = __atomic_exchange_n(
+        &g_settings_bridge.pending_mode,
+        0u,
+        __ATOMIC_ACQ_REL);
+    if (pending == 0u || pending > AZ_MODULE_SETTINGS_MODE_FILTER + 1u) {
+        return 0u;
+    }
+    *mode = pending - 1u;
+    (void)__atomic_add_fetch(
+        &g_settings_bridge.requests_taken, 1u, __ATOMIC_ACQ_REL);
+    return 1u;
 }
 
 void az_module_settings_detour_snapshot_status(
@@ -84,18 +120,7 @@ void az_module_settings_detour_snapshot_status(
     status->requests_taken = __atomic_load_n(
         &g_settings_bridge.requests_taken, __ATOMIC_ACQUIRE);
     status->pending = __atomic_load_n(
-        &g_settings_bridge.pending, __ATOMIC_ACQUIRE) != 0u ? 1u : 0u;
+        &g_settings_bridge.pending_mode, __ATOMIC_ACQUIRE) != 0u ? 1u : 0u;
     status->disabled = __atomic_load_n(
         &g_settings_bridge.disabled, __ATOMIC_ACQUIRE) != 0u ? 1u : 0u;
-}
-
-void az_rev1655_module_settings_detour_c(void)
-{
-    (void)__atomic_add_fetch(
-        &g_settings_bridge.hook_calls, 1u, __ATOMIC_ACQ_REL);
-    if (__atomic_load_n(
-            &g_settings_bridge.disabled,
-            __ATOMIC_ACQUIRE) == 0u) {
-        __atomic_store_n(&g_settings_bridge.pending, 1u, __ATOMIC_RELEASE);
-    }
 }

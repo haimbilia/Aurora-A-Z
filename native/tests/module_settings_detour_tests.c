@@ -22,6 +22,7 @@ int main(void)
     uint8_t wstring_object[0x1Cu];
     uint16_t storage[17];
     uint32_t size;
+    uint32_t mode = 99u;
     uint32_t capacity = 16u;
     static const uint16_t expected[] = {
         'A', 'u', 'r', 'o', 'r', 'a', ' ', 'A', '-', 'Z', 0
@@ -51,26 +52,37 @@ int main(void)
     CHECK(status.requests_taken == 0u);
     CHECK(status.pending == 0u);
     CHECK(status.disabled == 0u);
-    CHECK(az_module_settings_detour_take_request() == 0u);
-    az_rev1655_module_settings_detour_c();
+    CHECK(az_module_settings_take_mode_request(&mode) == 0u);
+    CHECK(az_module_settings_scene_path() != NULL);
     az_module_settings_detour_snapshot_status(&status);
     CHECK(status.hook_calls == 1u);
+    CHECK(status.pending == 0u);
+    CHECK(az_module_settings_request_mode(
+        AZ_MODULE_SETTINGS_MODE_BROWSE) == 1u);
+    CHECK(az_module_settings_request_mode(
+        AZ_MODULE_SETTINGS_MODE_FILTER) == 1u);
+    CHECK(az_module_settings_request_mode(2u) == 0u);
+    az_module_settings_detour_snapshot_status(&status);
     CHECK(status.pending == 1u);
-    CHECK(az_module_settings_detour_take_request() == 1u);
+    CHECK(az_module_settings_take_mode_request(&mode) == 1u);
+    CHECK(mode == AZ_MODULE_SETTINGS_MODE_FILTER);
     az_module_settings_detour_snapshot_status(&status);
     CHECK(status.requests_taken == 1u);
-    CHECK(az_module_settings_detour_take_request() == 0u);
+    CHECK(az_module_settings_take_mode_request(&mode) == 0u);
 
-    /* Repeated opens coalesce into one worker request. Aurora's original
-     * task completion tail is not replaced by this bridge. */
-    az_rev1655_module_settings_detour_c();
-    az_rev1655_module_settings_detour_c();
-    CHECK(az_module_settings_detour_take_request() == 1u);
-    CHECK(az_module_settings_detour_take_request() == 0u);
+    /* Repeated selections coalesce to the newest worker request. */
+    CHECK(az_module_settings_request_mode(
+        AZ_MODULE_SETTINGS_MODE_FILTER) == 1u);
+    CHECK(az_module_settings_request_mode(
+        AZ_MODULE_SETTINGS_MODE_BROWSE) == 1u);
+    CHECK(az_module_settings_take_mode_request(&mode) == 1u);
+    CHECK(mode == AZ_MODULE_SETTINGS_MODE_BROWSE);
+    CHECK(az_module_settings_take_mode_request(&mode) == 0u);
 
     az_module_settings_detour_begin_shutdown();
-    az_rev1655_module_settings_detour_c();
-    CHECK(az_module_settings_detour_take_request() == 0u);
+    CHECK(az_module_settings_request_mode(
+        AZ_MODULE_SETTINGS_MODE_FILTER) == 0u);
+    CHECK(az_module_settings_take_mode_request(&mode) == 0u);
 
     if (failures != 0) {
         fprintf(stderr, "%d module settings assertion(s) failed\n", failures);

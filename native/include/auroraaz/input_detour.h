@@ -71,6 +71,9 @@ typedef uint8_t (*AzRev1655BrowseJumpApply)(
     uint32_t target_index,
     uint32_t item_count);
 typedef void (*AzRev1655UiTick)(void *context);
+typedef uint8_t (*AzRev1655UiInput)(
+    void *context,
+    const AzInputKeystroke *keystroke);
 
 typedef struct AzInputDetourObservation {
     uint32_t serial;
@@ -185,6 +188,12 @@ void az_rev1655_input_detour_configure_browse_jump(
 /* Optional main-input-thread callback configured before hook publication. */
 void az_rev1655_input_detour_configure_ui_tick(
     AzRev1655UiTick tick,
+    void *context);
+
+/* Optional UI-thread input owner for plugin settings controls. A nonzero
+ * result clears the keystroke before Aurora processes it. */
+void az_rev1655_input_detour_configure_ui_input(
+    AzRev1655UiInput input,
     void *context);
 
 /* Worker-thread producer; the callback itself runs on the next main poll. */

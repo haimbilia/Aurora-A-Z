@@ -38,15 +38,14 @@
 #define AZ_M2B_RENDER_MENU_TARGET_ADDRESS 0x82358A08u
 #define AZ_M2B_FONT_END_TARGET_ADDRESS 0x8247E390u
 #define AZ_CONTENT_LAUNCH_TARGET_ADDRESS 0x82294DD0u
-#define AZ_MODULE_SETTINGS_TARGET_ADDRESS 0x822C8CE8u
-#define AZ_XAM_SHOW_MESSAGE_BOX_ORDINAL 0x2CAu
-#define AZ_XUSER_INDEX_ANY 0x000000FFu
+#define AZ_MODULE_SETTINGS_TARGET_ADDRESS 0x822C8B88u
 #define AZ_XUI_ELEMENT_GET_FIRST_CHILD_ORDINAL 811u
 #define AZ_XUI_ELEMENT_GET_NEXT_ORDINAL 816u
+#define AZ_XUI_TEXT_ELEMENT_SET_TEXT_ORDINAL 867u
 #define AZ_XUI_TEXT_ELEMENT_GET_TEXT_ORDINAL 870u
 #define AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL 915u
+#define AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL 921u
 #define AZ_XUI_ELEMENT_GET_DESCENDANT_BY_ID_ORDINAL 2111u
-#define AZ_ERROR_IO_PENDING 997u
 #define AZ_SCENE_CACHE_HEAD_ADDRESS 0x82BC006Cu
 #define AZ_ICON_UI_TICK_INTERVAL 30u
 #define AZ_BROWSE_LIST_MANAGER_SINGLETON_ADDRESS 0x8223FF30u
@@ -96,41 +95,13 @@
 #define AZ_BROWSE_APPLY_MOVED 8u
 
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
-typedef struct AzSettingsOverlapped {
-    volatile uint32_t result;
-    uint32_t length;
-    uint32_t context;
-    uint32_t event;
-    uint32_t completion_routine;
-    uint32_t completion_context;
-    uint32_t extended_error;
-} AzSettingsOverlapped;
-
-typedef struct AzSettingsMessageResult {
-    union {
-        uint32_t button_pressed;
-        uint16_t passcode[4];
-    } value;
-} AzSettingsMessageResult;
-
-typedef char AzSettingsMessageResultMustBe8Bytes[
-    sizeof(AzSettingsMessageResult) == 8u ? 1 : -1];
-
-typedef uint32_t (*AzShowMessageBoxFn)(
-    uint32_t,
-    const uint16_t *,
-    const uint16_t *,
-    uint32_t,
-    const uint16_t **,
-    uint32_t,
-    uint32_t,
-    AzSettingsMessageResult *,
-    AzSettingsOverlapped *);
 typedef int32_t (*AzXuiGetChildFn)(uint32_t, uint32_t *);
 typedef int32_t (*AzXuiGetDescendantFn)(
     uint32_t, const uint16_t *, uint32_t *);
 typedef int32_t (*AzXuiGetTextFn)(uint32_t, const uint16_t **);
+typedef int32_t (*AzXuiSetTextFn)(uint32_t, const uint16_t *);
 typedef int32_t (*AzXuiSetImagePathFn)(uint32_t, const uint16_t *);
+typedef int32_t (*AzXuiHasFocusFn)(uint32_t);
 #endif
 
 #if !defined(AURORAAZ_REV1655_RUNTIME_TEST_IO)
@@ -179,23 +150,23 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t browse_apply_current;
     volatile uint32_t browse_apply_count;
     AzRev1655BrowseConsumer browse_consumer;
-    AzShowMessageBoxFn show_message_box;
-    AzSettingsOverlapped settings_overlapped;
-    AzSettingsMessageResult settings_result;
     uint8_t settings_dialog_active;
+    uint8_t settings_a_owned;
     volatile uint32_t settings_resolve_result;
     volatile uint32_t settings_call_result;
     volatile uint32_t settings_completions;
     volatile uint32_t module_label_result;
     volatile uint32_t icon_cache_result;
+    volatile uint32_t settings_xur_cache_result;
     volatile uint32_t icon_apply_result;
     volatile uint32_t icon_ui_ticks;
-    uint32_t icon_applied_item;
     AzXuiGetChildFn xui_get_first_child;
     AzXuiGetChildFn xui_get_next;
     AzXuiGetDescendantFn xui_get_descendant;
     AzXuiGetTextFn xui_get_text;
+    AzXuiSetTextFn xui_set_text;
     AzXuiSetImagePathFn xui_set_image_path;
+    AzXuiHasFocusFn xui_has_focus;
     volatile uint32_t worker_thread_id;
     volatile uint32_t filter_bind_result;
     volatile uint32_t filter_probe_result;
@@ -316,9 +287,13 @@ static char g_operation_mode_path[] =
     "game:\\Data\\AuroraAZ.ini";
 static char g_icon_cache_path[] =
     "game:\\Data\\AuroraAZ-icon.png";
+static char g_settings_xur_cache_path[] =
+    "game:\\Data\\AuroraAZ_Settings.xur";
 
 extern const uint8_t g_auroraaz_embedded_icon_png[];
 extern const uint32_t g_auroraaz_embedded_icon_png_size;
+extern const uint8_t g_auroraaz_embedded_settings_xur[];
+extern const uint32_t g_auroraaz_embedded_settings_xur_size;
 
 /* xecorelib exports ordinal 748 but does not yet declare the prototype. */
 extern int32_t XamIsUIActive(void);
@@ -1620,16 +1595,15 @@ static uint8_t target_utf16_has_basename(
     return 1u;
 }
 
-static uint32_t find_settings_scene_handle(void)
+static uint32_t find_scene_handle(
+    const uint16_t *basename,
+    uint32_t basename_length)
 {
-    static const uint16_t basename[] = {
-        'A','u','r','o','r','a','_','S','e','t','t','i','n','g','s',
-        '.','x','u','r',0
-    };
     uint32_t node;
     uint32_t count;
 
-    if (filter_address_range_is_valid(
+    if (basename == NULL || basename_length == 0u ||
+        filter_address_range_is_valid(
             NULL,
             (const void *)(uintptr_t)AZ_SCENE_CACHE_HEAD_ADDRESS,
             sizeof(node)) == 0u) {
@@ -1657,7 +1631,7 @@ static uint32_t find_settings_scene_handle(void)
             target_utf16_has_basename(
                 (const uint16_t *)(uintptr_t)path_address,
                 basename,
-                (uint32_t)(sizeof(basename) / sizeof(basename[0]) - 1u)) != 0u) {
+                basename_length) != 0u) {
             return handle;
         }
         if (next == node) {
@@ -1668,6 +1642,28 @@ static uint32_t find_settings_scene_handle(void)
     return 0u;
 }
 
+static uint32_t find_settings_scene_handle(void)
+{
+    static const uint16_t basename[] = {
+        'A','u','r','o','r','a','_','S','e','t','t','i','n','g','s',
+        '.','x','u','r',0
+    };
+    return find_scene_handle(
+        basename,
+        (uint32_t)(sizeof(basename) / sizeof(basename[0]) - 1u));
+}
+
+static uint32_t find_auroraaz_settings_scene_handle(void)
+{
+    static const uint16_t basename[] = {
+        'A','u','r','o','r','a','A','Z','_','S','e','t','t','i','n','g','s',
+        '.','x','u','r',0
+    };
+    return find_scene_handle(
+        basename,
+        (uint32_t)(sizeof(basename) / sizeof(basename[0]) - 1u));
+}
+
 static uint8_t resolve_icon_xui(void)
 {
     HMODULE xam = NULL;
@@ -1675,9 +1671,13 @@ static uint8_t resolve_icon_xui(void)
     void *next = NULL;
     void *descendant = NULL;
     void *text = NULL;
+    void *set_text = NULL;
     void *set_image = NULL;
+    void *has_focus = NULL;
 
-    if (g_runtime.xui_set_image_path != NULL) {
+    if (g_runtime.xui_set_text != NULL &&
+        g_runtime.xui_set_image_path != NULL &&
+        g_runtime.xui_has_focus != NULL) {
         return 1u;
     }
     if (FAILED(XexGetModuleHandle("xam.xex", &xam)) || xam == NULL ||
@@ -1690,9 +1690,13 @@ static uint8_t resolve_icon_xui(void)
         FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_TEXT_ELEMENT_GET_TEXT_ORDINAL, &text)) ||
         FAILED(XexGetProcedureAddress(
+            xam, AZ_XUI_TEXT_ELEMENT_SET_TEXT_ORDINAL, &set_text)) ||
+        FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL, &set_image)) ||
+        FAILED(XexGetProcedureAddress(
+            xam, AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL, &has_focus)) ||
         first == NULL || next == NULL || descendant == NULL || text == NULL ||
-        set_image == NULL) {
+        set_text == NULL || set_image == NULL || has_focus == NULL) {
         return 0u;
     }
     g_runtime.xui_get_first_child = (AzXuiGetChildFn)(uintptr_t)first;
@@ -1700,12 +1704,14 @@ static uint8_t resolve_icon_xui(void)
     g_runtime.xui_get_descendant =
         (AzXuiGetDescendantFn)(uintptr_t)descendant;
     g_runtime.xui_get_text = (AzXuiGetTextFn)(uintptr_t)text;
+    g_runtime.xui_set_text = (AzXuiSetTextFn)(uintptr_t)set_text;
     g_runtime.xui_set_image_path =
         (AzXuiSetImagePathFn)(uintptr_t)set_image;
+    g_runtime.xui_has_focus = (AzXuiHasFocusFn)(uintptr_t)has_focus;
     return 1u;
 }
 
-static void module_icon_ui_tick(void *context)
+static void module_ui_tick(void *context)
 {
     static const uint16_t module_list_id[] = {
         'M','o','d','u','l','e','L','i','s','t',0
@@ -1723,13 +1729,49 @@ static void module_icon_ui_tick(void *context)
         'g','a','m','e',':','\\','D','a','t','a','\\','A','u','r','o','r','a',
         'A','Z','-','i','c','o','n','.','p','n','g',0
     };
+    static const uint16_t mode_status_id[] = {
+        'M','o','d','e','S','t','a','t','u','s',0
+    };
+    static const uint16_t browse_status[] = {
+        'C','u','r','r','e','n','t',' ','m','o','d','e',':',' ','B','r','o','w','s','e',0
+    };
+    static const uint16_t filter_status[] = {
+        'C','u','r','r','e','n','t',' ','m','o','d','e',':',' ','F','i','l','t','e','r',0
+    };
     uint32_t ticks;
     uint32_t scene;
     uint32_t list = 0u;
     uint32_t item = 0u;
     uint32_t count;
+    uint32_t module_scene;
 
     (void)context;
+    if (resolve_icon_xui() == 0u) {
+        g_runtime.settings_dialog_active = 0u;
+        store_u32(&g_runtime.settings_resolve_result, 2u);
+    }
+    else {
+        module_scene = find_auroraaz_settings_scene_handle();
+        g_runtime.settings_dialog_active =
+            module_scene != 0u &&
+            g_runtime.xui_has_focus(module_scene) == 1 ? 1u : 0u;
+        if (g_runtime.settings_dialog_active != 0u) {
+            uint32_t status_label = 0u;
+            if (g_runtime.xui_get_descendant(
+                    module_scene, mode_status_id, &status_label) >= 0 &&
+                status_label != 0u) {
+                const uint16_t *status_text =
+                    load_u32(&g_runtime.operation_mode) ==
+                        (uint32_t)AZ_OPERATION_MODE_FILTER ?
+                            filter_status : browse_status;
+                (void)g_runtime.xui_set_text(status_label, status_text);
+            }
+        }
+        store_u32(&g_runtime.settings_resolve_result, 1u);
+        if (g_runtime.settings_dialog_active == 0u) {
+            g_runtime.settings_a_owned = 0u;
+        }
+    }
     ticks = __atomic_add_fetch(
         &g_runtime.icon_ui_ticks, 1u, __ATOMIC_ACQ_REL);
     if (ticks < AZ_ICON_UI_TICK_INTERVAL) {
@@ -1743,7 +1785,6 @@ static void module_icon_ui_tick(void *context)
     }
     scene = find_settings_scene_handle();
     if (scene == 0u) {
-        g_runtime.icon_applied_item = 0u;
         store_u32(&g_runtime.icon_apply_result, 3u);
         return;
     }
@@ -1774,15 +1815,10 @@ static void module_icon_ui_tick(void *context)
                 store_u32(&g_runtime.icon_apply_result, 6u);
                 return;
             }
-            if (g_runtime.icon_applied_item == item) {
-                store_u32(&g_runtime.icon_apply_result, 8u);
-                return;
-            }
             if (g_runtime.xui_set_image_path(icon, icon_path) < 0) {
                 store_u32(&g_runtime.icon_apply_result, 7u);
                 return;
             }
-            g_runtime.icon_applied_item = item;
             store_u32(&g_runtime.icon_apply_result, 8u);
             return;
         }
@@ -1795,6 +1831,68 @@ static void module_icon_ui_tick(void *context)
         }
     }
     store_u32(&g_runtime.icon_apply_result, 5u);
+}
+
+static uint8_t module_settings_ui_input(
+    void *context,
+    const AzInputKeystroke *keystroke)
+{
+    static const uint16_t browse_id[] = {
+        'B','r','o','w','s','e','M','o','d','e',0
+    };
+    static const uint16_t filter_id[] = {
+        'F','i','l','t','e','r','M','o','d','e',0
+    };
+    uint32_t scene;
+    uint32_t browse = 0u;
+    uint32_t filter = 0u;
+    uint32_t mode;
+
+    (void)context;
+    if (keystroke == NULL ||
+        keystroke->virtual_key != AZ_VK_PAD_A ||
+        resolve_icon_xui() == 0u) {
+        return 0u;
+    }
+    if ((keystroke->flags & AZ_KEYSTROKE_KEYUP) != 0u) {
+        if (g_runtime.settings_a_owned == 0u) {
+            return 0u;
+        }
+        g_runtime.settings_a_owned = 0u;
+        return 1u;
+    }
+    if ((keystroke->flags & AZ_KEYSTROKE_REPEAT) != 0u) {
+        return g_runtime.settings_a_owned;
+    }
+    if ((keystroke->flags & AZ_KEYSTROKE_KEYDOWN) == 0u) {
+        return 0u;
+    }
+
+    scene = find_auroraaz_settings_scene_handle();
+    if (scene == 0u || g_runtime.xui_has_focus(scene) != 1) {
+        return 0u;
+    }
+    if (g_runtime.xui_get_descendant(scene, browse_id, &browse) < 0 ||
+        browse == 0u ||
+        g_runtime.xui_get_descendant(scene, filter_id, &filter) < 0 ||
+        filter == 0u) {
+        return 0u;
+    }
+    if (g_runtime.xui_has_focus(browse) == 1) {
+        mode = AZ_MODULE_SETTINGS_MODE_BROWSE;
+    }
+    else if (g_runtime.xui_has_focus(filter) == 1) {
+        mode = AZ_MODULE_SETTINGS_MODE_FILTER;
+    }
+    else {
+        return 0u;
+    }
+    if (az_module_settings_request_mode(mode) == 0u) {
+        return 0u;
+    }
+    g_runtime.settings_a_owned = 1u;
+    store_u32(&g_runtime.settings_call_result, 0u);
+    return 1u;
 }
 
 static void publish_consumer_gate_for_mode(AzOperationMode mode)
@@ -1829,110 +1927,15 @@ static void apply_operation_mode(AzOperationMode mode)
         az_operation_mode_name(mode));
 }
 
-static uint8_t resolve_settings_message_box(void)
-{
-    HMODULE xam = NULL;
-    void *procedure = NULL;
-
-    if (g_runtime.show_message_box != NULL) {
-        store_u32(&g_runtime.settings_resolve_result, 1u);
-        return 1u;
-    }
-    if (FAILED(XexGetModuleHandle("xam.xex", &xam)) || xam == NULL ||
-        FAILED(XexGetProcedureAddress(
-            xam,
-            AZ_XAM_SHOW_MESSAGE_BOX_ORDINAL,
-            &procedure)) ||
-        procedure == NULL) {
-        store_u32(&g_runtime.settings_resolve_result, 2u);
-        return 0u;
-    }
-    g_runtime.show_message_box =
-        (AzShowMessageBoxFn)(uintptr_t)procedure;
-    store_u32(&g_runtime.settings_resolve_result, 1u);
-    return 1u;
-}
-
-static void finish_settings_dialog(void)
-{
-    if (g_runtime.settings_result.value.button_pressed == 0u) {
-        apply_operation_mode(AZ_OPERATION_MODE_BROWSE);
-    }
-    else if (g_runtime.settings_result.value.button_pressed == 1u) {
-        apply_operation_mode(AZ_OPERATION_MODE_FILTER);
-    }
-    (void)__atomic_add_fetch(
-        &g_runtime.settings_completions, 1u, __ATOMIC_ACQ_REL);
-    g_runtime.settings_dialog_active = 0u;
-}
-
 static void settings_worker_step(void)
 {
-    static const uint16_t title[] = {
-        'A','u','r','o','r','a',' ','A','-','Z',0
-    };
-    static const uint16_t message[] = {
-        'C','h','o','o','s','e',' ','h','o','w',' ','l','e','t','t','e','r',' ',
-        's','e','l','e','c','t','i','o','n',' ','w','o','r','k','s','.',10,10,
-        'B','r','o','w','s','e',' ','j','u','m','p','s',' ','i','n','s','t','a','n','t','l','y',' ',
-        't','o',' ','t','h','e',' ','f','i','r','s','t',' ','m','a','t','c','h','i','n','g',' ','t','i','t','l','e','.',10,
-        'F','i','l','t','e','r',' ','s','h','o','w','s',' ','o','n','l','y',' ','m','a','t','c','h','i','n','g',' ',
-        't','i','t','l','e','s',' ','a','n','d',' ','c','a','n',' ','t','a','k','e',' ','l','o','n','g','e','r','.',0
-    };
-    static const uint16_t browse[] = {'B','r','o','w','s','e',0};
-    static const uint16_t filter[] = {'F','i','l','t','e','r',0};
-    static const uint16_t cancel[] = {'C','a','n','c','e','l',0};
-    static const uint16_t *buttons[] = {browse, filter, cancel};
-    uint32_t call_result;
-    uint32_t focus;
+    uint32_t mode;
 
-    if (g_runtime.settings_dialog_active != 0u) {
-        if (__atomic_load_n(
-                &g_runtime.settings_overlapped.result,
-                __ATOMIC_ACQUIRE) != AZ_ERROR_IO_PENDING) {
-            finish_settings_dialog();
-        }
-        return;
-    }
-    if (az_module_settings_detour_take_request() == 0u) {
-        return;
-    }
-    if (resolve_settings_message_box() == 0u) {
-        DbgPrint("AuroraAZ: settings dialog API unavailable\n");
-        return;
-    }
-
-    memset(&g_runtime.settings_overlapped, 0,
-        sizeof(g_runtime.settings_overlapped));
-    memset(&g_runtime.settings_result, 0,
-        sizeof(g_runtime.settings_result));
-    /* XAM requires a freshly zeroed XOVERLAPPED. It owns the transition to
-     * ERROR_IO_PENDING; pre-seeding that field makes the real kernel reject
-     * the request with ERROR_INVALID_PARAMETER (87). */
-    focus = load_u32(&g_runtime.operation_mode) ==
-        (uint32_t)AZ_OPERATION_MODE_FILTER ? 1u : 0u;
-    call_result = g_runtime.show_message_box(
-        AZ_XUSER_INDEX_ANY,
-        title,
-        message,
-        3u,
-        buttons,
-        focus,
-        0u,
-        &g_runtime.settings_result,
-        &g_runtime.settings_overlapped);
-    store_u32(&g_runtime.settings_call_result, call_result);
-    if (call_result != 0u && call_result != AZ_ERROR_IO_PENDING) {
-        DbgPrint(
-            "AuroraAZ: settings dialog failed=%u\n",
-            (unsigned int)call_result);
-        return;
-    }
-    g_runtime.settings_dialog_active = 1u;
-    if (__atomic_load_n(
-            &g_runtime.settings_overlapped.result,
-            __ATOMIC_ACQUIRE) != AZ_ERROR_IO_PENDING) {
-        finish_settings_dialog();
+    if (az_module_settings_take_mode_request(&mode) != 0u) {
+        apply_operation_mode(mode == AZ_MODULE_SETTINGS_MODE_FILTER ?
+            AZ_OPERATION_MODE_FILTER : AZ_OPERATION_MODE_BROWSE);
+        (void)__atomic_add_fetch(
+            &g_runtime.settings_completions, 1u, __ATOMIC_ACQ_REL);
     }
 }
 #endif
@@ -2783,6 +2786,16 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
             g_icon_cache_path,
             g_auroraaz_embedded_icon_png,
             g_auroraaz_embedded_icon_png_size) != 0u ? 1u : 2u);
+    store_u32(
+        &g_runtime.settings_xur_cache_result,
+        write_complete_file(
+            g_settings_xur_cache_path,
+            g_auroraaz_embedded_settings_xur,
+            g_auroraaz_embedded_settings_xur_size) != 0u ? 1u : 2u);
+    if (load_u32(&g_runtime.settings_xur_cache_result) != 1u) {
+        DbgPrint("AuroraAZ: embedded settings resource cache failed\n");
+        return AZ_REV1655_RUNTIME_HOOK_INSTALL_FAILED;
+    }
     validation = validate_overlay_sites(
         &image,
         &render_menu_site,
@@ -2845,7 +2858,9 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     az_rev1655_input_detour_configure_browse_jump(
         &browse_apply_jump, NULL);
     az_rev1655_input_detour_configure_ui_tick(
-        &module_icon_ui_tick, NULL);
+        &module_ui_tick, NULL);
+    az_rev1655_input_detour_configure_ui_input(
+        &module_settings_ui_input, NULL);
     az_module_settings_detour_reset();
     az_rev1655_input_detour_publish_verification(1u, 0u, 0u, 0u);
     create_result = az_rev1655_thread_create(
@@ -3025,25 +3040,23 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     store_u32(&g_runtime.browse_apply_count, 0u);
     memset(&g_runtime.browse_consumer, 0,
         sizeof(g_runtime.browse_consumer));
-    g_runtime.show_message_box = NULL;
-    memset(&g_runtime.settings_overlapped, 0,
-        sizeof(g_runtime.settings_overlapped));
-    memset(&g_runtime.settings_result, 0,
-        sizeof(g_runtime.settings_result));
     g_runtime.settings_dialog_active = 0u;
+    g_runtime.settings_a_owned = 0u;
     store_u32(&g_runtime.settings_resolve_result, 0u);
     store_u32(&g_runtime.settings_call_result, UINT32_MAX);
     store_u32(&g_runtime.settings_completions, 0u);
     store_u32(&g_runtime.module_label_result, 0u);
     store_u32(&g_runtime.icon_cache_result, 0u);
+    store_u32(&g_runtime.settings_xur_cache_result, 0u);
     store_u32(&g_runtime.icon_apply_result, 0u);
     store_u32(&g_runtime.icon_ui_ticks, 0u);
-    g_runtime.icon_applied_item = 0u;
     g_runtime.xui_get_first_child = NULL;
     g_runtime.xui_get_next = NULL;
     g_runtime.xui_get_descendant = NULL;
     g_runtime.xui_get_text = NULL;
+    g_runtime.xui_set_text = NULL;
     g_runtime.xui_set_image_path = NULL;
+    g_runtime.xui_has_focus = NULL;
     store_u32(&g_runtime.worker_thread_id, 0u);
     store_u32(
         &g_runtime.filter_bind_result,

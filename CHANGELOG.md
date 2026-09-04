@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Replace the freezing system Browse/Filter popup with an embedded native XUI
+  page hosted in Aurora's normal Configure Modules panel, like FTP and Nova.
+- Reapply the embedded repository icon after Aurora asynchronously populates
+  the module row, reliably replacing the stock Network Debugger artwork.
+- Keep settings persistence off the UI/input thread; A is consumed only while
+  the embedded Browse or Filter button owns focus.
 - Center the transient selector vertically, dim the complete viewport, enlarge
   the full-opacity selection, and animate the chosen item growing and fading
   after release.

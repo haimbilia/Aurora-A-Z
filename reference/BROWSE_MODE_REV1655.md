@@ -42,13 +42,20 @@ Aurora's fixed module list already contains the optional NETDBG/key-7 row. The
 plugin changes only the verified live wrapper label from `Network Debugger` to
 `Aurora A-Z`; no skin or XUR is modified.
 
-The dispatcher completion tail at `0x822C8CE8` is hooked. At that point `r30`
-still equals `7` only for the NETDBG row. The detour queues a settings request,
-emulates the displaced `li r5,1`, and resumes at `0x822C8CEC`, so Aurora keeps
-its original task-completion behavior. Every other module passes through.
+The module-scene dispatcher at `0x822C8B88` is hooked. For NETDBG key `7`, the
+detour supplies `game:\Data\AuroraAZ_Settings.xur` and rejoins Aurora's normal
+module scene loader at `0x822C8BF0`. Every other key receives the displaced
+`cmpwi cr6,r30,1` and resumes at `0x822C8B8C`, preserving the stock dispatcher.
 
-The worker opens an asynchronous system message box with Browse, Filter, and
-Cancel. Browse is the default. A saved choice is written as a tiny versioned
-file at `game:\Data\AuroraAZ.ini`; missing, torn, oversized, or unknown content
-falls back to Browse. This generated state does not change the one-XEX install
-contract.
+The XUR is compiled from `native/assets/AuroraAZ_Settings.xui`, embedded in the
+XEX, and rewritten to the runtime cache before the hook is installed. It is a
+classless 800x570 scene hosted inside Aurora's existing `ModuleHost`, matching
+the integration used by the FTP and Nova pages without requiring their private
+C++ scene classes. Browse and Filter are ordinary native XUI buttons. The input
+detour consumes A only when either button owns focus and queues the selected
+mode to the worker; file I/O never occurs on the UI thread.
+
+Browse is the default. A saved choice is written as a tiny versioned file at
+`game:\Data\AuroraAZ.ini`; missing, torn, oversized, or unknown content falls
+back to Browse. The generated XUR, icon cache, and mode file do not change the
+one-XEX installation contract.

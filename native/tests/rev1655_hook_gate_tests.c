@@ -18,7 +18,7 @@
 #define REV1655_RENDER_MENU_RVA 0x00358A08u
 #define REV1655_FONT_END_RVA 0x0047E390u
 #define REV1655_CONTENT_LAUNCH_RVA 0x00294DD0u
-#define REV1655_MODULE_SETTINGS_RVA 0x002C8CE8u
+#define REV1655_MODULE_SETTINGS_RVA 0x002C8B88u
 
 static int failures = 0;
 
@@ -53,8 +53,8 @@ static const uint8_t k_content_launch_signature[16] = {
 };
 
 static const uint8_t k_module_settings_signature[16] = {
-    0x38, 0xA0, 0x00, 0x01, 0x80, 0x7A, 0x00, 0x04,
-    0x57, 0x24, 0x00, 0x3E, 0x48, 0x56, 0x0E, 0x55
+    0x2F, 0x1E, 0x00, 0x01, 0x41, 0x9A, 0x01, 0x5C,
+    0x2F, 0x1E, 0x00, 0x02, 0x41, 0x9A, 0x00, 0x54
 };
 
 static const uint8_t k_sha256_empty[32] = {
@@ -615,8 +615,8 @@ static void test_exact_fixture(const char *path)
         AZ_REV1655_HOOK_SITE_CONTENT_LAUNCH, 0x82294DD0u,
         0x7D8802A6u, 16u);
     check_resolved_site(permit, &image,
-        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS, 0x822C8CE8u,
-        0x38A00001u, 16u);
+        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS, 0x822C8B88u,
+        0x2F1E0001u, 16u);
     CHECK(az_rev1655_hook_gate_site(permit,
         AZ_REV1655_HOOK_SITE_COUNT) == NULL);
 
