@@ -226,10 +226,12 @@ jobs:
         run: |
           output_dir="${GITHUB_WORKSPACE}/build/native-xbox360"
           mapfile -t xex_files < <(find "${output_dir}" -maxdepth 1 -type f -name '*.xex' -print)
-          test "${#xex_files[@]}" -eq 1
-          test "$(basename "${xex_files[0]}")" = "AuroraAZ.xex"
+          test "${#xex_files[@]}" -eq 2
           test -s "${output_dir}/AuroraAZ.xex"
           test -s "${output_dir}/AuroraAZ.xex.sha256"
+          test -s "${output_dir}/Install Aurora A-Z.xex"
+          test -s "${output_dir}/Install Aurora A-Z.xex.sha256"
+          test -s "${output_dir}/default.png"
 
           python3 scripts/xex_exports.py validate \
             --pe "${output_dir}/AuroraAZ.dll" \
@@ -248,6 +250,7 @@ jobs:
           PY
 
           (cd "${output_dir}" && sha256sum --check "AuroraAZ.xex.sha256")
+          (cd "${output_dir}" && sha256sum --check "Install Aurora A-Z.xex.sha256")
 
       - name: Upload AuroraAZ.xex runtime
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -256,6 +259,9 @@ jobs:
           path: |
             build/native-xbox360/AuroraAZ.xex
             build/native-xbox360/AuroraAZ.xex.sha256
+            build/native-xbox360/Install Aurora A-Z.xex
+            build/native-xbox360/Install Aurora A-Z.xex.sha256
+            build/native-xbox360/default.png
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

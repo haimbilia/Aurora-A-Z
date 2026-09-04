@@ -7,6 +7,7 @@ output_dir="${AURORAAZ_OUTPUT_DIR:-${repo_root}/build/native-xbox360}"
 embedded_icon_source="${output_dir}/auroraaz_embedded_icon.c"
 embedded_settings_source="${output_dir}/auroraaz_embedded_settings.c"
 embedded_settings_filter_source="${output_dir}/auroraaz_embedded_settings_filter.c"
+installer_source="${repo_root}/native/src/installer_main.c"
 
 compiler="${toolchain_root}/bin/clang"
 packager="${toolchain_root}/bin/synthxex"
@@ -112,4 +113,28 @@ python3 "${repo_root}/scripts/xex_exports.py" validate \
     --ordinals 2,3,4,5
 
 (cd "${output_dir}" && sha256sum "AuroraAZ.xex" > "AuroraAZ.xex.sha256")
+
+# The installer is a regular title XEX, launched from Aurora with AuroraAZ.xex
+# in the same folder.  default.png supplies its browser artwork.
+"${compiler}" \
+    -std=c99 \
+    -Oz \
+    -fno-zero-initialized-in-bss \
+    -Wall -Wextra -Werror \
+    -I"${repo_root}/native/include" \
+    "${installer_source}" \
+    -Wl,/entry:main \
+    -Wl,/base:0x82D50000 \
+    -Wl,/filealign:128 \
+    -Wl,/align:65536 \
+    -Wl,/opt:ref \
+    -o "${output_dir}/Install Aurora A-Z.dll"
+
+"${packager}" \
+    -t title \
+    -i "${output_dir}/Install Aurora A-Z.dll" \
+    -o "${output_dir}/Install Aurora A-Z.xex"
+
+cp "${repo_root}/icon.png" "${output_dir}/default.png"
+(cd "${output_dir}" && sha256sum "Install Aurora A-Z.xex" > "Install Aurora A-Z.xex.sha256")
 echo "Built ${output_dir}/AuroraAZ.xex"
