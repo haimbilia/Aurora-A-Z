@@ -54,6 +54,13 @@ In Filter mode, `ALL` is scoped: it removes only the alphabetical name filter an
 the active QuickView and other filters. On release, the row vanishes and the
 selected item grows while fading out; this animation never delays filtering.
 
+## Switching mode
+
+While holding **R3** with the A-Z row open, tap **LT** to switch between Browse
+and Filter mode. The row updates immediately (`ALL` is present only in Filter
+mode) and the choice is saved for future selections. This avoids relying on
+Aurora's fixed Configure Modules UI.
+
 Aurora A-Z supports two persistent operating modes from **Settings ->
 Configure Modules -> Aurora A-Z**. Browse and Filter are presented as native
 Aurora radio rows, matching the Profile settings style, and the saved mode is
