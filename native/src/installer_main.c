@@ -8,7 +8,6 @@
 typedef uint8_t AzBool;
 
 extern AzBool CopyFileA(char *source, char *destination, AzBool fail_if_exists);
-extern AzBool DeleteFileA(char *path);
 extern void XNotifyQueueUI(uint32_t type, uint32_t user_index, uint32_t area,
     const uint16_t *text, uint64_t parameter);
 
