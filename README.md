@@ -15,8 +15,8 @@ replacing the selected Aurora skin.
 The installed payload is one self-contained file, `AuroraAZ.xex`. All runtime
 resources are embedded. Releases also include an optional Aurora Script-menu
 installer with browser artwork. Installation does not require QuickViews,
-database records, skin files, changes to `Aurora.xex`, or changes to
-`launch.ini`.
+database records, skin files, or changes to `Aurora.xex`. The DashLaunch
+installer adds Aurora A-Z to the first empty `launch.ini` plugin slot.
 The repository icon is the source artwork for the module identity. It is
 embedded in the XEX; installation never copies `icon.png` to the console.
 
@@ -31,12 +31,13 @@ Hdd1:\Aurora\User\Scripts\AuroraAZInstaller\icon.png
 ```
 
 It appears as **Install Aurora A-Z** in Aurora's Script menu. The installer
-stages the payload, preserves an existing
-`Hdd1:\Aurora\Plugins\NetDbgDll.xex` as
-`NetDbgDll.xex.before-aurora-az`, installs Aurora A-Z into that slot, and shows
-a completion notification. Reboot Aurora after it finishes. The installer
-expects the standard `Hdd1:\Aurora` location; manual installation remains
-available for custom Aurora paths.
+copies the payload to `Hdd1:\Aurora\Plugins\AuroraAZ.xex`, backs up
+`Hdd1:\launch.ini` as `launch.ini.AuroraAZ.backup`, and writes the first empty
+`plugin1` through `plugin5` entry as
+`Hdd:\Aurora\Plugins\AuroraAZ.xex`. It does not overwrite an occupied plugin
+slot. Reboot Aurora after it finishes. The installer expects the standard
+`Hdd1:\Aurora` location; manual installation remains available for custom
+Aurora paths.
 
 ## Required interaction
 

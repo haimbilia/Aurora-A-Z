@@ -2639,6 +2639,68 @@ AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
     return AZ_REV1655_RUNTIME_OK;
 }
 
+AzRev1655RuntimeResult az_rev1655_runtime_pin_dashlaunch_module(
+    uint32_t expected_ordinal4_export)
+{
+    AzRev1655LoadedImage image;
+    AzRev1655ResolvedHookSite resolved;
+    AzRev1655RuntimeResult validation;
+    uint32_t expected_state;
+    uint32_t state;
+
+    if (expected_ordinal4_export == 0u) {
+        return AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    }
+
+    state = load_u32(&g_runtime.lifetime_state);
+    if (state == AZ_LIFETIME_PINNED) {
+        return load_u32(&g_runtime.pinned_ordinal4_export) ==
+            expected_ordinal4_export ?
+                AZ_REV1655_RUNTIME_OK :
+                AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    }
+    if (state != AZ_LIFETIME_UNPINNED) {
+        return state == AZ_LIFETIME_PINNING ?
+            AZ_REV1655_RUNTIME_BUSY :
+            AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    }
+
+    expected_state = AZ_LIFETIME_UNPINNED;
+    if (!__atomic_compare_exchange_n(
+            &g_runtime.lifetime_state,
+            &expected_state,
+            AZ_LIFETIME_PINNING,
+            0,
+            __ATOMIC_ACQ_REL,
+            __ATOMIC_ACQUIRE)) {
+        return expected_state == AZ_LIFETIME_PINNED &&
+            load_u32(&g_runtime.pinned_ordinal4_export) ==
+                expected_ordinal4_export ?
+                    AZ_REV1655_RUNTIME_OK :
+                    AZ_REV1655_RUNTIME_BUSY;
+    }
+
+    /* DashLaunch owns this XEX for the Aurora process lifetime. Unlike the
+     * NetDbg route there is no Aurora wrapper to make resident, but startup
+     * can race Aurora's mapping; leave the state retryable until the exact
+     * image and thread-wrapper gates both pass. */
+    validation = validate_input_site(&image, &resolved, 0u, NULL);
+    if (validation != AZ_REV1655_RUNTIME_OK) {
+        store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_UNPINNED);
+        return validation;
+    }
+    if (az_rev1655_thread_wrapper_is_valid() == 0u) {
+        store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_UNPINNED);
+        return AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED;
+    }
+
+    store_u32(&g_runtime.pinned_ordinal4_export,
+        expected_ordinal4_export);
+    store_u32(&g_runtime.netdbg_wrapper_address, 0u);
+    store_u32(&g_runtime.lifetime_state, AZ_LIFETIME_PINNED);
+    return AZ_REV1655_RUNTIME_OK;
+}
+
 static void log_observation(const AzInputDetourObservation *observation)
 {
     DbgPrint(

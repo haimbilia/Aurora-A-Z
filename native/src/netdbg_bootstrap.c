@@ -37,6 +37,9 @@ typedef char AzM2aMarkerMustBe48Bytes[
     (sizeof(AzM2aMarker) == 48u) ? 1 : -1];
 
 static uint32_t g_bootstrap_claimed = 0u;
+#if defined(AURORAAZ_DASHLAUNCH_PLUGIN)
+static uint32_t g_dashlaunch_bootstrap_claimed = 0u;
+#endif
 static char g_m2a_marker_path[] =
     "game:\\Data\\Logs\\AuroraAZ-M2a.bin";
 
@@ -148,11 +151,65 @@ uint32_t AuroraAZNetDbgBootstrapStart(void)
     return 0u;
 }
 
+#if defined(AURORAAZ_DASHLAUNCH_PLUGIN)
+static uint32_t dashlaunch_bootstrap_worker(void *context)
+{
+    AzRev1655RuntimeResult result = AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    uint32_t attempt;
+
+    (void)context;
+    write_m2a_marker(AZ_M2A_MARKER_WORKER_ENTERED,
+        AZ_M2A_RESULT_NOT_ATTEMPTED);
+
+    /* DashLaunch can load its plugin before Aurora's image and private thread
+     * wrapper are completely mapped. Retry the exact read-only admission gate
+     * for ten seconds rather than mutating anything early. */
+    for (attempt = 0u; attempt < 20u; ++attempt) {
+        int64_t interval;
+
+        result = az_rev1655_runtime_pin_dashlaunch_module(
+            (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite);
+        if (result == AZ_REV1655_RUNTIME_OK) {
+            result = az_rev1655_runtime_start(
+                AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY);
+            break;
+        }
+        interval = -5000000LL;
+        (void)KeDelayExecutionThread(0u, 0u, &interval);
+    }
+
+    write_m2a_marker(AZ_M2A_MARKER_RUNTIME_RETURNED, (uint32_t)result);
+    return (uint32_t)result;
+}
+#endif
+
 int DllMain(void *module, uint32_t reason, void *reserved)
 {
     (void)module;
-    (void)reason;
     (void)reserved;
+
+#if defined(AURORAAZ_DASHLAUNCH_PLUGIN)
+    if (reason == 1u) {
+        uint32_t expected = 0u;
+        HANDLE thread = NULL;
+
+        if (__atomic_compare_exchange_n(
+                &g_dashlaunch_bootstrap_claimed,
+                &expected,
+                1u,
+                0,
+                __ATOMIC_ACQ_REL,
+                __ATOMIC_ACQUIRE) &&
+            az_rev1655_thread_create(
+                (void *)(uintptr_t)&dashlaunch_bootstrap_worker,
+                NULL,
+                &thread) == AZ_REV1655_THREAD_CREATE_OK) {
+            (void)NtClose(thread);
+        }
+    }
+#else
+    (void)reason;
+#endif
 
     /* This is a process-lifetime optional module. Never wait for workers or
      * restore hooks from DllMain: the loader lock makes synchronous teardown

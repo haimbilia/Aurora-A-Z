@@ -59,6 +59,12 @@ typedef enum AzRev1655RuntimeResult {
 AzRev1655RuntimeResult az_rev1655_runtime_pin_module(
     uint32_t expected_ordinal4_export);
 
+/* DashLaunch keeps its configured plugins resident for Aurora's process
+ * lifetime. This equivalent pin path retains the same image/input/thread
+ * validation without depending on Aurora's optional NetDbgDll wrapper. */
+AzRev1655RuntimeResult az_rev1655_runtime_pin_dashlaunch_module(
+    uint32_t expected_ordinal4_export);
+
 /*
  * Selects one reviewed runtime milestone. INPUT_OBSERVE installs only the
  * Rev1655 input-wrapper hook. OVERLAY_CANARY adds static rendering while
