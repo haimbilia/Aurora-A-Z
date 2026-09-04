@@ -48,19 +48,24 @@ functional unless it satisfies every acceptance criterion below on Aurora
 ## User-visible behavior
 
 - The alphabet is hidden during normal coverflow use.
-- Holding R3 (right-stick click) while the coverflow is active displays one
-  centered row containing `# A B ... Z` above the game title area.
-- Selection starts at `#` each time R3 is pressed and held.
+- Holding R3 (right-stick click) while the coverflow is active darkens the
+  complete viewport and displays one horizontally and vertically centered row
+  containing `ALL # A B ... Z`.
+- Selection starts at `ALL` each time R3 is pressed and held.
 - D-pad Left and D-pad Right move the highlight one letter at a time.
 - Left-stick Left and left-stick Right perform the same movement as the D-pad.
 - While selector mode is active, those four inputs move only the letter
   highlight. They must not move or scroll the coverflow.
-- Exactly one letter is visibly highlighted at a time.
+- Exactly one item is visibly highlighted at a time. The selected item is
+  rendered at 100% opacity and larger than the inactive row items.
 - Releasing R3 applies the highlighted initial-character filter only if at
   least one Left/Right navigation input changed the selection during that hold.
   It then hides the alphabet and returns normal coverflow control.
+- After a changed selection is released, the row disappears immediately. The
+  selected item briefly grows while fading to transparent, then the viewport
+  dimming disappears. The animation must not delay or gate filter scheduling.
 - Pressing and releasing R3 without changing the highlight is a no-op: it
-  hides the alphabet and must not apply `#` or rebuild the coverflow.
+  hides the alphabet and must not apply `ALL` or rebuild the coverflow.
 - Aurora A-Z must never consume, clear, or assign any action to A.
 - RB continues to open Aurora's unmodified QuickView menu.
 - Launching a game or XEX must behave identically with Aurora A-Z installed or
@@ -68,6 +73,12 @@ functional unless it satisfies every acceptance criterion below on Aurora
   blocker.
 
 ## Filtering semantics
+
+- `ALL` removes only an active `NameFilter` predicate. It must preserve the
+  current QuickView and every non-name predicate, so selecting `ALL` while the
+  XBLA QuickView is active displays all XBLA titles rather than all titles.
+- Only Aurora's own QuickView `ALL` selection may switch to the global all-game
+  view; Aurora A-Z must never synthesize that QuickView change.
 
 - `A` through `Z` match title names case-insensitively by their first displayed
   character.
@@ -89,20 +100,20 @@ There are two distinct states:
    after such a change, then hides the alphabet. A tap with no navigation
    cancels. Coverflow navigation is suspended while R3 is held.
 
-Cancel behavior and whether navigation stops or wraps at `#` and `Z` are not
-specified yet. They must not be assumed by an implementation until documented.
+Navigation clamps at `ALL` and `Z`; it does not wrap.
 
 ## Acceptance tests
 
 1. From the coverflow, verify that the alphabet is hidden, then press and hold
-   R3. The row appears with `#` highlighted and no QuickView menu opens.
-2. While holding R3, press D-pad Right once. `A` is highlighted and the
+   R3. The centered row appears over a dimmed viewport with `ALL` highlighted
+   at full opacity and a larger size; no QuickView menu opens.
+2. While holding R3, press D-pad Right once. `#` is highlighted and the
    coverflow does not move.
-3. While holding R3, press D-pad Left once. `#` is highlighted and the
+3. While holding R3, press D-pad Left once. `ALL` is highlighted and the
    coverflow does not move.
-4. While holding R3, press left-stick Right once. `A` is highlighted and the
+4. While holding R3, press left-stick Right once. `#` is highlighted and the
    coverflow does not move.
-5. While holding R3, press left-stick Left once. `#` is highlighted and the
+5. While holding R3, press left-stick Left once. `ALL` is highlighted and the
    coverflow does not move.
 6. While holding R3, highlight a known letter and release R3. The alphabet
    hides, only matching titles remain visible, and normal coverflow navigation
@@ -125,6 +136,12 @@ specified yet. They must not be assumed by an implementation until documented.
     multi-second delay when completion is already observable.
 14. Launch a known-good game and a known-good XEX application, return to
     Aurora, and repeat. Every title handoff must complete normally.
+15. Activate the XBLA QuickView, apply a letter, then select `ALL` by moving
+    away from it and back before releasing R3. All XBLA titles return, while
+    non-XBLA titles remain excluded and Aurora's QuickView stays on XBLA.
+16. Release a changed selection and verify the row vanishes immediately while
+    only the selected item grows and fades away; filtering begins without
+    waiting for the animation.
 
 ## Explicitly non-compliant implementations
 

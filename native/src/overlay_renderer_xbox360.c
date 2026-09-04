@@ -536,9 +536,10 @@ static void expand_selected_crop(AzOverlayQuad *quad)
     const float padding_right =
         available_right < AZ_SELECTED_CROP_PADDING ?
             available_right : AZ_SELECTED_CROP_PADDING;
+    const float destination_scale = quad->width / quad->source_width;
 
-    quad->x -= padding_left;
-    quad->width += padding_left + padding_right;
+    quad->x -= padding_left * destination_scale;
+    quad->width += (padding_left + padding_right) * destination_scale;
     quad->source_x -= padding_left;
     quad->source_width += padding_left + padding_right;
 }
@@ -560,7 +561,7 @@ static int prepare_model(
         (request->viewport_height -
             (AZ_LOGICAL_VIEWPORT_HEIGHT * scale)) * 0.5f;
     const size_t expected_count =
-        request->selector_active != 0u ? 3u : 2u;
+        request->selector_active != 0u ? 5u : 3u;
     size_t index;
 
     az_overlay_model_build(
@@ -569,28 +570,42 @@ static int prepare_model(
         1u,
         request->selector_active,
         request->selected_index,
+        request->exit_animation_active,
+        request->exit_animation_index,
+        request->exit_animation_progress,
         model);
 
     if (model->count != expected_count ||
-        model->quads[0].layer != AZ_OVERLAY_LAYER_SHADOW ||
-        model->quads[1].layer != AZ_OVERLAY_LAYER_ROW ||
-        (expected_count == 3u &&
-            model->quads[2].layer != AZ_OVERLAY_LAYER_SELECTED)) {
+        model->quads[0].layer != AZ_OVERLAY_LAYER_DIM ||
+        model->quads[expected_count - 2u].layer !=
+            AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
+        model->quads[expected_count - 1u].layer !=
+            AZ_OVERLAY_LAYER_SELECTED ||
+        (request->selector_active != 0u &&
+            (model->quads[1].layer != AZ_OVERLAY_LAYER_SHADOW ||
+             model->quads[2].layer != AZ_OVERLAY_LAYER_ROW))) {
         return 0;
     }
 
-    if (expected_count == 3u) {
-        expand_selected_crop(&model->quads[2]);
-    }
+    expand_selected_crop(&model->quads[expected_count - 2u]);
+    expand_selected_crop(&model->quads[expected_count - 1u]);
 
     for (index = 0u; index < model->count; ++index) {
         AzOverlayQuad *quad = &model->quads[index];
 
-        quad->x = origin_x + (quad->x * scale);
-        quad->y = origin_y +
-            ((quad->y + AZ_LOGICAL_ROW_Y_CORRECTION) * scale);
-        quad->width *= scale;
-        quad->height *= scale;
+        if (quad->layer == AZ_OVERLAY_LAYER_DIM) {
+            quad->x = 0.0f;
+            quad->y = 0.0f;
+            quad->width = request->viewport_width;
+            quad->height = request->viewport_height;
+        }
+        else {
+            quad->x = origin_x + (quad->x * scale);
+            quad->y = origin_y +
+                ((quad->y + AZ_LOGICAL_ROW_Y_CORRECTION) * scale);
+            quad->width *= scale;
+            quad->height *= scale;
+        }
 
         if (!quad_is_valid(request, quad)) {
             return 0;
@@ -875,12 +890,20 @@ AzOverlayRendererResult az_overlay_renderer_try_draw(
     }
     if (request->proven_modal_clear != 1u ||
         request->selector_active > 1u ||
+        request->exit_animation_active > 1u ||
+        (request->selector_active != 0u &&
+            request->exit_animation_active != 0u) ||
         (request->selector_active == 1u &&
-            request->selected_index >= AZ_GLYPH_COUNT)) {
+            request->selected_index >= AZ_GLYPH_COUNT) ||
+        (request->exit_animation_active == 1u &&
+            (request->exit_animation_index >= AZ_GLYPH_COUNT ||
+             !(request->exit_animation_progress >= 0.0f) ||
+             !(request->exit_animation_progress < 1.0f)))) {
         result = AZ_OVERLAY_RENDERER_BAD_REQUEST;
         goto draw_done;
     }
-    if (request->selector_active == 0u) {
+    if (request->selector_active == 0u &&
+        request->exit_animation_active == 0u) {
         result = AZ_OVERLAY_RENDERER_OK;
         goto draw_done;
     }

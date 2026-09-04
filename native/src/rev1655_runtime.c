@@ -937,6 +937,50 @@ static uint8_t filter_vector_push(
         after == before + 1u ? 1u : 0u;
 }
 
+static uint8_t filter_vector_erase(
+    void *context,
+    AzRev1655AuroraStringVector *vector,
+    uint32_t index)
+{
+    uint32_t count;
+    uint32_t current_index;
+    uint32_t after;
+    AzRev1655AuroraString *last;
+
+    if (filter_vector_count(context, vector, &count) == 0u ||
+        index >= count) {
+        return 0u;
+    }
+    for (current_index = index; current_index + 1u < count;
+         ++current_index) {
+        AzRev1655AuroraString *current = filter_vector_at(
+            context, vector, current_index);
+        AzRev1655AuroraString *next = filter_vector_at(
+            context, vector, current_index + 1u);
+        const char *characters = NULL;
+        uint32_t length = 0u;
+        uint32_t capacity = 0u;
+
+        if (current == NULL || next == NULL ||
+            filter_string_view(
+                context, next, &characters, &length, &capacity) == 0u ||
+            filter_string_assign(
+                context, current, characters, length) == 0u) {
+            return 0u;
+        }
+    }
+
+    last = filter_vector_at(context, vector, count - 1u);
+    if (last == NULL ||
+        vector->end_address < AZ_REV1655_AURORA_STRING_SIZE) {
+        return 0u;
+    }
+    filter_string_destroy(context, last);
+    vector->end_address -= AZ_REV1655_AURORA_STRING_SIZE;
+    return filter_vector_count(context, vector, &after) != 0u &&
+        after + 1u == count ? 1u : 0u;
+}
+
 static int32_t filter_schedule(
     void *context,
     void *gcm_plus_8,
@@ -973,6 +1017,7 @@ static void initialize_filter_host(AzRev1655FilterHostOps *host)
     host->vector_count = &filter_vector_count;
     host->vector_at = &filter_vector_at;
     host->vector_push_back = &filter_vector_push;
+    host->vector_erase = &filter_vector_erase;
     host->schedule_filter = &filter_schedule;
 }
 

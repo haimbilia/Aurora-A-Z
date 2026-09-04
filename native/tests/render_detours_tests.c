@@ -31,6 +31,10 @@ static size_t cleanup_result_index;
 static void *expected_manager;
 static void *expected_font;
 static AzOverlayDrawRequest captured_request;
+static AzSelectorMode snapshot_mode = AZ_MODE_SELECTING;
+static uint8_t snapshot_selected_index = 12u;
+static uint8_t snapshot_applied_index = 3u;
+static uint8_t snapshot_apply_serial = 7u;
 
 #define CHECK(condition) \
     do { \
@@ -112,9 +116,10 @@ static void note_input(
 static void snapshot_selector(AzSelectorState *selector)
 {
     CHECK(selector != NULL);
-    selector->mode = AZ_MODE_SELECTING;
-    selector->selected_index = 12u;
-    selector->applied_index = 3u;
+    selector->mode = snapshot_mode;
+    selector->selected_index = snapshot_selected_index;
+    selector->applied_index = snapshot_applied_index;
+    selector->apply_serial = snapshot_apply_serial;
     push_event(EVENT_SNAPSHOT_SELECTOR);
 }
 
@@ -268,6 +273,7 @@ static void test_render_then_publish_and_draw_then_end(void)
     CHECK(captured_request.viewport_height == 720.0f);
     CHECK(captured_request.selector_active == 1u);
     CHECK(captured_request.selected_index == 12u);
+    CHECK(captured_request.exit_animation_active == 0u);
     CHECK(captured_request.proven_modal_clear == 1u);
 
     memset(&status, 0, sizeof(status));
@@ -279,6 +285,60 @@ static void test_render_then_publish_and_draw_then_end(void)
     CHECK(status.last_render_menu_result == 0);
     CHECK(status.last_note_result == AZ_OVERLAY_RENDERER_OK);
     CHECK(status.last_draw_result == AZ_OVERLAY_RENDERER_BAD_FONT);
+}
+
+static void test_release_animation_tracks_successful_apply(void)
+{
+    AzOverlayRenderer renderer;
+    AzRev1655RenderDetourBindings bindings;
+
+    memset(&renderer, 0, sizeof(renderer));
+    az_rev1655_render_detours_reset();
+    bindings = make_bindings(&renderer);
+    CHECK(az_rev1655_render_detours_configure(&bindings) ==
+        AZ_RENDER_DETOUR_OK);
+
+    original_render_result = 0;
+    note_result = AZ_OVERLAY_RENDERER_OK;
+    draw_result = AZ_OVERLAY_RENDERER_DRAWN;
+    snapshot_mode = AZ_MODE_SELECTING;
+    snapshot_selected_index = 4u;
+    snapshot_applied_index = AZ_NO_GLYPH;
+    snapshot_apply_serial = 0u;
+    (void)az_rev1655_render_menu_detour_c(expected_manager);
+    az_rev1655_font_end_detour_c(
+        expected_font,
+        AZ_REV1655_FONT_END_CALLER_LR);
+    CHECK(captured_request.selector_active == 1u);
+    CHECK(captured_request.exit_animation_active == 0u);
+
+    snapshot_mode = AZ_MODE_COVERFLOW;
+    snapshot_applied_index = 4u;
+    snapshot_apply_serial = 1u;
+    (void)az_rev1655_render_menu_detour_c(expected_manager);
+    az_rev1655_font_end_detour_c(
+        expected_font,
+        AZ_REV1655_FONT_END_CALLER_LR);
+    CHECK(captured_request.selector_active == 0u);
+    CHECK(captured_request.exit_animation_active == 1u);
+    CHECK(captured_request.exit_animation_index == 4u);
+    CHECK(captured_request.exit_animation_progress == 0.0f);
+
+    (void)az_rev1655_render_menu_detour_c(expected_manager);
+    az_rev1655_font_end_detour_c(
+        expected_font,
+        AZ_REV1655_FONT_END_CALLER_LR);
+    CHECK(captured_request.exit_animation_active == 1u);
+    CHECK(captured_request.exit_animation_progress > 0.0f);
+
+    snapshot_mode = AZ_MODE_SELECTING;
+    snapshot_applied_index = 4u;
+    (void)az_rev1655_render_menu_detour_c(expected_manager);
+    az_rev1655_font_end_detour_c(
+        expected_font,
+        AZ_REV1655_FONT_END_CALLER_LR);
+    CHECK(captured_request.selector_active == 1u);
+    CHECK(captured_request.exit_animation_active == 0u);
 }
 
 static void test_overlay_rejection_invalidates_input_scope(void)
@@ -368,6 +428,7 @@ int main(void)
     test_unconfigured_fails_closed_to_originals();
     test_configuration_guards();
     test_render_then_publish_and_draw_then_end();
+    test_release_animation_tracks_successful_apply();
     test_overlay_rejection_invalidates_input_scope();
     test_cleanup_retries_before_original();
 

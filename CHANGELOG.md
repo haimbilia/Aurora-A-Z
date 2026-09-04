@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Center the transient selector vertically, dim the complete viewport, enlarge
+  the full-opacity selection, and animate the chosen item growing and fading
+  after release.
+- Add `ALL` to the selector. It removes only Aurora's active alphabetical
+  `NameFilter`, preserving XBLA or any other QuickView and non-name filters.
+- Record the production hardware pass for the nonblocking ContentLauncher
+  cleanup baseline (`d1cfced`): filtering and normal game launch both work.
 - Add an exact-build `ContentLauncher` boundary hook that asynchronously
   revokes input, cancels filter work, restores all four hooks, and exits the
   worker while Aurora gathers launch information. A synchronous wait froze the

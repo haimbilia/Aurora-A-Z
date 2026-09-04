@@ -6,7 +6,7 @@ static const AzVisualStyle k_mockup_style = {
     720.0f,
     640.0f,
     34.25f,
-    598.0f,
+    372.0f,
     36.0f,
     2.0f,
     2.0f,

@@ -114,7 +114,8 @@ static uint32_t pack_selector(const AzSelectorState *selector)
 {
     return ((uint32_t)selector->mode & 0xFFu) |
         ((uint32_t)selector->selected_index << 8u) |
-        ((uint32_t)selector->applied_index << 16u);
+        ((uint32_t)selector->applied_index << 16u) |
+        ((uint32_t)selector->apply_serial << 24u);
 }
 
 static void publish_selector(void)
@@ -662,6 +663,7 @@ void az_rev1655_input_detour_snapshot_selector(AzSelectorState *selector)
     selector->mode = (AzSelectorMode)(packed & 0xFFu);
     selector->selected_index = (uint8_t)((packed >> 8u) & 0xFFu);
     selector->applied_index = (uint8_t)((packed >> 16u) & 0xFFu);
+    selector->apply_serial = (uint8_t)((packed >> 24u) & 0xFFu);
     selector->selection_changed = 0u;
     if (requested_stage_from_lifecycle() !=
         AZ_INPUT_DETOUR_CONSUME) {

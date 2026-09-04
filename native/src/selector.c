@@ -24,6 +24,7 @@ void az_selector_init(AzSelectorState *state)
     state->selected_index = 0u;
     state->applied_index = AZ_NO_GLYPH;
     state->selection_changed = 0u;
+    state->apply_serial = 0u;
 }
 
 void az_selector_leave_coverflow(AzSelectorState *state)
@@ -105,6 +106,7 @@ AzSelectorResult az_selector_dispatch(
         }
         state->selection_changed = 0u;
         state->applied_index = state->selected_index;
+        ++state->apply_serial;
         result.request_filter = 1u;
         result.filter_index = state->applied_index;
         return result;

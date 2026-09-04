@@ -208,6 +208,7 @@ static void test_edge_behavior(void)
 static void test_filter_mapping(void)
 {
     static const char *const expected_filters[AZ_GLYPH_COUNT] = {
+        NULL,
         "NameFilter.Other",
         "NameFilter.A - F.A",
         "NameFilter.A - F.B",
@@ -238,31 +239,38 @@ static void test_filter_mapping(void)
     };
     uint8_t index;
 
-    CHECK(az_glyph_for_index(0u) == '#');
-    CHECK(az_glyph_for_index(1u) == 'A');
-    CHECK(az_glyph_for_index(26u) == 'Z');
-    CHECK(az_glyph_for_index(27u) == '\0');
+    CHECK(az_glyph_for_index(0u) == '\0');
+    CHECK(az_glyph_for_index(1u) == '#');
+    CHECK(az_glyph_for_index(2u) == 'A');
+    CHECK(az_glyph_for_index(27u) == 'Z');
+    CHECK(az_glyph_for_index(28u) == '\0');
+    CHECK(strcmp(az_label_for_index(0u), "ALL") == 0);
+    CHECK(strcmp(az_label_for_index(1u), "#") == 0);
+    CHECK(strcmp(az_label_for_index(27u), "Z") == 0);
+    CHECK(az_label_for_index(28u) == NULL);
 
-    CHECK(strcmp(az_filter_method_for_index(0u), "NameFilter.Other") == 0);
-    CHECK(strcmp(az_filter_method_for_index(1u), "NameFilter.A - F.A") == 0);
-    CHECK(strcmp(az_filter_method_for_index(6u), "NameFilter.A - F.F") == 0);
-    CHECK(strcmp(az_filter_method_for_index(7u), "NameFilter.G - L.G") == 0);
-    CHECK(strcmp(az_filter_method_for_index(13u), "NameFilter.M - R.M") == 0);
-    CHECK(strcmp(az_filter_method_for_index(19u), "NameFilter.S - X.S") == 0);
-    CHECK(strcmp(az_filter_method_for_index(25u), "NameFilter.Y - Z.Y") == 0);
-    CHECK(strcmp(az_filter_method_for_index(26u), "NameFilter.Y - Z.Z") == 0);
-    CHECK(az_filter_method_for_index(27u) == NULL);
+    CHECK(az_filter_method_for_index(0u) == NULL);
+    CHECK(strcmp(az_filter_method_for_index(1u), "NameFilter.Other") == 0);
+    CHECK(strcmp(az_filter_method_for_index(2u), "NameFilter.A - F.A") == 0);
+    CHECK(strcmp(az_filter_method_for_index(7u), "NameFilter.A - F.F") == 0);
+    CHECK(strcmp(az_filter_method_for_index(8u), "NameFilter.G - L.G") == 0);
+    CHECK(strcmp(az_filter_method_for_index(14u), "NameFilter.M - R.M") == 0);
+    CHECK(strcmp(az_filter_method_for_index(20u), "NameFilter.S - X.S") == 0);
+    CHECK(strcmp(az_filter_method_for_index(26u), "NameFilter.Y - Z.Y") == 0);
+    CHECK(strcmp(az_filter_method_for_index(27u), "NameFilter.Y - Z.Z") == 0);
+    CHECK(az_filter_method_for_index(28u) == NULL);
 
-    CHECK(az_filter_index_for_method("NameFilter.Other") == 0u);
-    CHECK(az_filter_index_for_method("NameFilter.A - F.A") == 1u);
-    CHECK(az_filter_index_for_method("NameFilter.Y - Z.Z") == 26u);
+    CHECK(az_filter_index_for_method("NameFilter.Other") == 1u);
+    CHECK(az_filter_index_for_method("NameFilter.A - F.A") == 2u);
+    CHECK(az_filter_index_for_method("NameFilter.Y - Z.Z") == 27u);
     CHECK(az_filter_index_for_method("NameFilter.A - F.a") == AZ_NO_GLYPH);
     CHECK(az_filter_index_for_method("NameFilter.A - F.A.extra") ==
         AZ_NO_GLYPH);
     CHECK(az_filter_index_for_method("") == AZ_NO_GLYPH);
     CHECK(az_filter_index_for_method(NULL) == AZ_NO_GLYPH);
 
-    for (index = 0u; index < AZ_GLYPH_COUNT; ++index) {
+    CHECK(expected_filters[AZ_FILTER_ALL_INDEX] == NULL);
+    for (index = AZ_FILTER_OTHER_INDEX; index < AZ_GLYPH_COUNT; ++index) {
         CHECK(az_filter_method_for_index(index) != NULL);
         CHECK(strcmp(
             az_filter_method_for_index(index),
@@ -279,16 +287,15 @@ static void test_layout(void)
     CHECK(style->logical_height == 720.0f);
     CHECK(style->row_center_x == 640.0f);
     CHECK(style->glyph_pitch == 34.25f);
-    CHECK(style->baseline_y == 598.0f);
+    CHECK(style->baseline_y == 372.0f);
     CHECK(style->em_size == 36.0f);
     CHECK(style->shadow_offset_x == 2.0f);
     CHECK(style->shadow_offset_y == 2.0f);
     CHECK(style->inactive_alpha == 216u);
     CHECK(style->selected_alpha == 255u);
     CHECK(style->shadow_alpha == 176u);
-    CHECK(az_glyph_center_x(13u) == 640.0f);
-    CHECK(az_glyph_center_x(0u) + az_glyph_center_x(26u) == 1280.0f);
-    CHECK(az_glyph_center_x(27u) == 640.0f);
+    CHECK(az_glyph_center_x(0u) + az_glyph_center_x(27u) == 1280.0f);
+    CHECK(az_glyph_center_x(28u) == 640.0f);
 
     for (index = 1u; index < AZ_GLYPH_COUNT; ++index) {
         CHECK(

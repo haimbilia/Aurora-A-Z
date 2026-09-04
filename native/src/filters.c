@@ -3,6 +3,7 @@
 #include <auroraaz/filters.h>
 
 static const char *const k_filter_methods[AZ_GLYPH_COUNT] = {
+    NULL,
     "NameFilter.Other",
     "NameFilter.A - F.A",
     "NameFilter.A - F.B",
@@ -32,6 +33,13 @@ static const char *const k_filter_methods[AZ_GLYPH_COUNT] = {
     "NameFilter.Y - Z.Z"
 };
 
+static const char *const k_labels[AZ_GLYPH_COUNT] = {
+    "ALL", "#",
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
+    "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X",
+    "Y", "Z"
+};
+
 static int strings_equal(const char *left, const char *right)
 {
     size_t index = 0u;
@@ -52,15 +60,20 @@ static int strings_equal(const char *left, const char *right)
 
 char az_glyph_for_index(uint8_t index)
 {
-    if (index == 0u) {
+    if (index == AZ_FILTER_OTHER_INDEX) {
         return '#';
     }
 
-    if (index >= AZ_GLYPH_COUNT) {
+    if (index < AZ_FILTER_FIRST_ALPHA_INDEX || index >= AZ_GLYPH_COUNT) {
         return '\0';
     }
 
-    return (char)('A' + (char)(index - 1u));
+    return (char)('A' + (char)(index - AZ_FILTER_FIRST_ALPHA_INDEX));
+}
+
+const char *az_label_for_index(uint8_t index)
+{
+    return index < AZ_GLYPH_COUNT ? k_labels[index] : NULL;
 }
 
 const char *az_filter_method_for_index(uint8_t index)
@@ -80,7 +93,9 @@ uint8_t az_filter_index_for_method(const char *method)
         return AZ_NO_GLYPH;
     }
 
-    for (index = 0u; index < AZ_GLYPH_COUNT; ++index) {
+    for (index = AZ_FILTER_OTHER_INDEX;
+         index < AZ_GLYPH_COUNT;
+         ++index) {
         if (strings_equal(method, k_filter_methods[index]) != 0) {
             return index;
         }

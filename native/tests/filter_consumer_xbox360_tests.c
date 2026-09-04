@@ -101,6 +101,7 @@ typedef struct TestHost {
     uint32_t construct_calls;
     uint32_t assign_calls;
     uint32_t push_calls;
+    uint32_t erase_calls;
     uint32_t schedule_calls;
     uint32_t take_calls;
     uint32_t finish_calls;
@@ -728,6 +729,43 @@ static uint8_t test_vector_push_back(
     return 1u;
 }
 
+static uint8_t test_vector_erase(
+    void *context,
+    AzRev1655AuroraStringVector *vector,
+    uint32_t index)
+{
+    TestHost *host = (TestHost *)context;
+    TestVectorRecord *record = find_vector_record(host, vector);
+    uint32_t current;
+
+    ++host->erase_calls;
+    if (record == NULL || index >= record->count) {
+        return 0u;
+    }
+    for (current = index; current + 1u < record->count; ++current) {
+        TestStringRecord *destination = find_string_record(
+            host, &record->elements[current]);
+        TestStringRecord *source = find_string_record(
+            host, &record->elements[current + 1u]);
+        if (destination == NULL || source == NULL) {
+            return 0u;
+        }
+        memcpy(destination->text, source->text, source->length + 1u);
+        destination->length = source->length;
+        destination->capacity = source->capacity;
+    }
+    {
+        TestStringRecord *last = find_string_record(
+            host, &record->elements[record->count - 1u]);
+        if (last == NULL) {
+            return 0u;
+        }
+        last->active = 0u;
+    }
+    --record->count;
+    return 1u;
+}
+
 static void capture_string(
     TestHost *host,
     const AzRev1655AuroraString *source,
@@ -819,6 +857,7 @@ static void make_host_ops(TestHost *host, AzRev1655FilterHostOps *ops)
     ops->vector_count = &test_vector_count;
     ops->vector_at = &test_vector_at;
     ops->vector_push_back = &test_vector_push_back;
+    ops->vector_erase = &test_vector_erase;
     ops->schedule_filter = &test_schedule_filter;
 }
 
@@ -979,7 +1018,9 @@ static void test_all_canonical_methods(const AzRev1655LoadedImage *image)
     bind_and_probe(&consumer, &host, image);
     host.take_result = AZ_INPUT_DETOUR_OK;
 
-    for (index = 0u; index < AZ_GLYPH_COUNT; ++index) {
+    for (index = AZ_FILTER_OTHER_INDEX;
+         index < AZ_GLYPH_COUNT;
+         ++index) {
         host.requested_index = index;
         CHECK(az_rev1655_filter_consumer_worker_step(&consumer) ==
             AZ_REV1655_FILTER_CONSUMER_SCHEDULED);
@@ -989,8 +1030,8 @@ static void test_all_canonical_methods(const AzRev1655LoadedImage *image)
         CHECK(host.scheduled.flags == AZ_REV1655_FILTER_FLAGS_ADDITIONAL);
         CHECK(active_string_count(&host) == 0u);
     }
-    CHECK(host.schedule_calls == AZ_GLYPH_COUNT);
-    CHECK(host.finish_calls == AZ_GLYPH_COUNT);
+    CHECK(host.schedule_calls == AZ_GLYPH_COUNT - 1u);
+    CHECK(host.finish_calls == AZ_GLYPH_COUNT - 1u);
 }
 
 static void test_worker_probe(const AzRev1655LoadedImage *image)
@@ -1015,7 +1056,7 @@ static void test_worker_probe(const AzRev1655LoadedImage *image)
     host.affinity_verified = 1u;
     CHECK(az_rev1655_filter_consumer_worker_probe(&consumer) ==
         AZ_REV1655_FILTER_CONSUMER_IDLE);
-    CHECK(host.registry_calls == AZ_GLYPH_COUNT);
+    CHECK(host.registry_calls == AZ_GLYPH_COUNT - 1u);
     CHECK(host.copy_calls == 1u);
     CHECK(host.destroy_calls == 1u);
     CHECK(active_string_count(&host) == 0u);
@@ -1068,7 +1109,7 @@ static void test_append_filter(const AzRev1655LoadedImage *image)
     host.initial_raw_count = 1u;
     bind_and_probe(&consumer, &host, image);
     host.take_result = AZ_INPUT_DETOUR_OK;
-    host.requested_index = 1u;
+    host.requested_index = 2u;
 
     CHECK(az_rev1655_filter_consumer_worker_step(&consumer) ==
         AZ_REV1655_FILTER_CONSUMER_SCHEDULED);
@@ -1097,7 +1138,7 @@ static void test_replace_raw_filter(const AzRev1655LoadedImage *image)
     host.initial_raw_count = 2u;
     bind_and_probe(&consumer, &host, image);
     host.take_result = AZ_INPUT_DETOUR_OK;
-    host.requested_index = 26u;
+    host.requested_index = 27u;
 
     CHECK(az_rev1655_filter_consumer_worker_step(&consumer) ==
         AZ_REV1655_FILTER_CONSUMER_SCHEDULED);
@@ -1122,7 +1163,7 @@ static void test_replace_compiled_filter(const AzRev1655LoadedImage *image)
         "[\"A - F\"][\"A\"](Content) and after";
     bind_and_probe(&consumer, &host, image);
     host.take_result = AZ_INPUT_DETOUR_OK;
-    host.requested_index = 0u;
+    host.requested_index = 1u;
 
     CHECK(az_rev1655_filter_consumer_worker_step(&consumer) ==
         AZ_REV1655_FILTER_CONSUMER_SCHEDULED);
@@ -1132,6 +1173,69 @@ static void test_replace_compiled_filter(const AzRev1655LoadedImage *image)
         "before and GameListFilterCategories[\"NameFilter\"]"
         "[\"Other\"](Content) and after") == 0);
     CHECK(host.scheduled.raw_count == 0u);
+    assert_preserved_state(&host);
+    CHECK(active_string_count(&host) == 0u);
+}
+
+static void test_alphabetical_all_preserves_quickview(
+    const AzRev1655LoadedImage *image)
+{
+    TestHost host;
+    AzRev1655FilterConsumer consumer;
+
+    test_host_init(&host);
+    host.initial_quickview_id = 17u;
+    host.initial_raw[0] = "NameFilter.A - F.A";
+    host.initial_raw[1] = "ContentType.XBLA";
+    host.initial_raw_count = 2u;
+    bind_and_probe(&consumer, &host, image);
+    host.take_result = AZ_INPUT_DETOUR_OK;
+    host.requested_index = AZ_FILTER_ALL_INDEX;
+
+    CHECK(az_rev1655_filter_consumer_worker_step(&consumer) ==
+        AZ_REV1655_FILTER_CONSUMER_SCHEDULED);
+    CHECK(host.erase_calls == 1u);
+    CHECK(host.assign_calls == 0u);
+    CHECK(host.scheduled.raw_count == 1u);
+    CHECK(strcmp(host.scheduled.raw[0], "ContentType.XBLA") == 0);
+    CHECK(strcmp(host.scheduled.compiled, host.initial_compiled) == 0);
+    assert_preserved_state(&host);
+    CHECK(active_string_count(&host) == 0u);
+
+    test_host_init(&host);
+    host.initial_quickview_id = 23u;
+    host.initial_compiled =
+        "ContentType.XBLA(Content) and "
+        "GameListFilterCategories[\"NameFilter\"]"
+        "[\"M - R\"][\"M\"](Content) and Favorites(Content)";
+    bind_and_probe(&consumer, &host, image);
+    host.take_result = AZ_INPUT_DETOUR_OK;
+    host.requested_index = AZ_FILTER_ALL_INDEX;
+
+    CHECK(az_rev1655_filter_consumer_worker_step(&consumer) ==
+        AZ_REV1655_FILTER_CONSUMER_SCHEDULED);
+    CHECK(host.erase_calls == 0u);
+    CHECK(host.assign_calls == 1u);
+    CHECK(strcmp(host.scheduled.compiled,
+        "ContentType.XBLA(Content) and Favorites(Content)") == 0);
+    CHECK(host.scheduled.raw_count == 0u);
+    assert_preserved_state(&host);
+    CHECK(active_string_count(&host) == 0u);
+
+    test_host_init(&host);
+    host.initial_quickview_id = 29u;
+    host.initial_raw[0] = "ContentType.XBLA";
+    host.initial_raw_count = 1u;
+    bind_and_probe(&consumer, &host, image);
+    host.take_result = AZ_INPUT_DETOUR_OK;
+    host.requested_index = AZ_FILTER_ALL_INDEX;
+
+    CHECK(az_rev1655_filter_consumer_worker_step(&consumer) ==
+        AZ_REV1655_FILTER_CONSUMER_SCHEDULED);
+    CHECK(host.erase_calls == 0u);
+    CHECK(host.assign_calls == 0u);
+    CHECK(host.scheduled.raw_count == 1u);
+    CHECK(strcmp(host.scheduled.raw[0], "ContentType.XBLA") == 0);
     assert_preserved_state(&host);
     CHECK(active_string_count(&host) == 0u);
 }
@@ -1333,6 +1437,7 @@ int main(int argc, char **argv)
     test_append_filter(&image);
     test_replace_raw_filter(&image);
     test_replace_compiled_filter(&image);
+    test_alphabetical_all_preserves_quickview(&image);
     test_ambiguous_filters(&image);
     test_defer_worker_only_and_cancel(&image);
     test_failure_cleanup(&image);

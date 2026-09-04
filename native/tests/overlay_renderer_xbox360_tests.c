@@ -30,7 +30,7 @@ static uint32_t g_texture_words[4];
 static uint32_t
     g_texture_pixels[AZ_GLYPH_ATLAS_HEIGHT][AZ_GLYPH_ATLAS_WIDTH];
 static volatile uint32_t g_device_slot = 0x12340000u;
-static AzOverlayFontVertex g_draw_vertices[3][4];
+static AzOverlayFontVertex g_draw_vertices[5][4];
 static uint32_t g_create_count;
 static uint32_t g_lock_count;
 static uint32_t g_unlock_count;
@@ -147,7 +147,7 @@ static void draw_primitive_up(
     if ((uintptr_t)device != (uintptr_t)g_device_slot ||
         primitive_type != 5u || vertex_count != 4u ||
         vertices == NULL || stride != sizeof(AzOverlayFontVertex) ||
-        g_draw_count >= 3u) {
+        g_draw_count >= 5u) {
         return;
     }
 
@@ -213,6 +213,7 @@ int main(void)
 
     initialize_renderer(&renderer);
     initialize_host_objects();
+    memset(&request, 0, sizeof(request));
 
     request.font = g_font;
     request.caller_lr = AZ_REV1655_FONT_END_CALLER_LR;
@@ -244,22 +245,26 @@ int main(void)
             &renderer,
             &request) != AZ_OVERLAY_RENDERER_DRAWN ||
         g_create_count != 1u || g_lock_count != 1u ||
-        g_unlock_count != 1u || g_set_texture_count != 3u ||
-        g_set_constant_count != 6u || g_draw_count != 3u) {
+        g_unlock_count != 1u || g_set_texture_count != 5u ||
+        g_set_constant_count != 10u || g_draw_count != 5u) {
         return EXIT_FAILURE;
     }
 
-    if (!close_enough(g_draw_vertices[1][0].x, 179.0f) ||
-        !close_enough(g_draw_vertices[1][0].y, 569.0f) ||
-        g_draw_vertices[1][0].u != 0 ||
-        g_draw_vertices[1][0].v != 20 ||
-        g_draw_vertices[1][2].u != 922 ||
-        g_draw_vertices[1][2].v != 53 ||
-        g_draw_vertices[1][3].u != 0 ||
-        g_draw_vertices[1][3].v != 53 ||
+    if (!close_enough(g_draw_vertices[0][0].x, 0.0f) ||
+        !close_enough(g_draw_vertices[0][0].y, 0.0f) ||
+        g_draw_vertices[0][0].u != 1017 ||
+        g_draw_vertices[0][0].v != 57 ||
+        !close_enough(g_draw_vertices[2][0].x, 141.0f) ||
+        !close_enough(g_draw_vertices[2][0].y, 343.0f) ||
         g_draw_vertices[2][0].u != 0 ||
-        g_draw_vertices[2][2].u != 25 ||
-        g_draw_vertices[2][3].u != 0) {
+        g_draw_vertices[2][0].v != 20 ||
+        g_draw_vertices[2][2].u != 998 ||
+        g_draw_vertices[2][2].v != 53 ||
+        g_draw_vertices[2][3].u != 0 ||
+        g_draw_vertices[2][3].v != 53 ||
+        g_draw_vertices[4][0].u != 0 ||
+        g_draw_vertices[4][2].u != 68 ||
+        g_draw_vertices[4][3].u != 0) {
         return EXIT_FAILURE;
     }
 
@@ -272,7 +277,7 @@ int main(void)
             &renderer,
             &request) != AZ_OVERLAY_RENDERER_BAD_REQUEST ||
         az_overlay_renderer_in_flight(&renderer) != 0u ||
-        g_draw_count != 3u) {
+        g_draw_count != 5u) {
         return EXIT_FAILURE;
     }
 
@@ -288,7 +293,7 @@ int main(void)
         az_overlay_renderer_try_draw(
             &renderer,
             &request) != AZ_OVERLAY_RENDERER_NO_COVERFLOW ||
-        g_draw_count != 3u ||
+        g_draw_count != 5u ||
         strcmp(
             az_overlay_renderer_result_name(
                 AZ_OVERLAY_RENDERER_BAD_REQUEST),

@@ -144,6 +144,10 @@ typedef struct AzRev1655FilterHostOps {
         void *context,
         AzRev1655AuroraStringVector *vector,
         const AzRev1655AuroraString *value);
+    uint8_t (*vector_erase)(
+        void *context,
+        AzRev1655AuroraStringVector *vector,
+        uint32_t index);
 
     int32_t (*schedule_filter)(
         void *context,

@@ -31,6 +31,7 @@ typedef struct AzSelectorState {
     uint8_t selected_index;
     uint8_t applied_index;
     uint8_t selection_changed;
+    uint8_t apply_serial;
 } AzSelectorState;
 
 typedef struct AzSelectorResult {

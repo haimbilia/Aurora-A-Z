@@ -1,8 +1,9 @@
 # Aurora A-Z
 
 Aurora A-Z is a skin-agnostic, on-coverflow alphabetical selector for the
-Aurora dashboard on Xbox 360. The target UI is a transient `# A B ... Z` row
-above the game title, shown only while R3 is held, with controller navigation
+Aurora dashboard on Xbox 360. The target UI is a transient
+`ALL # A B ... Z` row centered over a dimmed coverflow, shown only while R3 is
+held, with controller navigation
 and selection directly from the main coverflow. It works without modifying or
 replacing the selected Aurora skin.
 
@@ -15,10 +16,14 @@ changes to `Aurora.xex`, or changes to `launch.ini`.
 
 The normative controller and filtering behavior is defined in
 [`REQUIREMENTS.md`](REQUIREMENTS.md). In short: hold R3 to reveal the
-on-coverflow selector at `#`; while holding it, D-pad Left/Right and left-stick
+on-coverflow selector at `ALL`; while holding it, D-pad Left/Right and left-stick
 Left/Right move the highlight; release R3 to filter and hide the row. Aurora
 A-Z never consumes A, and RB retains Aurora's normal QuickView menu. A quick
 R3 press/release without moving the highlight cancels without filtering.
+
+`ALL` is scoped: it removes only the alphabetical name filter and preserves
+the active QuickView and other filters. On release, the row vanishes and the
+selected item grows while fading out; this animation never delays filtering.
 
 The architectural constraints that follow from these requirements are recorded
 in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
@@ -26,31 +31,28 @@ in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
 
 ## Current status
 
-There is no compliant filtering release yet. The native C99 selector core is
-implemented and host-tested: it models the hold-R3/Left/Right/release state machine, maps
-`#` and `A` through `Z` to Aurora's built-in name filters, carries the mockup's
-measured 1280x720 layout, and rejects binaries that do not match the exact
-Rev1655 code probes. M1, the one-file native bootstrap and worker-entry gate, is
-complete on hardware. M2a is also complete on hardware: the direct observe-only
-input hook saw every required control, including stick holds/repeats, while
-recording zero invalid events, drops, consumed keys, or filter requests. M3's
-renderer-owned overlay and selector interaction passed on hardware with commit
-`c86ad0c`, GitHub Actions run `33747222158`, and artifact SHA-256
-`94F32460DBC5A76153F63BB9B23158E7CFE690277D792DBB7822666B93B09CF8`.
-The complete row rendered without diagonal clipping; R3, D-pad Left/Right,
-left-stick Left/Right, and RB behaved as required. The filter bridge remains
-hardware-gated; A is no longer part of the Aurora A-Z interaction.
+The complete hold-R3 interaction, in-memory filtering, immediate re-arming,
+and title-launch lifecycle now pass on production hardware. The known-good
+baseline is commit `d1cfced`, GitHub Actions run `33820492994`, artifact
+SHA-256
+`409369CD513FE9BB5E475BA1261FA09FCA9E8000571563DA6149A3E686B0D94A`.
+It is installed as the single `Plugins\NetDbgDll.xex` payload and has launched
+a game successfully without the earlier black-screen or 0% gathering freeze.
+
+The current unreleased polish work adds the centered dimmed `ALL # A ... Z`
+presentation, enlarged highlight, release animation, and alphabetical-only
+`ALL` semantics. It remains a lab candidate until native CI, screenshot review,
+filter tests, and game/XEX launch regression tests pass.
 
 The hold-R3 filtering interaction now works on hardware, including cancel on
 an unmoved R3 tap and completion-based re-arming. Commit `57dd888` is not a
 release candidate: an isolated A/B test proved that its still-running worker
 blocked normal title handoff. Hardware then disproved ordinal 3 as a launch
 notification: the shutdown-capable follow-up still black-screened and its
-persisted marker recorded zero shutdown requests. The current lab candidate
+persisted marker recorded zero shutdown requests. The passing implementation
 instead intercepts the exact Rev1655 `ContentLauncher` entry, signals its
-worker to restore all four hooks and exit, then immediately resumes
-Aurora's original launcher. It must pass game/XEX launch testing before any
-production install.
+worker to restore all four hooks and exit, then immediately resumes Aurora's
+original launcher.
 
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary
@@ -122,8 +124,9 @@ The hardware-passing M2a artifact is commit `06affc4`, GitHub Actions run
 `33736960588`, SHA-256
 `431FAD613E1C177B5B5A486B5B21B98AB17BB2AC2592C1A6F630DC07E68EB86E`.
 Its final telemetry recorded all seven observed controls, the recovered main caller,
-and clean safety fields. The current overlay canary adds only the centered
-transient row; filter mutation remains behind its independent hardware gate.
+and clean safety fields. The production baseline includes the renderer,
+selector, filtering bridge, and nonblocking title-launch cleanup. Visual polish
+is tested in the lab first.
 
 ## Project layout
 

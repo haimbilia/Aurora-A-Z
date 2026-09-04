@@ -47,15 +47,17 @@ int main(void)
         sum += (uint32_t)pixels[index];
     }
 
-    if (az_glyph_atlas_rle_size() != 12512u ||
-        nonzero != 5984u ||
-        sum != 1053619u ||
-        fnv1a(pixels, AZ_GLYPH_ATLAS_PIXEL_COUNT) != 0x923703D6u ||
+    if (az_glyph_atlas_rle_size() != 13438u ||
+        nonzero != 6478u ||
+        sum != 1144023u ||
+        fnv1a(pixels, AZ_GLYPH_ATLAS_PIXEL_COUNT) != 0xF067A02Eu ||
         g_az_glyph_atlas_glyphs[0].source_x != 0u ||
-        g_az_glyph_atlas_glyphs[0].advance != 23u ||
-        g_az_glyph_atlas_glyphs[1].source_x != 33u ||
-        g_az_glyph_atlas_glyphs[26].source_x != 899u ||
-        g_az_glyph_atlas_glyphs[26].advance != 23u ||
+        g_az_glyph_atlas_glyphs[0].advance != 66u ||
+        g_az_glyph_atlas_glyphs[1].source_x != 76u ||
+        g_az_glyph_atlas_glyphs[27].source_x != 975u ||
+        g_az_glyph_atlas_glyphs[27].advance != 23u ||
+        pixels[(AZ_GLYPH_ATLAS_SOLID_Y * AZ_GLYPH_ATLAS_WIDTH) +
+            AZ_GLYPH_ATLAS_SOLID_X] != 255u ||
         strcmp(
             az_glyph_atlas_source_font_sha256(),
             "59123D9F5A81091626FB1B37C583510A85DB1296AB794B48309AAAD0410232ED") != 0) {

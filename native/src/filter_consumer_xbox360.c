@@ -174,6 +174,7 @@ typedef struct AzNameFilterClassification {
     AzRev1655AuroraString *raw_element;
     uint32_t raw_count;
     uint8_t raw_index;
+    uint32_t raw_vector_index;
     uint32_t compiled_count;
     uint8_t compiled_index;
     uint32_t compiled_offset;
@@ -296,6 +297,7 @@ static uint8_t host_callbacks_are_complete(
         host->vector_count != NULL &&
         host->vector_at != NULL &&
         host->vector_push_back != NULL &&
+        host->vector_erase != NULL &&
         host->schedule_filter != NULL ? 1u : 0u;
 }
 
@@ -555,7 +557,9 @@ static uint8_t canonical_index_for_text(
     if (filter_index == NULL) {
         return 0u;
     }
-    for (index = 0u; index < AZ_GLYPH_COUNT; ++index) {
+    for (index = AZ_FILTER_OTHER_INDEX;
+         index < AZ_GLYPH_COUNT;
+         ++index) {
         const char *method = az_filter_method_for_index(index);
         if (text_equals(characters, length, method) != 0u) {
             *filter_index = index;
@@ -610,6 +614,7 @@ static void classify_name_filters(
             ++classification->raw_count;
             classification->raw_element = element;
             classification->raw_index = canonical_index;
+            classification->raw_vector_index = vector_index;
         }
         else if (range_contains_text(
                 raw.characters, raw.length, name_filter) != 0u) {
@@ -617,7 +622,9 @@ static void classify_name_filters(
         }
     }
 
-    for (filter_index = 0u; filter_index < AZ_GLYPH_COUNT; ++filter_index) {
+    for (filter_index = AZ_FILTER_OTHER_INDEX;
+         filter_index < AZ_GLYPH_COUNT;
+         ++filter_index) {
         char leaf[128];
         uint32_t leaf_length = 0u;
         uint32_t offset;
@@ -763,6 +770,75 @@ static uint8_t replace_compiled_leaf(
         (uint32_t)new_length) != 0u ? 1u : 0u;
 }
 
+static uint8_t remove_compiled_leaf(
+    AzRev1655FilterConsumer *consumer,
+    AzRev1655FilterWork74 *work,
+    const AzNameFilterClassification *classification)
+{
+    static const char conjunction[] = " and ";
+    static const char match_all[] = "return true";
+    AzStringView current;
+    size_t remove_start;
+    size_t remove_end;
+    size_t new_length;
+
+    if (consumer == NULL || work == NULL || classification == NULL ||
+        classification->compiled_count != 1u ||
+        string_is_valid(
+            consumer,
+            &work->compiled_quickview_filter,
+            &current) == 0u ||
+        classification->compiled_offset > current.length ||
+        classification->compiled_length >
+            current.length - classification->compiled_offset) {
+        return 0u;
+    }
+
+    remove_start = (size_t)classification->compiled_offset;
+    remove_end = remove_start + (size_t)classification->compiled_length;
+    if (remove_start == 0u && remove_end == (size_t)current.length) {
+        return consumer->host.string_assign_bytes(
+            consumer->host.context,
+            &work->compiled_quickview_filter,
+            match_all,
+            (uint32_t)(sizeof(match_all) - 1u));
+    }
+
+    if (remove_start >= sizeof(conjunction) - 1u &&
+        memcmp(
+            current.characters + remove_start - (sizeof(conjunction) - 1u),
+            conjunction,
+            sizeof(conjunction) - 1u) == 0) {
+        remove_start -= sizeof(conjunction) - 1u;
+    }
+    else if (remove_end + (sizeof(conjunction) - 1u) <= current.length &&
+        memcmp(
+            current.characters + remove_end,
+            conjunction,
+            sizeof(conjunction) - 1u) == 0) {
+        remove_end += sizeof(conjunction) - 1u;
+    }
+    else {
+        return 0u;
+    }
+
+    new_length = (size_t)current.length - (remove_end - remove_start);
+    if (new_length > AZ_REV1655_FILTER_MAX_TEXT || new_length > UINT32_MAX) {
+        return 0u;
+    }
+    memcpy(consumer->replacement_scratch, current.characters, remove_start);
+    memcpy(
+        consumer->replacement_scratch + remove_start,
+        current.characters + remove_end,
+        (size_t)current.length - remove_end);
+    consumer->replacement_scratch[new_length] = '\0';
+    return consumer->host.string_assign_bytes(
+        consumer->host.context,
+        &work->compiled_quickview_filter,
+        consumer->replacement_scratch,
+        (uint32_t)new_length);
+}
+
 static uint8_t caller_is_worker(const AzRev1655FilterConsumer *consumer)
 {
     uint32_t current_thread;
@@ -834,6 +910,7 @@ static AzRev1655FilterConsumerResult apply_held_filter(
     int32_t schedule_result = 1;
     uint8_t snapshot_live = 0u;
     uint8_t selected_live = 0u;
+    uint8_t select_all;
     AzRev1655FilterConsumerResult result =
         AZ_REV1655_FILTER_CONSUMER_MUTATION_FAILED;
 
@@ -846,22 +923,26 @@ static AzRev1655FilterConsumerResult apply_held_filter(
         return AZ_REV1655_FILTER_CONSUMER_BAD_FILTER_INDEX;
     }
 
-    selected_method = az_filter_method_for_index(consumer->held_filter_index);
-    selected_length = bounded_cstring_length(
+    select_all = consumer->held_filter_index == AZ_FILTER_ALL_INDEX ? 1u : 0u;
+    selected_method = select_all != 0u ? NULL :
+        az_filter_method_for_index(consumer->held_filter_index);
+    selected_length = select_all != 0u ? 0u : bounded_cstring_length(
         selected_method, AZ_REV1655_FILTER_MAX_TEXT);
-    if (selected_method == NULL || selected_length == 0u ||
-        selected_length > AZ_REV1655_FILTER_MAX_TEXT ||
-        selected_length > UINT32_MAX) {
+    if (select_all == 0u &&
+        (selected_method == NULL || selected_length == 0u ||
+         selected_length > AZ_REV1655_FILTER_MAX_TEXT ||
+         selected_length > UINT32_MAX)) {
         consumer->disabled = 1u;
         return AZ_REV1655_FILTER_CONSUMER_BAD_FILTER_INDEX;
     }
 
     registry = validated_registry(consumer);
-    if (registry == NULL || consumer->host.registry_lookup(
+    if (registry == NULL || (select_all == 0u &&
+        consumer->host.registry_lookup(
             consumer->host.context,
             registry,
             0u,
-            selected_method) == 0u) {
+            selected_method) == 0u)) {
         consumer->disabled = 1u;
         return AZ_REV1655_FILTER_CONSUMER_REGISTRY_MISSING;
     }
@@ -894,7 +975,34 @@ static AzRev1655FilterConsumerResult apply_held_filter(
         goto cleanup;
     }
 
-    if (classification.raw_count == 0u &&
+    if (select_all != 0u) {
+        if (classification.raw_count == 1u &&
+            classification.compiled_count == 0u) {
+            if (consumer->host.vector_erase(
+                    consumer->host.context,
+                    &snapshot.work.additional_filter_ids,
+                    classification.raw_vector_index) == 0u) {
+                result = AZ_REV1655_FILTER_CONSUMER_MUTATION_FAILED;
+                goto cleanup;
+            }
+        }
+        else if (classification.compiled_count == 1u &&
+                 classification.raw_count == 0u) {
+            if (remove_compiled_leaf(
+                    consumer,
+                    &snapshot.work,
+                    &classification) == 0u) {
+                result = AZ_REV1655_FILTER_CONSUMER_MUTATION_FAILED;
+                goto cleanup;
+            }
+        }
+        else if (classification.raw_count != 0u ||
+                 classification.compiled_count != 0u) {
+            result = AZ_REV1655_FILTER_CONSUMER_AMBIGUOUS_NAME_FILTER;
+            goto cleanup;
+        }
+    }
+    else if (classification.raw_count == 0u &&
         classification.compiled_count == 0u) {
         if (consumer->host.string_construct_cstring(
                 consumer->host.context,
@@ -946,9 +1054,13 @@ static AzRev1655FilterConsumerResult apply_held_filter(
         goto cleanup;
     }
     classify_name_filters(consumer, &snapshot.work, &final_classification);
-    if (classification_is_selected(
+    if ((select_all != 0u &&
+         (final_classification.ambiguous != 0u ||
+          final_classification.raw_count != 0u ||
+          final_classification.compiled_count != 0u)) ||
+        (select_all == 0u && classification_is_selected(
             &final_classification,
-            consumer->held_filter_index) == 0u) {
+            consumer->held_filter_index) == 0u)) {
         result = AZ_REV1655_FILTER_CONSUMER_MUTATION_FAILED;
         goto cleanup;
     }
@@ -1183,7 +1295,9 @@ AzRev1655FilterConsumerResult az_rev1655_filter_consumer_worker_probe(
         consumer->disabled = 1u;
         return AZ_REV1655_FILTER_CONSUMER_REGISTRY_MISSING;
     }
-    for (index = 0u; index < AZ_GLYPH_COUNT; ++index) {
+    for (index = AZ_FILTER_OTHER_INDEX;
+         index < AZ_GLYPH_COUNT;
+         ++index) {
         const char *identifier = az_filter_method_for_index(index);
         if (identifier == NULL || consumer->host.registry_lookup(
                 consumer->host.context,

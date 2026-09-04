@@ -8,11 +8,13 @@
 extern "C" {
 #endif
 
-#define AZ_OVERLAY_MAX_QUADS 3u
+#define AZ_OVERLAY_MAX_QUADS 5u
 
 typedef enum AzOverlayLayer {
-    AZ_OVERLAY_LAYER_SHADOW = 0,
+    AZ_OVERLAY_LAYER_DIM = 0,
+    AZ_OVERLAY_LAYER_SHADOW,
     AZ_OVERLAY_LAYER_ROW,
+    AZ_OVERLAY_LAYER_SELECTED_SHADOW,
     AZ_OVERLAY_LAYER_SELECTED
 } AzOverlayLayer;
 
@@ -44,6 +46,9 @@ void az_overlay_model_build(
     uint8_t coverflow_visible,
     uint8_t selector_active,
     uint8_t selected_index,
+    uint8_t exit_animation_active,
+    uint8_t exit_animation_index,
+    float exit_animation_progress,
     AzOverlayModel *model);
 
 #ifdef __cplusplus

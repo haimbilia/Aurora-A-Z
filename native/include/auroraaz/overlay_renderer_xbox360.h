@@ -97,6 +97,9 @@ typedef struct AzOverlayDrawRequest {
     float viewport_height;
     uint8_t selector_active;
     uint8_t selected_index;
+    uint8_t exit_animation_active;
+    uint8_t exit_animation_index;
+    float exit_animation_progress;
     /* Must come from a proven Aurora scene/modal predicate. */
     uint8_t proven_modal_clear;
 } AzOverlayDrawRequest;

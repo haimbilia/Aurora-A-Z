@@ -11,6 +11,8 @@ typedef char AzFontEndContinuationMustMatch[
     AZ_REV1655_FONT_END_CONTINUE_ADDRESS ==
         AZ_REV1655_FONT_END_ADDRESS + sizeof(uint32_t) ? 1 : -1];
 
+#define AZ_EXIT_ANIMATION_FRAMES 18u
+
 typedef struct AzRenderDetourBridge {
     AzRev1655RenderDetourBindings bindings;
     volatile uint32_t configured;
@@ -24,6 +26,10 @@ typedef struct AzRenderDetourBridge {
     volatile uint32_t last_note_result;
     volatile uint32_t last_draw_result;
     volatile uint32_t last_cleanup_result;
+    uint8_t last_apply_serial;
+    uint8_t exit_animation_active;
+    uint8_t exit_animation_index;
+    uint8_t exit_animation_frame;
 } AzRenderDetourBridge;
 
 static AzRenderDetourBridge g_render_detours;
@@ -255,6 +261,39 @@ void az_rev1655_font_end_detour_c(void *font, uint32_t caller_lr)
                 1u : 0u;
             request.selected_index = request.selector_active != 0u ?
                 selector.selected_index : 0u;
+            if (caller_lr == AZ_REV1655_FONT_END_CALLER_LR) {
+                if (request.selector_active != 0u) {
+                    g_render_detours.last_apply_serial =
+                        selector.apply_serial;
+                    g_render_detours.exit_animation_active = 0u;
+                    g_render_detours.exit_animation_frame = 0u;
+                }
+                else if (selector.apply_serial !=
+                    g_render_detours.last_apply_serial) {
+                    g_render_detours.last_apply_serial =
+                        selector.apply_serial;
+                    if (selector.applied_index < AZ_GLYPH_COUNT) {
+                        g_render_detours.exit_animation_active = 1u;
+                        g_render_detours.exit_animation_index =
+                            selector.applied_index;
+                        g_render_detours.exit_animation_frame = 0u;
+                    }
+                }
+
+                if (g_render_detours.exit_animation_active != 0u) {
+                    request.exit_animation_active = 1u;
+                    request.exit_animation_index =
+                        g_render_detours.exit_animation_index;
+                    request.exit_animation_progress =
+                        (float)g_render_detours.exit_animation_frame /
+                        (float)AZ_EXIT_ANIMATION_FRAMES;
+                    ++g_render_detours.exit_animation_frame;
+                    if (g_render_detours.exit_animation_frame >=
+                        AZ_EXIT_ANIMATION_FRAMES) {
+                        g_render_detours.exit_animation_active = 0u;
+                    }
+                }
+            }
             request.proven_modal_clear =
                 input_status.scene_allows_capture != 0u ? 1u : 0u;
 

@@ -9,6 +9,16 @@ native bootstrap status below supersedes the earlier failed-attempt notes.
 
 ## 1. Status right now
 
+The nonblocking ContentLauncher build at commit `d1cfced` passed on production
+hardware on 2026-09-04. Its GitHub Actions run was `33820492994`; the deployed
+artifact SHA-256 was
+`409369CD513FE9BB5E475BA1261FA09FCA9E8000571563DA6149A3E686B0D94A`.
+Hold-R3 selection, repeated filtering, and a normal game launch all worked.
+That file is the rollback baseline in production and must not be replaced by
+an unverified polish build. Current polish work is lab-first and adds the
+vertically centered dimmed `ALL # A ... Z` row, enlarged highlight, release
+grow/fade animation, and scoped removal of only the alphabetical `NameFilter`.
+
 The legacy A-Z experiment has been removed from the console. A read-only pull
 of the live `settings.db` on 2026-09-02 confirmed the stock 7 QuickViews, zero
 `AURORA_AZ` rows, zero one-character `NameFilter` rows, and no `AuroraAZ*`
@@ -55,10 +65,10 @@ installing this plugin's first hook.
 
 The controller contract changed on 2026-09-04 after an unarmed build allowed A
 to reach Aurora and launch the highlighted game. The row is now hidden during
-normal coverflow use. Press and hold R3 to show it at `#`, navigate with D-pad
+normal coverflow use. Press and hold R3 to show it at `ALL`, navigate with D-pad
 or left-stick Left/Right while continuing to hold R3, and release R3 to apply
 and hide it. A press/release of R3 without any actual highlight movement is a
-cancel/no-op and must not apply `#`. Aurora A-Z no longer assigns, consumes, or
+cancel/no-op and must not apply `ALL`. Aurora A-Z no longer assigns, consumes, or
 clears A at all. Hardware confirmed the first hold/release build filtered
 correctly, but its fixed 8-second plus 1-second-idle re-arm window was visibly
 slow. The next build uses observed queue/busy activity followed by 200 ms of
@@ -84,8 +94,8 @@ information 0%`. Waiting on the launcher thread is therefore forbidden. The
 revised bridge only signals the worker and immediately resumes Aurora, giving
 cleanup the information-gathering interval to cancel filtering, restore the
 ContentLauncher, Font::End, RenderMenu, and input hooks, and exit
-asynchronously. This remains lab-only until the same game and XEX launch A/B
-gates pass.
+asynchronously. The revised nonblocking build subsequently passed the
+production game-launch gate recorded at the top of this section.
 
 After reboot, the frozen synchronous candidate's persisted v5 marker decoded
 with `shutdown_requests=1` and runtime state `CLOSED`. That proves the boundary
@@ -99,7 +109,7 @@ remained running.
 QuickViews                                        stock 7 rows
 User/Scripts/*                                    no Aurora A-Z scripts
 Skins/*                                           no Aurora A-Z test skins
-Production Plugins/NetDbgDll.xex                  absent at last verified check
+Production Plugins/NetDbgDll.xex                  d1cfced rollback baseline active
 AuroraAZLab Plugins/NetDbgDll.xex                 verify before each experiment
 M1 primary marker                                 ordinal 4 / phase 5 / running
 M1 worker marker                                  ordinal 4 / phase 7 / running

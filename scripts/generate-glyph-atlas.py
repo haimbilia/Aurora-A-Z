@@ -11,8 +11,8 @@ import PIL
 from PIL import Image, ImageDraw, ImageFont
 
 
-GLYPHS = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-ROW_TEXT = " ".join(GLYPHS)
+LABELS = ("ALL", "#", *tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
+ROW_TEXT = " ".join(LABELS)
 ATLAS_WIDTH = 1024
 ATLAS_HEIGHT = 64
 FONT_SIZE = 39
@@ -20,8 +20,11 @@ BASELINE = 48
 EXPECTED_FONT_SHA256 = (
     "59123d9f5a81091626fb1b37c583510a85db1296ab794b48309aaad0410232ed"
 )
-EXPECTED_ROW_ADVANCE = 922
+EXPECTED_ROW_ADVANCE = 998
 EXPECTED_PILLOW_VERSION = "12.2.0"
+SOLID_X = 1016
+SOLID_Y = 56
+SOLID_SIZE = 4
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,11 +76,13 @@ extern "C" {
 #define AZ_GLYPH_ATLAS_WIDTH 1024u
 #define AZ_GLYPH_ATLAS_HEIGHT 64u
 #define AZ_GLYPH_ATLAS_PIXEL_COUNT 65536u
-#define AZ_GLYPH_ATLAS_GLYPH_COUNT 27u
-#define AZ_GLYPH_ATLAS_ROW_ADVANCE 922u
+#define AZ_GLYPH_ATLAS_GLYPH_COUNT 28u
+#define AZ_GLYPH_ATLAS_ROW_ADVANCE 998u
 #define AZ_GLYPH_ATLAS_TEXT_TOP 20u
 #define AZ_GLYPH_ATLAS_BASELINE 48u
 #define AZ_GLYPH_ATLAS_TEXT_BOTTOM 53u
+#define AZ_GLYPH_ATLAS_SOLID_X 1017u
+#define AZ_GLYPH_ATLAS_SOLID_Y 57u
 
 typedef struct AzGlyphAtlasGlyph {
     uint16_t source_x;
@@ -197,14 +202,20 @@ def main() -> None:
     image = Image.new("L", (ATLAS_WIDTH, ATLAS_HEIGHT), 0)
     draw = ImageDraw.Draw(image)
     draw.text((0, BASELINE), ROW_TEXT, font=font, fill=255, anchor="ls")
+    draw.rectangle(
+        (SOLID_X, SOLID_Y, SOLID_X + SOLID_SIZE - 1, SOLID_Y + SOLID_SIZE - 1),
+        fill=255,
+    )
 
     glyph_metrics: list[tuple[int, int]] = []
     cursor = 0.0
-    for index, character in enumerate(ROW_TEXT):
-        advance = font.getlength(character)
-        if index % 2 == 0:
-            glyph_metrics.append((round(cursor), round(advance)))
+    separator_advance = font.getlength(" ")
+    for index, label in enumerate(LABELS):
+        advance = font.getlength(label)
+        glyph_metrics.append((round(cursor), round(advance)))
         cursor += advance
+        if index + 1 < len(LABELS):
+            cursor += separator_advance
 
     pixels = image.tobytes()
     encoded = rle_encode(pixels)

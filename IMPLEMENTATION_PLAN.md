@@ -3,7 +3,7 @@
 ## Outcome
 
 Build a skin-agnostic runtime extension for Aurora 0.7b.2 Rev1655 that renders
-the mockup's centered `# A B ... Z` row over the live coverflow only while R3
+the mockup's centered `ALL # A B ... Z` row over the live coverflow only while R3
 is held, accepts D-pad and left-stick Left/Right during that hold, and applies
 the selected letter when R3 is released. It must leave A, every skin, the
 on-disk `Aurora.xex`, and Aurora's
@@ -364,26 +364,30 @@ Selector(no movement) --R3 release--> Coverflow (no-op)
 While `Selector` is active, letter navigation must never move the coverflow.
 Filter application must be idempotent and resilient to an empty result.
 
-Resolve these product decisions before freezing the state machine:
+The integrated state machine uses these frozen decisions:
 
-- whether `#` and `Z` wrap or clamp;
-- whether a separate cancel gesture is needed;
-- how the user clears a letter filter without adding an `ALL` item to the
-  mockup row;
-- whether a letter replaces the active QuickView filter or combines with it;
+- navigation clamps at `ALL` and `Z`;
+- an unmoved R3 tap cancels, so no separate cancel gesture is needed;
+- `ALL` removes only the alphabetical `NameFilter` and preserves the current
+  QuickView and all non-name predicates;
+- a letter replaces only the active alphabetical filter and combines with the
+  active QuickView and other predicates;
 - the row is hidden outside the R3-held selector mode.
 
 ## M6 — Match the mockup
 
 Use the mockup as a measured visual reference, not a general inspiration:
 
-- one unbroken `# A B ... Z` row;
-- horizontally centered in the 1280×720 virtual viewport;
+- one unbroken `ALL # A B ... Z` row, centered in both axes;
+- a full-viewport dim layer while the selector is visible;
+- horizontally and vertically centered in the 1280×720 virtual viewport;
 - fitted within approximately 91% of the title-safe width, with a reference
-  text baseline near logical Y=558 (about 77.5% down the viewport);
+  text baseline near logical Y=372 so the 33 px row is optically centered;
 - white/light-gray, lightweight 32–36 px sans-serif glyphs with even optical
   spacing;
-- a clearly distinguishable selected letter without rearranging the row;
+- a full-opacity selected item enlarged in place without rearranging the row;
+- a release transition where the row vanishes and the chosen item grows while
+  fading out;
 - non-selected glyphs only slightly dimmed while active, with the selected
   glyph at full white and a restrained glow or underline;
 - a soft black shadow offset by roughly 2–3 logical pixels, added after the
