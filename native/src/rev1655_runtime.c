@@ -41,12 +41,12 @@
 #define AZ_MODULE_SETTINGS_TARGET_ADDRESS 0x822C8B88u
 #define AZ_XUI_ELEMENT_GET_FIRST_CHILD_ORDINAL 811u
 #define AZ_XUI_ELEMENT_GET_NEXT_ORDINAL 816u
+#define AZ_XUI_ELEMENT_GET_PARENT_ORDINAL 817u
 #define AZ_XUI_TEXT_ELEMENT_SET_TEXT_ORDINAL 867u
 #define AZ_XUI_TEXT_ELEMENT_GET_TEXT_ORDINAL 870u
 #define AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL 915u
 #define AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL 921u
 #define AZ_XUI_ELEMENT_GET_DESCENDANT_BY_ID_ORDINAL 2111u
-#define AZ_SCENE_CACHE_HEAD_ADDRESS 0x82BC006Cu
 #define AZ_ICON_UI_TICK_INTERVAL 30u
 #define AZ_BROWSE_LIST_MANAGER_SINGLETON_ADDRESS 0x8223FF30u
 #define AZ_BROWSE_LIST_LOOKUP_ADDRESS 0x8223FFB0u
@@ -162,6 +162,7 @@ typedef struct AzRev1655Runtime {
     volatile uint32_t icon_ui_ticks;
     AzXuiGetChildFn xui_get_first_child;
     AzXuiGetChildFn xui_get_next;
+    AzXuiGetChildFn xui_get_parent;
     AzXuiGetDescendantFn xui_get_descendant;
     AzXuiGetTextFn xui_get_text;
     AzXuiSetTextFn xui_set_text;
@@ -1562,106 +1563,55 @@ static uint8_t target_utf16_equals(
     }
 }
 
-static uint8_t target_utf16_has_basename(
-    const uint16_t *path,
-    const uint16_t *basename,
-    uint32_t basename_length)
+static uint32_t live_module_settings_scene_handle(void)
 {
-    uint16_t units[256];
-    uint32_t length;
-    uint32_t index;
+    uint32_t controller = az_module_settings_controller();
+    uint32_t scene = 0u;
+    uint32_t scene_slot;
 
-    if (path == NULL || basename == NULL) {
+    if (controller == 0u || controller > 0xFFFFFF8Fu) {
         return 0u;
     }
-    for (length = 0u; length < 256u; ++length) {
-        if (filter_address_range_is_valid(
-                NULL, path + length, sizeof(uint16_t)) == 0u) {
-            return 0u;
-        }
-        memcpy(&units[length], path + length, sizeof(uint16_t));
-        if (units[length] == 0u) {
-            break;
-        }
-    }
-    if (length == 256u || length < basename_length) {
-        return 0u;
-    }
-    for (index = 0u; index < basename_length; ++index) {
-        if (units[length - basename_length + index] != basename[index]) {
-            return 0u;
-        }
-    }
-    return 1u;
-}
-
-static uint32_t find_scene_handle(
-    const uint16_t *basename,
-    uint32_t basename_length)
-{
-    uint32_t node;
-    uint32_t count;
-
-    if (basename == NULL || basename_length == 0u ||
-        filter_address_range_is_valid(
+    scene_slot = controller + 0x70u;
+    if (filter_address_range_is_valid(
             NULL,
-            (const void *)(uintptr_t)AZ_SCENE_CACHE_HEAD_ADDRESS,
-            sizeof(node)) == 0u) {
+            (const void *)(uintptr_t)scene_slot,
+            sizeof(scene)) == 0u) {
         return 0u;
     }
-    memcpy(
-        &node,
-        (const void *)(uintptr_t)AZ_SCENE_CACHE_HEAD_ADDRESS,
-        sizeof(node));
-    for (count = 0u; node != 0u && count < 256u; ++count) {
-        uint32_t path_address;
-        uint32_t handle;
-        uint32_t acquired;
-        uint32_t next;
+    memcpy(&scene, (const void *)(uintptr_t)scene_slot, sizeof(scene));
+    return scene;
+}
 
-        if (filter_address_range_is_valid(
-                NULL, (const void *)(uintptr_t)node, 16u) == 0u) {
-            return 0u;
-        }
-        memcpy(&path_address, (const void *)(uintptr_t)node, 4u);
-        memcpy(&handle, (const void *)(uintptr_t)(node + 4u), 4u);
-        memcpy(&acquired, (const void *)(uintptr_t)(node + 8u), 4u);
-        memcpy(&next, (const void *)(uintptr_t)(node + 12u), 4u);
-        if (acquired == 1u && handle != 0u &&
-            target_utf16_has_basename(
-                (const uint16_t *)(uintptr_t)path_address,
-                basename,
-                basename_length) != 0u) {
-            return handle;
-        }
-        if (next == node) {
-            return 0u;
-        }
-        node = next;
+static uint32_t find_module_settings_ancestor(
+    uint32_t module_scene,
+    const uint16_t *module_list_id,
+    uint32_t *module_list)
+{
+    uint32_t current = module_scene;
+    uint32_t depth;
+
+    if (module_list == NULL || module_list_id == NULL) {
+        return 0u;
     }
+    *module_list = 0u;
+    for (depth = 0u; current != 0u && depth < 12u; ++depth) {
+        if (g_runtime.xui_get_descendant(
+                current, module_list_id, module_list) >= 0 &&
+            *module_list != 0u) {
+            return current;
+        }
+        {
+            uint32_t parent = 0u;
+            if (g_runtime.xui_get_parent(current, &parent) < 0 ||
+                parent == 0u || parent == current) {
+                break;
+            }
+            current = parent;
+        }
+    }
+    *module_list = 0u;
     return 0u;
-}
-
-static uint32_t find_settings_scene_handle(void)
-{
-    static const uint16_t basename[] = {
-        'A','u','r','o','r','a','_','S','e','t','t','i','n','g','s',
-        '.','x','u','r',0
-    };
-    return find_scene_handle(
-        basename,
-        (uint32_t)(sizeof(basename) / sizeof(basename[0]) - 1u));
-}
-
-static uint32_t find_auroraaz_settings_scene_handle(void)
-{
-    static const uint16_t basename[] = {
-        'A','u','r','o','r','a','A','Z','_','S','e','t','t','i','n','g','s',
-        '.','x','u','r',0
-    };
-    return find_scene_handle(
-        basename,
-        (uint32_t)(sizeof(basename) / sizeof(basename[0]) - 1u));
 }
 
 static uint8_t resolve_icon_xui(void)
@@ -1669,13 +1619,15 @@ static uint8_t resolve_icon_xui(void)
     HMODULE xam = NULL;
     void *first = NULL;
     void *next = NULL;
+    void *parent = NULL;
     void *descendant = NULL;
     void *text = NULL;
     void *set_text = NULL;
     void *set_image = NULL;
     void *has_focus = NULL;
 
-    if (g_runtime.xui_set_text != NULL &&
+    if (g_runtime.xui_get_parent != NULL &&
+        g_runtime.xui_set_text != NULL &&
         g_runtime.xui_set_image_path != NULL &&
         g_runtime.xui_has_focus != NULL) {
         return 1u;
@@ -1686,6 +1638,8 @@ static uint8_t resolve_icon_xui(void)
         FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_ELEMENT_GET_NEXT_ORDINAL, &next)) ||
         FAILED(XexGetProcedureAddress(
+            xam, AZ_XUI_ELEMENT_GET_PARENT_ORDINAL, &parent)) ||
+        FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_ELEMENT_GET_DESCENDANT_BY_ID_ORDINAL, &descendant)) ||
         FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_TEXT_ELEMENT_GET_TEXT_ORDINAL, &text)) ||
@@ -1695,12 +1649,14 @@ static uint8_t resolve_icon_xui(void)
             xam, AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL, &set_image)) ||
         FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL, &has_focus)) ||
-        first == NULL || next == NULL || descendant == NULL || text == NULL ||
-        set_text == NULL || set_image == NULL || has_focus == NULL) {
+        first == NULL || next == NULL || parent == NULL ||
+        descendant == NULL || text == NULL || set_text == NULL ||
+        set_image == NULL || has_focus == NULL) {
         return 0u;
     }
     g_runtime.xui_get_first_child = (AzXuiGetChildFn)(uintptr_t)first;
     g_runtime.xui_get_next = (AzXuiGetChildFn)(uintptr_t)next;
+    g_runtime.xui_get_parent = (AzXuiGetChildFn)(uintptr_t)parent;
     g_runtime.xui_get_descendant =
         (AzXuiGetDescendantFn)(uintptr_t)descendant;
     g_runtime.xui_get_text = (AzXuiGetTextFn)(uintptr_t)text;
@@ -1721,6 +1677,9 @@ static void module_ui_tick(void *context)
     };
     static const uint16_t icon_id[] = {
         'I','c','o','n','P','r','e','s','e','n','t','e','r',0
+    };
+    static const uint16_t module_icon_id[] = {
+        'M','o','d','u','l','e','I','c','o','n',0
     };
     static const uint16_t expected_title[] = {
         'A','u','r','o','r','a',' ','A','-','Z',0
@@ -1752,9 +1711,21 @@ static void module_ui_tick(void *context)
         store_u32(&g_runtime.settings_resolve_result, 2u);
     }
     else {
-        module_scene = find_auroraaz_settings_scene_handle();
-        g_runtime.settings_dialog_active =
-            module_scene != 0u &&
+        uint32_t browse = 0u;
+        uint32_t filter = 0u;
+        static const uint16_t browse_id[] = {
+            'B','r','o','w','s','e','M','o','d','e',0
+        };
+        static const uint16_t filter_id[] = {
+            'F','i','l','t','e','r','M','o','d','e',0
+        };
+
+        module_scene = live_module_settings_scene_handle();
+        g_runtime.settings_dialog_active = module_scene != 0u &&
+            g_runtime.xui_get_descendant(
+                module_scene, browse_id, &browse) >= 0 && browse != 0u &&
+            g_runtime.xui_get_descendant(
+                module_scene, filter_id, &filter) >= 0 && filter != 0u &&
             g_runtime.xui_has_focus(module_scene) == 1 ? 1u : 0u;
         if (g_runtime.settings_dialog_active != 0u) {
             uint32_t status_label = 0u;
@@ -1768,7 +1739,11 @@ static void module_ui_tick(void *context)
                 (void)g_runtime.xui_set_text(status_label, status_text);
             }
         }
-        store_u32(&g_runtime.settings_resolve_result, 1u);
+        store_u32(
+            &g_runtime.settings_resolve_result,
+            module_scene == 0u ? 3u :
+                (browse == 0u || filter == 0u ? 4u :
+                    (g_runtime.settings_dialog_active != 0u ? 1u : 5u)));
         if (g_runtime.settings_dialog_active == 0u) {
             g_runtime.settings_a_owned = 0u;
         }
@@ -1784,15 +1759,24 @@ static void module_ui_tick(void *context)
         store_u32(&g_runtime.icon_apply_result, 2u);
         return;
     }
-    scene = find_settings_scene_handle();
-    if (scene == 0u) {
+    module_scene = live_module_settings_scene_handle();
+    if (module_scene == 0u) {
         store_u32(&g_runtime.icon_apply_result, 3u);
         return;
     }
-    if (g_runtime.xui_get_descendant(
-            scene, module_list_id, &list) < 0 || list == 0u) {
+    scene = find_module_settings_ancestor(
+        module_scene, module_list_id, &list);
+    if (scene == 0u || list == 0u) {
         store_u32(&g_runtime.icon_apply_result, 4u);
         return;
+    }
+    {
+        uint32_t module_icon = 0u;
+        if (g_runtime.xui_get_descendant(
+                scene, module_icon_id, &module_icon) >= 0 &&
+            module_icon != 0u) {
+            (void)g_runtime.xui_set_image_path(module_icon, icon_path);
+        }
     }
     if (g_runtime.xui_get_first_child(list, &item) < 0 || item == 0u) {
         store_u32(&g_runtime.icon_apply_result, 5u);
@@ -1869,7 +1853,7 @@ static uint8_t module_settings_ui_input(
         return 0u;
     }
 
-    scene = find_auroraaz_settings_scene_handle();
+    scene = live_module_settings_scene_handle();
     if (scene == 0u || g_runtime.xui_has_focus(scene) != 1) {
         return 0u;
     }
@@ -3053,6 +3037,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     store_u32(&g_runtime.icon_ui_ticks, 0u);
     g_runtime.xui_get_first_child = NULL;
     g_runtime.xui_get_next = NULL;
+    g_runtime.xui_get_parent = NULL;
     g_runtime.xui_get_descendant = NULL;
     g_runtime.xui_get_text = NULL;
     g_runtime.xui_set_text = NULL;

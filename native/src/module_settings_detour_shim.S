@@ -10,6 +10,7 @@ az_rev1655_module_settings_direct_detour_entry:
     mflr %r12
     stwu %r1, -112(%r1)
     stw %r12, 104(%r1)
+    mr %r3, %r31
     bl az_module_settings_scene_path
     mr %r30, %r3
     lwz %r12, 104(%r1)

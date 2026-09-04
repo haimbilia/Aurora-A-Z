@@ -57,11 +57,13 @@ int main(void)
     CHECK(status.requests_taken == 0u);
     CHECK(status.pending == 0u);
     CHECK(status.disabled == 0u);
+    CHECK(az_module_settings_controller() == 0u);
     CHECK(az_module_settings_take_mode_request(&mode) == 0u);
     CHECK(memcmp(
-        az_module_settings_scene_path(),
+        az_module_settings_scene_path(0x12345678u),
         expected_scene_path,
         sizeof(expected_scene_path)) == 0);
+    CHECK(az_module_settings_controller() == 0x12345678u);
     az_module_settings_detour_snapshot_status(&status);
     CHECK(status.hook_calls == 1u);
     CHECK(status.pending == 0u);
@@ -88,6 +90,7 @@ int main(void)
     CHECK(az_module_settings_take_mode_request(&mode) == 0u);
 
     az_module_settings_detour_begin_shutdown();
+    CHECK(az_module_settings_controller() == 0u);
     CHECK(az_module_settings_request_mode(
         AZ_MODULE_SETTINGS_MODE_FILTER) == 0u);
     CHECK(az_module_settings_take_mode_request(&mode) == 0u);

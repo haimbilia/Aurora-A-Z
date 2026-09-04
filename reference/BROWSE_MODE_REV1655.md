@@ -56,6 +56,15 @@ C++ scene classes. Browse and Filter are ordinary native XUI buttons. The input
 detour consumes A only when either button owns focus and queues the selected
 mode to the worker; file I/O never occurs on the UI thread.
 
+At dispatcher entry, `r31` is the live module-settings controller. After
+Aurora creates the embedded scene, its instantiated `HXUIOBJ` is stored at
+controller offset `+0x70`. The detour captures that controller and all control
+lookup, focus testing, and status updates use the live handle. The resource
+cache handle is only a template and must never be used for interaction. A
+bounded `XuiElementGetParent` walk from the embedded scene reaches the live
+settings container, where `ModuleIcon`, `ModuleList`, and the Aurora A-Z row's
+`IconPresenter` receive the embedded icon.
+
 Browse is the default. A saved choice is written as a tiny versioned file at
 `game:\Data\AuroraAZ.ini`; missing, torn, oversized, or unknown content falls
 back to Browse. The generated XUR, icon cache, and mode file do not change the

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bind settings input and icon updates to Aurora's instantiated module scene
+  instead of the cached XUI template; walk its live ancestors to update both
+  the module header and list-row icon.
 - Replace the freezing system Browse/Filter popup with an embedded native XUI
   page hosted in Aurora's normal Configure Modules panel, like FTP and Nova.
 - Reapply the embedded repository icon after Aurora asynchronously populates

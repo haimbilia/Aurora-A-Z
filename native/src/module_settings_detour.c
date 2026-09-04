@@ -9,6 +9,7 @@ typedef struct AzModuleSettingsBridge {
     volatile uint32_t disabled;
     volatile uint32_t hook_calls;
     volatile uint32_t requests_taken;
+    volatile uint32_t controller;
 } AzModuleSettingsBridge;
 
 static AzModuleSettingsBridge g_settings_bridge;
@@ -45,15 +46,17 @@ void az_module_settings_detour_reset(void)
     __atomic_store_n(&g_settings_bridge.disabled, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.hook_calls, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.requests_taken, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_settings_bridge.controller, 0u, __ATOMIC_RELEASE);
 }
 
 void az_module_settings_detour_begin_shutdown(void)
 {
     __atomic_store_n(&g_settings_bridge.disabled, 1u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.pending_mode, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_settings_bridge.controller, 0u, __ATOMIC_RELEASE);
 }
 
-const uint16_t *az_module_settings_scene_path(void)
+const uint16_t *az_module_settings_scene_path(uint32_t controller)
 {
     static const uint16_t path[] = {
         (uint16_t)'f', (uint16_t)'i', (uint16_t)'l', (uint16_t)'e',
@@ -71,7 +74,19 @@ const uint16_t *az_module_settings_scene_path(void)
 
     (void)__atomic_add_fetch(
         &g_settings_bridge.hook_calls, 1u, __ATOMIC_ACQ_REL);
+    __atomic_store_n(
+        &g_settings_bridge.controller, controller, __ATOMIC_RELEASE);
     return path;
+}
+
+uint32_t az_module_settings_controller(void)
+{
+    if (__atomic_load_n(
+            &g_settings_bridge.disabled, __ATOMIC_ACQUIRE) != 0u) {
+        return 0u;
+    }
+    return __atomic_load_n(
+        &g_settings_bridge.controller, __ATOMIC_ACQUIRE);
 }
 
 uint8_t az_module_settings_request_mode(uint32_t mode)
