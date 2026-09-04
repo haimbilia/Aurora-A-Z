@@ -1,217 +1,73 @@
-scriptTitle = "Aurora A-Z Installer"
+scriptTitle = "Install Aurora A-Z"
 scriptAuthor = "haimbilia"
-scriptVersion = 0.4
-scriptDescription = "Install, update, or remove the A-Z QuickView selector"
-scriptPermissions = { "sql" }
+scriptVersion = 1
+scriptDescription = "Installs or updates the Aurora A-Z coverflow selector"
+scriptIcon = "icon.png"
+scriptPermissions = { "filesystem" }
 
-local ownerMarker = "AURORA_AZ"
-local versionSetting = "AuroraAZInstalledVersion"
-local previousDefaultSetting = "AuroraAZPreviousDefaultQuickView"
-local installedVersion = "0.4"
-local selectorCount = 27
+-- Keep AuroraAZ.xex next to this Main.lua in User\Scripts\AuroraAZInstaller.
+local source = Script.GetBasePath() .. "AuroraAZ.xex"
+local live = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex"
+local backup = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex.before-aurora-az"
+local staged = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex.auroraaz-staged"
 
--- Aurora registers filters under fully qualified names. The boot log prints the
--- exact identifiers, e.g. "NameFilter.G - L.G" and "User.A-Z G". A QuickView's
--- FilterMethod must use that full name; a bare "A-Z G" is rejected with
--- "invalid filter method (syntax error)".
---
--- Aurora already ships a complete built-in initial-character filter set under
--- NameFilter, so the letters point at native filters rather than our Lua ones.
-local function nameFilterFor(letter)
-    if letter <= "F" then return "NameFilter.A - F." .. letter end
-    if letter <= "L" then return "NameFilter.G - L." .. letter end
-    if letter <= "R" then return "NameFilter.M - R." .. letter end
-    if letter <= "X" then return "NameFilter.S - X." .. letter end
-    return "NameFilter.Y - Z." .. letter
-end
-
-local function requestRefreshOnExit()
-    -- The API dump confirmed the name is RefreshListOnExit. The earlier
-    -- SetRefreshListOnExit call was the source of the LUAERROR on first install.
-    if type(Script.RefreshListOnExit) == "function" then
-        Script.RefreshListOnExit(true)
-    end
-end
-
-local function execute(query)
-    if Sql.Execute(query) ~= true then
-        print("Aurora A-Z SQL failed: " .. query)
-        return false
-    end
-    return true
-end
-
-local function isInstalled()
-    local rows = Sql.ExecuteFetchRows(
-        "SELECT Value FROM SystemSettings WHERE Name = '" .. versionSetting .. "' LIMIT 1"
-    )
-    return rows ~= nil and #rows > 0
-end
-
--- IconHash doubles as the ownership marker. It may cost a placeholder icon in
--- the picker, but it is the only field that reliably identifies our rows, and
--- deleting by it can never touch a QuickView the user created.
-local function insertQuickView(displayName, filterName, orderIndex)
-    return execute(string.format(
-        "INSERT INTO QuickViews " ..
-        "(DisplayName, SortMethod, FilterMethod, Flags, CreatorXUID, OrderIndex, IconHash) " ..
-        "VALUES ('%s', 'Title Name', '%s', 2, NULL, %d, '%s')",
-        displayName,
-        filterName,
-        orderIndex,
-        ownerMarker
-    ))
+local function fail(message)
+    Script.ShowMessageBox("Aurora A-Z", message, "OK")
 end
 
 local function install()
-    local updating = isInstalled()
-
-    if execute("BEGIN TRANSACTION") ~= true then
-        return false
+    if not FileSystem.FileExists(source) then
+        fail("AuroraAZ.xex is missing from this script's folder.")
+        return
     end
 
-    local ok = true
-
-    if not updating then
-        ok = ok and execute(
-            "INSERT OR REPLACE INTO SystemSettings (Name, Value) " ..
-            "SELECT '" .. previousDefaultSetting .. "', Value FROM SystemSettings " ..
-            "WHERE Name = 'DefaultQuickView'"
-        )
-        ok = ok and execute(
-            "UPDATE QuickViews SET OrderIndex = OrderIndex + " .. selectorCount ..
-            " WHERE OrderIndex >= 1"
-        )
-    end
-
-    -- Must match uninstall exactly. Matching on the marker alone let an
-    -- earlier marker-less build survive a reinstall and produce a duplicate
-    -- set of every letter.
-    ok = ok and execute(
-        "DELETE FROM QuickViews WHERE IconHash = '" .. ownerMarker .. "' " ..
-        "OR (FilterMethod LIKE 'NameFilter.%' AND length(DisplayName) = 1)"
-    )
-
-    ok = ok and insertQuickView("#", "NameFilter.Other", 1)
-
-    for code = 65, 90 do
-        local letter = string.char(code)
-        ok = ok and insertQuickView(letter, nameFilterFor(letter), code - 63)
-    end
-
-    -- Only reset the default view if the Show All entry actually exists.
-    ok = ok and execute(
-        "UPDATE SystemSettings SET Value = " ..
-        "(SELECT CAST(Id AS TEXT) FROM QuickViews WHERE IconHash = 'SHOWALL' ORDER BY Id LIMIT 1) " ..
-        "WHERE Name = 'DefaultQuickView' " ..
-        "AND EXISTS (SELECT 1 FROM QuickViews WHERE IconHash = 'SHOWALL')"
-    )
-    ok = ok and execute(
-        "INSERT OR REPLACE INTO SystemSettings (Name, Value) VALUES ('" ..
-        versionSetting .. "', '" .. installedVersion .. "')"
-    )
-
-    if ok then
-        execute("COMMIT")
-        requestRefreshOnExit()
-        return true
-    end
-
-    execute("ROLLBACK")
-    return false
-end
-
-local function uninstall()
-    if not isInstalled() then
-        Script.ShowMessageBox("Aurora A-Z", "The A-Z selector is not installed.", "OK")
-        return true
-    end
-
-    if execute("BEGIN TRANSACTION") ~= true then
-        return false
-    end
-
-    local ok = true
-
-    -- Two generations of rows exist: early ones carry the IconHash marker,
-    -- and one build wrote them with an empty IconHash. Catch both. The
-    -- single-character DisplayName keeps this off any NameFilter QuickView
-    -- the user made themselves, which would have a real name.
-    ok = ok and execute(
-        "DELETE FROM QuickViews WHERE IconHash = '" .. ownerMarker .. "' " ..
-        "OR (FilterMethod LIKE 'NameFilter.%' AND length(DisplayName) = 1)"
-    )
-    ok = ok and execute(
-        "UPDATE QuickViews SET OrderIndex = OrderIndex - " .. selectorCount ..
-        " WHERE OrderIndex > " .. selectorCount
-    )
-
-    -- Only put the old default back if the current one was one of ours and is
-    -- now gone. If the user has since chosen a different view, keep theirs.
-    ok = ok and execute(
-        "UPDATE SystemSettings SET Value = " ..
-        "(SELECT Value FROM SystemSettings WHERE Name = '" .. previousDefaultSetting .. "') " ..
-        "WHERE Name = 'DefaultQuickView' " ..
-        "AND EXISTS (SELECT 1 FROM SystemSettings WHERE Name = '" .. previousDefaultSetting .. "') " ..
-        "AND NOT EXISTS (SELECT 1 FROM QuickViews WHERE CAST(Id AS TEXT) = " ..
-        "(SELECT Value FROM SystemSettings WHERE Name = 'DefaultQuickView'))"
-    )
-    ok = ok and execute(
-        "DELETE FROM SystemSettings WHERE Name IN ('" .. versionSetting ..
-        "', '" .. previousDefaultSetting .. "')"
-    )
-
-    if ok then
-        execute("COMMIT")
-        requestRefreshOnExit()
-        return true
-    end
-
-    execute("ROLLBACK")
-    return false
-end
-
-local function offerRestart(message)
-    local result = Script.ShowMessageBox(
+    local choice = Script.ShowMessageBox(
         "Aurora A-Z",
-        message .. "\n\nAurora must restart before the change is active.",
-        "Later",
-        "Restart"
+        "Install Aurora A-Z into Aurora's NetDbgDll slot?\n\n" ..
+        "An existing NetDbgDll.xex will be renamed to " ..
+        "NetDbgDll.xex.before-aurora-az.",
+        "Install", "Cancel"
     )
-    if result.Button == 2 then
-        if type(Aurora.Restart) == "function" then
-            Aurora.Restart()
-        else
-            Script.ShowMessageBox(
-                "Aurora A-Z",
-                "Automatic restart is unavailable in this Aurora build. Restart Aurora manually.",
-                "OK"
-            )
+    if choice.Button ~= 1 then return end
+
+    -- Do not disturb the live slot until a complete staged copy exists.
+    FileSystem.DeleteFile(staged)
+    Script.SetStatus("Staging Aurora A-Z...")
+    if FileSystem.CopyFile(source, staged, true) ~= true then
+        fail("Could not stage AuroraAZ.xex. The active plugin was not changed.")
+        return
+    end
+
+    if FileSystem.FileExists(live) then
+        FileSystem.DeleteFile(backup)
+        Script.SetStatus("Preserving existing NetDbgDll...")
+        if FileSystem.MoveFile(live, backup, true) ~= true then
+            FileSystem.DeleteFile(staged)
+            fail("Could not preserve the existing NetDbgDll.xex. Nothing was installed.")
+            return
         end
+    end
+
+    Script.SetStatus("Installing Aurora A-Z...")
+    if FileSystem.MoveFile(staged, live, true) ~= true then
+        if FileSystem.FileExists(backup) then
+            FileSystem.MoveFile(backup, live, true)
+        end
+        FileSystem.DeleteFile(staged)
+        fail("Installation failed. The previous plugin was restored when possible.")
+        return
+    end
+
+    local restart = Script.ShowMessageBox(
+        "Aurora A-Z installed",
+        "Installation complete. Reboot Aurora to activate the selector.",
+        "Later", "Restart Aurora"
+    )
+    if restart.Button == 2 and type(Aurora.Restart) == "function" then
+        Aurora.Restart()
     end
 end
 
 function main()
-    local action = Script.ShowMessageBox(
-        "Aurora A-Z",
-        "Install the # through Z selector using Aurora's built-in NameFilter set, " ..
-        "or restore the previous QuickView configuration?",
-        "Install",
-        "Uninstall",
-        "Cancel"
-    )
-
-    if action.Button == 1 then
-        if install() then
-            offerRestart("The A-Z QuickViews were installed.")
-        else
-            Script.ShowMessageBox("Aurora A-Z", "Installation failed; database changes were rolled back.", "OK")
-        end
-    elseif action.Button == 2 then
-        if uninstall() then
-            offerRestart("The A-Z QuickViews were removed and the previous default was restored.")
-        else
-            Script.ShowMessageBox("Aurora A-Z", "Uninstall failed; database changes were rolled back.", "OK")
-        end
-    end
+    install()
 end

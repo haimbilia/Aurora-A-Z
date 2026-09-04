@@ -13,25 +13,25 @@ and selection directly from the main coverflow. It works without modifying or
 replacing the selected Aurora skin.
 
 The installed payload is one self-contained file, `AuroraAZ.xex`. All runtime
-resources are embedded. Releases also include an optional on-console installer
-(`Install Aurora A-Z.xex`) and its `default.png` browser artwork. Installation
-does not require Lua scripts, QuickViews, database records, skin files, changes
-to `Aurora.xex`, or changes to `launch.ini`.
+resources are embedded. Releases also include an optional Aurora Script-menu
+installer with browser artwork. Installation does not require QuickViews,
+database records, skin files, changes to `Aurora.xex`, or changes to
+`launch.ini`.
 The repository icon is the source artwork for the module identity. It is
 embedded in the XEX; installation never copies `icon.png` to the console.
 
 ## On-console installation
 
-Copy these three release files into one temporary folder on the Xbox, then run
-`Install Aurora A-Z.xex` from Aurora:
+Copy these three release files into this Aurora Script-menu folder:
 
 ```text
-Install Aurora A-Z.xex
-AuroraAZ.xex
-default.png
+Hdd:\Aurora\User\Scripts\AuroraAZInstaller\Main.lua
+Hdd:\Aurora\User\Scripts\AuroraAZInstaller\AuroraAZ.xex
+Hdd:\Aurora\User\Scripts\AuroraAZInstaller\icon.png
 ```
 
-The installer stages the payload, preserves an existing
+It appears as **Install Aurora A-Z** in Aurora's Script menu. The installer
+stages the payload, preserves an existing
 `Hdd:\Aurora\Plugins\NetDbgDll.xex` as
 `NetDbgDll.xex.before-aurora-az`, installs Aurora A-Z into that slot, and shows
 a completion notification. Reboot Aurora after it finishes. The installer
