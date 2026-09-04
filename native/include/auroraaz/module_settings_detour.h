@@ -31,6 +31,7 @@ void az_module_settings_detour_begin_shutdown(void);
 const uint16_t *az_module_settings_scene_path(void);
 void az_module_settings_capture_scene(uint32_t scene);
 uint32_t az_module_settings_live_scene(void);
+uint32_t az_module_settings_scene_generation(void);
 uint8_t az_module_settings_request_mode(uint32_t mode);
 uint8_t az_module_settings_take_mode_request(uint32_t *mode);
 void az_module_settings_detour_snapshot_status(

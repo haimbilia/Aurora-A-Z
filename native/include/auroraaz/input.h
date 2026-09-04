@@ -11,10 +11,15 @@ extern "C" {
 
 /* Conventional XDK virtual keys. Hardware logging must confirm these values. */
 #define AZ_VK_PAD_A 0x5800u
+#define AZ_VK_PAD_B 0x5801u
 #define AZ_VK_PAD_RSHOULDER 0x5804u
+#define AZ_VK_PAD_DPAD_UP 0x5810u
+#define AZ_VK_PAD_DPAD_DOWN 0x5811u
 #define AZ_VK_PAD_DPAD_LEFT 0x5812u
 #define AZ_VK_PAD_DPAD_RIGHT 0x5813u
 #define AZ_VK_PAD_RTHUMB_PRESS 0x5817u
+#define AZ_VK_PAD_LTHUMB_UP 0x5820u
+#define AZ_VK_PAD_LTHUMB_DOWN 0x5821u
 #define AZ_VK_PAD_LTHUMB_RIGHT 0x5822u
 #define AZ_VK_PAD_LTHUMB_LEFT 0x5823u
 

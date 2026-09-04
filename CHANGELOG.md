@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Track settings-page navigation by captured scene generation, so Browse or
+  Filter can be saved even though Aurora does not expose generated XUR button
+  IDs through its descendant APIs. Draw the custom icon inside the embedded
+  page as a lookup-independent header overlay.
 - Bind settings input and icon updates to Aurora's instantiated module scene
   instead of the cached XUI template; walk its live ancestors to update both
   the module header and list-row icon, with a bounded native child-tree lookup

@@ -10,6 +10,16 @@
 <Height>570.000000</Height>
 <DefaultFocus>BrowseMode</DefaultFocus>
 </Properties>
+<XuiImage>
+<Properties>
+<Id>AuroraAZIcon</Id>
+<Width>48.000000</Width>
+<Height>48.000000</Height>
+<Position>45.000000,19.000000,0.000000</Position>
+<SizeMode>16</SizeMode>
+<ImagePath>file://game:/Data/AuroraAZ-icon.png</ImagePath>
+</Properties>
+</XuiImage>
 <XuiLabel>
 <Properties>
 <Id>ModeHeading</Id>
@@ -73,7 +83,7 @@
 <Height>28.000000</Height>
 <Position>40.000000,420.000000,0.000000</Position>
 <Visual>XuiLabel_Heading_18pt</Visual>
-<Text>Current mode: Browse</Text>
+<Text>Press A to save the highlighted mode.</Text>
 </Properties>
 </XuiLabel>
 <XuiLabel>
@@ -83,7 +93,7 @@
 <Height>28.000000</Height>
 <Position>40.000000,464.000000,0.000000</Position>
 <Visual>XuiLabel_Heading_18pt</Visual>
-<Text>Highlight a mode and press A. Changes are saved immediately.</Text>
+<Text>The saved mode is used by the R3 selector immediately.</Text>
 </Properties>
 </XuiLabel>
 </XuiScene>

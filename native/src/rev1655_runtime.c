@@ -155,6 +155,8 @@ typedef struct AzRev1655Runtime {
     AzRev1655BrowseConsumer browse_consumer;
     uint8_t settings_dialog_active;
     uint8_t settings_a_owned;
+    uint32_t settings_scene_generation_seen;
+    uint32_t settings_selection;
     volatile uint32_t settings_resolve_result;
     volatile uint32_t settings_call_result;
     volatile uint32_t settings_completions;
@@ -1742,48 +1744,39 @@ static void module_ui_tick(void *context)
     uint32_t item = 0u;
     uint32_t count;
     uint32_t module_scene;
+    uint32_t scene_generation;
 
     (void)context;
-    if (resolve_icon_xui() == 0u) {
-        g_runtime.settings_dialog_active = 0u;
-        store_u32(&g_runtime.settings_resolve_result, 2u);
+    scene_generation = az_module_settings_scene_generation();
+    module_scene = live_module_settings_scene_handle();
+    if (scene_generation != 0u &&
+        scene_generation != g_runtime.settings_scene_generation_seen) {
+        g_runtime.settings_scene_generation_seen = scene_generation;
+        g_runtime.settings_selection = AZ_MODULE_SETTINGS_MODE_BROWSE;
+        g_runtime.settings_dialog_active = 1u;
+        g_runtime.settings_a_owned = 0u;
     }
-    else {
-        uint32_t browse = 0u;
-        uint32_t filter = 0u;
-        static const uint16_t browse_id[] = {
-            'B','r','o','w','s','e','M','o','d','e',0
-        };
-        static const uint16_t filter_id[] = {
-            'F','i','l','t','e','r','M','o','d','e',0
-        };
-
-        module_scene = live_module_settings_scene_handle();
-        g_runtime.settings_dialog_active = module_scene != 0u &&
-            find_live_descendant(
-                module_scene, browse_id, &browse) >= 0 &&
-            find_live_descendant(
-                module_scene, filter_id, &filter) >= 0 &&
-            g_runtime.xui_has_focus(module_scene) == 1 ? 1u : 0u;
-        if (g_runtime.settings_dialog_active != 0u) {
-            uint32_t status_label = 0u;
-            if (find_live_descendant(
-                    module_scene, mode_status_id, &status_label) >= 0) {
-                const uint16_t *status_text =
-                    load_u32(&g_runtime.operation_mode) ==
-                        (uint32_t)AZ_OPERATION_MODE_FILTER ?
-                            filter_status : browse_status;
-                (void)g_runtime.xui_set_text(status_label, status_text);
-            }
+    if (module_scene == 0u) {
+        g_runtime.settings_dialog_active = 0u;
+    }
+    if (g_runtime.settings_dialog_active != 0u &&
+        resolve_icon_xui() != 0u) {
+        uint32_t status_label = 0u;
+        if (find_live_descendant(
+                module_scene, mode_status_id, &status_label) >= 0) {
+            const uint16_t *status_text =
+                load_u32(&g_runtime.operation_mode) ==
+                    (uint32_t)AZ_OPERATION_MODE_FILTER ?
+                        filter_status : browse_status;
+            (void)g_runtime.xui_set_text(status_label, status_text);
         }
-        store_u32(
-            &g_runtime.settings_resolve_result,
-            module_scene == 0u ? 3u :
-                (browse == 0u || filter == 0u ? 4u :
-                    (g_runtime.settings_dialog_active != 0u ? 1u : 5u)));
-        if (g_runtime.settings_dialog_active == 0u) {
-            g_runtime.settings_a_owned = 0u;
-        }
+    }
+    store_u32(
+        &g_runtime.settings_resolve_result,
+        module_scene == 0u ? 3u :
+            (g_runtime.settings_dialog_active != 0u ? 1u : 5u));
+    if (g_runtime.settings_dialog_active == 0u) {
+        g_runtime.settings_a_owned = 0u;
     }
     ticks = __atomic_add_fetch(
         &g_runtime.icon_ui_ticks, 1u, __ATOMIC_ACQ_REL);
@@ -1797,7 +1790,7 @@ static void module_ui_tick(void *context)
         return;
     }
     module_scene = live_module_settings_scene_handle();
-    if (module_scene == 0u) {
+    if (module_scene == 0u || g_runtime.settings_dialog_active == 0u) {
         store_u32(&g_runtime.icon_apply_result, 3u);
         return;
     }
@@ -1856,21 +1849,43 @@ static uint8_t module_settings_ui_input(
     void *context,
     const AzInputKeystroke *keystroke)
 {
-    static const uint16_t browse_id[] = {
-        'B','r','o','w','s','e','M','o','d','e',0
-    };
-    static const uint16_t filter_id[] = {
-        'F','i','l','t','e','r','M','o','d','e',0
-    };
     uint32_t scene;
-    uint32_t browse = 0u;
-    uint32_t filter = 0u;
     uint32_t mode;
 
     (void)context;
-    if (keystroke == NULL ||
-        keystroke->virtual_key != AZ_VK_PAD_A ||
-        resolve_icon_xui() == 0u) {
+    if (keystroke == NULL) {
+        return 0u;
+    }
+    scene = live_module_settings_scene_handle();
+    if (scene == 0u || g_runtime.settings_dialog_active == 0u) {
+        return 0u;
+    }
+    if (keystroke->virtual_key == AZ_VK_PAD_B &&
+        (keystroke->flags & AZ_KEYSTROKE_KEYDOWN) != 0u) {
+        g_runtime.settings_dialog_active = 0u;
+        g_runtime.settings_a_owned = 0u;
+        return 0u;
+    }
+    if ((keystroke->flags &
+            (AZ_KEYSTROKE_KEYDOWN | AZ_KEYSTROKE_REPEAT)) != 0u) {
+        switch (keystroke->virtual_key) {
+        case AZ_VK_PAD_DPAD_LEFT:
+        case AZ_VK_PAD_DPAD_UP:
+        case AZ_VK_PAD_LTHUMB_LEFT:
+        case AZ_VK_PAD_LTHUMB_UP:
+            g_runtime.settings_selection = AZ_MODULE_SETTINGS_MODE_BROWSE;
+            return 0u;
+        case AZ_VK_PAD_DPAD_RIGHT:
+        case AZ_VK_PAD_DPAD_DOWN:
+        case AZ_VK_PAD_LTHUMB_RIGHT:
+        case AZ_VK_PAD_LTHUMB_DOWN:
+            g_runtime.settings_selection = AZ_MODULE_SETTINGS_MODE_FILTER;
+            return 0u;
+        default:
+            break;
+        }
+    }
+    if (keystroke->virtual_key != AZ_VK_PAD_A) {
         return 0u;
     }
     if ((keystroke->flags & AZ_KEYSTROKE_KEYUP) != 0u) {
@@ -1887,23 +1902,7 @@ static uint8_t module_settings_ui_input(
         return 0u;
     }
 
-    scene = live_module_settings_scene_handle();
-    if (scene == 0u || g_runtime.xui_has_focus(scene) != 1) {
-        return 0u;
-    }
-    if (find_live_descendant(scene, browse_id, &browse) < 0 ||
-        find_live_descendant(scene, filter_id, &filter) < 0) {
-        return 0u;
-    }
-    if (g_runtime.xui_has_focus(browse) == 1) {
-        mode = AZ_MODULE_SETTINGS_MODE_BROWSE;
-    }
-    else if (g_runtime.xui_has_focus(filter) == 1) {
-        mode = AZ_MODULE_SETTINGS_MODE_FILTER;
-    }
-    else {
-        return 0u;
-    }
+    mode = g_runtime.settings_selection;
     if (az_module_settings_request_mode(mode) == 0u) {
         return 0u;
     }
@@ -3094,6 +3093,8 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
         sizeof(g_runtime.browse_consumer));
     g_runtime.settings_dialog_active = 0u;
     g_runtime.settings_a_owned = 0u;
+    g_runtime.settings_scene_generation_seen = 0u;
+    g_runtime.settings_selection = AZ_MODULE_SETTINGS_MODE_BROWSE;
     store_u32(&g_runtime.settings_resolve_result, 0u);
     store_u32(&g_runtime.settings_call_result, UINT32_MAX);
     store_u32(&g_runtime.settings_completions, 0u);

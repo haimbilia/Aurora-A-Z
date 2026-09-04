@@ -52,23 +52,26 @@ The XUR is compiled from `native/assets/AuroraAZ_Settings.xui`, embedded in the
 XEX, and rewritten to the runtime cache before the hook is installed. It is a
 classless 800x570 scene hosted inside Aurora's existing `ModuleHost`, matching
 the integration used by the FTP and Nova pages without requiring their private
-C++ scene classes. Browse and Filter are ordinary native XUI buttons. The input
-detour consumes A only when either button owns focus and queues the selected
-mode to the worker; file I/O never occurs on the UI thread.
+C++ scene classes. Browse and Filter are ordinary native XUI buttons. A new
+scene-generation counter initializes the tracked selection to Browse whenever
+Aurora instantiates the page. Directional input updates that tracked choice in
+parallel with Aurora's native button navigation; A is consumed only while that
+captured page generation is active and queues the tracked mode to the worker.
+This avoids depending on generated XUR control IDs, which Aurora does not
+expose through the public descendant APIs. File I/O never occurs on the UI
+thread.
 
 At dispatcher entry, `r31` is Aurora's temporary loader stack frame—not a
 persistent controller. `XuiSceneCreate` writes the instantiated `HXUIOBJ` to
 the frame's `+0x70` output slot. A second exact-signature detour at
 `0x822C8C38` captures that handle immediately after creation and before the
-loader returns; retaining the stack address is invalid. All control lookup,
-focus testing, and status updates use the captured live handle. The resource
-cache handle is only a template and must never be used for interaction. A
-bounded `XuiElementGetParent` walk from the embedded scene reaches the live
-settings container, where `ModuleIcon`, `ModuleList`, and the Aurora A-Z row's
-`IconPresenter` receive the embedded icon. Lookup falls back to a bounded walk
-using the standard
-`XuiElementGetChildById`, `XuiElementGetFirstChild`, and `XuiElementGetNext`
-exports.
+loader returns; retaining the stack address is invalid. The resource cache
+handle is only a template and must never be used for interaction. The embedded
+page draws the generated `AuroraAZ-icon.png` over the module header icon
+directly. Parent and child lookup remains a best-effort path for replacing
+Aurora's module-row and header artwork, using the standard
+`XuiElementGetParent`, `XuiElementGetChildById`,
+`XuiElementGetFirstChild`, and `XuiElementGetNext` exports.
 
 Browse is the default. A saved choice is written as a tiny versioned file at
 `game:\Data\AuroraAZ.ini`; missing, torn, oversized, or unknown content falls
