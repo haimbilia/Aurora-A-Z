@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Replace the Browse/Filter buttons with Aurora-style radio rows. The saved
+  mode now selects the matching embedded XUR variant, initial focus, checked
+  marker, and status text whenever Configure Modules is opened.
 - Track settings-page navigation by captured scene generation, so Browse or
   Filter can be saved even though Aurora does not expose generated XUR button
   IDs through its descendant APIs. Replace the stock header and row icon from

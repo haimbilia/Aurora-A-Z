@@ -22,7 +22,9 @@ settings implementation used a system message box and froze Aurora after a
 selection, so it is rejected. The current candidate hooks the key-7 dispatcher
 at `0x822C8B88` and loads an embedded, classless settings XUR into Aurora's
 normal `ModuleHost`, matching the FTP/Nova page integration. Browse and Filter
-buttons queue persistence to the worker so the UI thread performs no file I/O.
+use Aurora-style radio rows. The saved mode chooses the matching embedded XUR,
+initial focus, checked marker, and status; A queues persistence to the worker
+so the UI thread performs no file I/O.
 The same candidate continuously reapplies the embedded `icon.png` artwork to
 the Aurora A-Z module row because Aurora may asynchronously restore the stock
 Network Debugger icon after the row is first populated. Exact ABI details are

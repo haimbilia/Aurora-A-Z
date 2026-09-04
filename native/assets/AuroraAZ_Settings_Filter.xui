@@ -8,7 +8,7 @@
 <Id>AuroraAZModule</Id>
 <Width>800.000000</Width>
 <Height>570.000000</Height>
-<DefaultFocus>BrowseMode</DefaultFocus>
+<DefaultFocus>FilterMode</DefaultFocus>
 </Properties>
 <XuiLabel>
 <Properties>
@@ -40,6 +40,7 @@
 <Width>8.000000</Width>
 <Height>8.000000</Height>
 <Position>54.000000,116.000000,0.000000</Position>
+<Opacity>0.000000</Opacity>
 <Fill>
 <Properties>
 <FillColor>0xffffffff</FillColor>
@@ -80,7 +81,6 @@
 <Width>8.000000</Width>
 <Height>8.000000</Height>
 <Position>54.000000,250.000000,0.000000</Position>
-<Opacity>0.000000</Opacity>
 <Fill>
 <Properties>
 <FillColor>0xffffffff</FillColor>
@@ -108,7 +108,7 @@
 <Height>28.000000</Height>
 <Position>40.000000,380.000000,0.000000</Position>
 <Visual>XuiLabel_Heading_18pt</Visual>
-<Text>Saved mode: Browse</Text>
+<Text>Saved mode: Filter</Text>
 </Properties>
 </XuiLabel>
 <XuiLabel>

@@ -6,6 +6,7 @@ toolchain_root="${OPENXECHAIN_ROOT:-/opt/openxechain}"
 output_dir="${AURORAAZ_OUTPUT_DIR:-${repo_root}/build/native-xbox360}"
 embedded_icon_source="${output_dir}/auroraaz_embedded_icon.c"
 embedded_settings_source="${output_dir}/auroraaz_embedded_settings.c"
+embedded_settings_filter_source="${output_dir}/auroraaz_embedded_settings_filter.c"
 
 compiler="${toolchain_root}/bin/clang"
 packager="${toolchain_root}/bin/synthxex"
@@ -59,6 +60,10 @@ python3 "${repo_root}/scripts/generate-embedded-icon.py" \
 python3 "${repo_root}/scripts/generate-embedded-settings.py" \
     "${repo_root}/native/assets/AuroraAZ_Settings.xur" \
     "${embedded_settings_source}"
+python3 "${repo_root}/scripts/generate-embedded-settings.py" \
+    "${repo_root}/native/assets/AuroraAZ_Settings_Filter.xur" \
+    "${embedded_settings_filter_source}" \
+    --symbol g_auroraaz_embedded_settings_filter_xur
 
 export LIBRARY_PATH=""
 export C_INCLUDE_PATH=""
@@ -74,6 +79,7 @@ export CPLUS_INCLUDE_PATH=""
     -I"${repo_root}/native/include" \
     "${embedded_icon_source}" \
     "${embedded_settings_source}" \
+    "${embedded_settings_filter_source}" \
     "${m2a_sources[@]}" \
     -Wl,/dll \
     -Wl,/entry:DllMain \

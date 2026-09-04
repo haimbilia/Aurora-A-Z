@@ -48,19 +48,29 @@ detour supplies the XUI resource locator
 module scene loader at `0x822C8BF0`. Every other key receives the displaced
 `cmpwi cr6,r30,1` and resumes at `0x822C8B8C`, preserving the stock dispatcher.
 
-The XUR is compiled from `native/assets/AuroraAZ_Settings.xui`, embedded in the
-XEX, and rewritten to the runtime cache before the hook is installed. It is a
-classless 800x570 scene hosted inside Aurora's existing `ModuleHost`, matching
+The settings UI has Browse and Filter variants compiled from
+`native/assets/AuroraAZ_Settings.xui` and
+`native/assets/AuroraAZ_Settings_Filter.xui`. Both are embedded in the XEX; the
+worker writes the variant matching the persisted mode to the common runtime
+cache before the hook is installed and after each mode change. They are
+classless 800x570 scenes hosted inside Aurora's existing `ModuleHost`, matching
 the integration used by the FTP and Nova pages without requiring their private
-C++ scene classes. Browse and Filter are ordinary native XUI buttons. A new
-scene-generation counter initializes the tracked selection to Browse whenever
-Aurora instantiates the page. Directional input updates that tracked choice in
-parallel with Aurora's native button navigation; A is consumed only while that
-captured page generation is active and queues the tracked mode to the worker.
-This avoids depending on generated XUR control IDs, which Aurora does not
-expose through the public descendant APIs. File I/O never occurs on the UI
-thread. `XuiElementHasFocus` on the captured scene is the lifecycle gate: when
-focus returns to Aurora's module list, the page immediately stops owning A.
+C++ scene classes. Browse and Filter use the same `XuiCheckbox` plus
+`XuiRadioButton` visual combination as Aurora's Profile page. The matching
+variant supplies the correct initial focus and checked marker when the page is
+opened.
+
+A new scene-generation counter initializes the tracked selection from the
+persisted operation mode whenever Aurora instantiates the page. Directional
+input updates that tracked choice in parallel with Aurora's native radio-row
+navigation; A is consumed only while that captured page generation is active
+and queues the tracked mode to the worker. The worker persists the choice,
+refreshes the cached variant, and the live page updates its checked marker and
+status. This avoids depending on generated XUR control IDs, which Aurora does
+not expose reliably through the public descendant APIs. File I/O never occurs
+on the UI thread. `XuiElementHasFocus` on the captured scene is the lifecycle
+gate: when focus returns to Aurora's module list, the page immediately stops
+owning A.
 
 At dispatcher entry, `r31` is Aurora's temporary loader stack frame—not a
 persistent controller. `XuiSceneCreate` writes the instantiated `HXUIOBJ` to
@@ -78,5 +88,6 @@ status text and row descendants.
 
 Browse is the default. A saved choice is written as a tiny versioned file at
 `game:\Data\AuroraAZ.ini`; missing, torn, oversized, or unknown content falls
-back to Browse. The generated XUR, icon cache, and mode file do not change the
-one-XEX installation contract.
+back to Browse. Both generated XUR variants, the icon cache, and the mode file
+are extracted at runtime from `AuroraAZ.xex`; they do not change the one-XEX
+installation contract.

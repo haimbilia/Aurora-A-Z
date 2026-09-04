@@ -33,7 +33,9 @@ the active QuickView and other filters. On release, the row vanishes and the
 selected item grows while fading out; this animation never delays filtering.
 
 Aurora A-Z supports two persistent operating modes from **Settings ->
-Configure Modules -> Aurora A-Z**. Its Browse and Filter controls are embedded
+Configure Modules -> Aurora A-Z**. Browse and Filter are presented as native
+Aurora radio rows, matching the Profile settings style, and the saved mode is
+checked and focused whenever the page opens. The controls are embedded
 directly in Aurora's normal module-settings panel, like the built-in FTP and
 Nova pages; no system popup is used. `Browse` (the default) jumps to the first
 matching title in the current QuickView without rebuilding the list. `Filter`
