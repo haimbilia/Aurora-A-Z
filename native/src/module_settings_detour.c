@@ -56,9 +56,11 @@ void az_module_settings_detour_begin_shutdown(void)
 const uint16_t *az_module_settings_scene_path(void)
 {
     static const uint16_t path[] = {
+        (uint16_t)'f', (uint16_t)'i', (uint16_t)'l', (uint16_t)'e',
+        (uint16_t)':', (uint16_t)'/', (uint16_t)'/',
         (uint16_t)'g', (uint16_t)'a', (uint16_t)'m', (uint16_t)'e',
-        (uint16_t)':', (uint16_t)'\\', (uint16_t)'D', (uint16_t)'a',
-        (uint16_t)'t', (uint16_t)'a', (uint16_t)'\\',
+        (uint16_t)':', (uint16_t)'/', (uint16_t)'D', (uint16_t)'a',
+        (uint16_t)'t', (uint16_t)'a', (uint16_t)'/',
         (uint16_t)'A', (uint16_t)'u', (uint16_t)'r', (uint16_t)'o',
         (uint16_t)'r', (uint16_t)'a', (uint16_t)'A', (uint16_t)'Z',
         (uint16_t)'_', (uint16_t)'S', (uint16_t)'e', (uint16_t)'t',

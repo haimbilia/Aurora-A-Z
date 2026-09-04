@@ -6,6 +6,8 @@
   page hosted in Aurora's normal Configure Modules panel, like FTP and Nova.
 - Reapply the embedded repository icon after Aurora asynchronously populates
   the module row, reliably replacing the stock Network Debugger artwork.
+- Use `file://game:/...` XUI resource locators for the generated settings XUR
+  and PNG instead of raw `game:\...` filesystem paths.
 - Keep settings persistence off the UI/input thread; A is consumed only while
   the embedded Browse or Filter button owns focus.
 - Center the transient selector vertically, dim the complete viewport, enlarge

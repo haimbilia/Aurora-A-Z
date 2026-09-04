@@ -1726,7 +1726,8 @@ static void module_ui_tick(void *context)
         'A','u','r','o','r','a',' ','A','-','Z',0
     };
     static const uint16_t icon_path[] = {
-        'g','a','m','e',':','\\','D','a','t','a','\\','A','u','r','o','r','a',
+        'f','i','l','e',':','/','/','g','a','m','e',':','/','D','a','t','a','/',
+        'A','u','r','o','r','a',
         'A','Z','-','i','c','o','n','.','p','n','g',0
     };
     static const uint16_t mode_status_id[] = {

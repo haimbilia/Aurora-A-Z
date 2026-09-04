@@ -27,6 +27,11 @@ int main(void)
     static const uint16_t expected[] = {
         'A', 'u', 'r', 'o', 'r', 'a', ' ', 'A', '-', 'Z', 0
     };
+    static const uint16_t expected_scene_path[] = {
+        'f','i','l','e',':','/','/','g','a','m','e',':','/','D','a','t','a','/',
+        'A','u','r','o','r','a','A','Z','_','S','e','t','t','i','n','g','s',
+        '.','x','u','r',0
+    };
 
     memset(wstring_object, 0, sizeof(wstring_object));
     memset(storage, 0x7f, sizeof(storage));
@@ -53,7 +58,10 @@ int main(void)
     CHECK(status.pending == 0u);
     CHECK(status.disabled == 0u);
     CHECK(az_module_settings_take_mode_request(&mode) == 0u);
-    CHECK(az_module_settings_scene_path() != NULL);
+    CHECK(memcmp(
+        az_module_settings_scene_path(),
+        expected_scene_path,
+        sizeof(expected_scene_path)) == 0);
     az_module_settings_detour_snapshot_status(&status);
     CHECK(status.hook_calls == 1u);
     CHECK(status.pending == 0u);

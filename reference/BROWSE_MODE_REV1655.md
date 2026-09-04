@@ -43,7 +43,8 @@ plugin changes only the verified live wrapper label from `Network Debugger` to
 `Aurora A-Z`; no skin or XUR is modified.
 
 The module-scene dispatcher at `0x822C8B88` is hooked. For NETDBG key `7`, the
-detour supplies `game:\Data\AuroraAZ_Settings.xur` and rejoins Aurora's normal
+detour supplies the XUI resource locator
+`file://game:/Data/AuroraAZ_Settings.xur` and rejoins Aurora's normal
 module scene loader at `0x822C8BF0`. Every other key receives the displaced
 `cmpwi cr6,r30,1` and resumes at `0x822C8B8C`, preserving the stock dispatcher.
 
