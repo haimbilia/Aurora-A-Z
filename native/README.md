@@ -1,13 +1,12 @@
 # Native implementation
 
 This directory contains the platform-independent selector core and the native
-Xbox 360 runtime. The release payload remains one file, `AuroraAZ.xex`. Aurora
-Rev1655's reserved optional wrapper requests those same bytes under the
-installed filename `Plugins\NetDbgDll.xex`. No companion file or DashLaunch
-slot is used. M1 has now proved this loader path, automatic ordinal-4 dispatch,
-and entry into an AuroraAZ-owned worker on hardware. The current M2a build is
-observe-only: it does not consume input, render the alphabet row, or apply a
-filter.
+Xbox 360 runtime. The release payload is one file, `AuroraAZ.xex`, installed as
+`Plugins\AuroraAZ.xex` and loaded by a DashLaunch plugin slot. Its DashLaunch
+entry creates a retrying bootstrap worker, validates the exact Rev1655 image
+and thread wrapper before installing any hooks, and does not use Aurora's
+Network Debugger slot. The NetDbg source and evidence below are retained as
+historical loader research.
 
 ## Host tests
 

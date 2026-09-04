@@ -21,31 +21,28 @@ functional unless it satisfies every acceptance criterion below on Aurora
 
 ## Single-file distribution
 
-- The production release consists of exactly one file, `AuroraAZ.xex`. The
-  installed payload is still exactly one file, but the same bytes are named
-  `Plugins\NetDbgDll.xex` because that is the literal path requested by
-  Rev1655's selected optional wrapper. The wrapper now loads and resolves a
-  compatible canary on hardware; this becomes a supported production path only
-  after M1 also proves plugin code execution.
+- The production executable payload consists of exactly one file,
+  `AuroraAZ.xex`, installed as `Plugins\AuroraAZ.xex`.
 - Executable code, compatibility signatures, default settings, shaders, and
   every font or glyph resource used by the selector must be embedded in that
   file.
-- Installation must require only copying `AuroraAZ.xex` as
-  `Plugins\NetDbgDll.xex` after verifying that target does not already exist,
-  then restarting Aurora.
-- Disabling or uninstalling must require only removing or renaming the installed
-  `Plugins\NetDbgDll.xex` and restarting Aurora.
+- Installation must add `Hdd:\Aurora\Plugins\AuroraAZ.xex` to one empty
+  DashLaunch `plugin1` through `plugin5` entry in `Hdd:\launch.ini`, then
+  reboot the console. The on-console installer must back up `launch.ini` before
+  changing it and must never replace an occupied slot.
+- Disabling or uninstalling must remove that DashLaunch entry and then remove
+  or rename `Plugins\AuroraAZ.xex` before rebooting.
 - The production plugin must not require a companion script, preinstalled
   configuration file, asset directory, database row, QuickView, patched skin,
-  patched `Aurora.xex`, or `launch.ini` change. The installed payload remains
-  one XEX. After first use, the plugin may generate one small settings file
+  or patched `Aurora.xex`. The executable payload remains one XEX; DashLaunch
+  configuration is the sole installation metadata. After first use, the plugin
+  may generate one small settings file
   under Aurora's `Data` directory to persist the selected operating mode.
 - Runtime filtering must remain in memory. It must not persist A-Z QuickViews
   or other Aurora A-Z-owned records in the user's database.
-- Aurora A-Z must supply the complete, verified Network Debugger ordinal ABI;
-  it must not rely on Aurora accepting unresolved export pointers.
-- Aurora A-Z and a real `NetDbgDll.xex` cannot coexist. Installation must stop
-  rather than overwrite an existing file at that path.
+- Aurora A-Z must not load through Aurora's Network Debugger slot. A previous
+  `Plugins\NetDbgDll.xex` Aurora A-Z installation must be disabled before the
+  DashLaunch plugin is enabled, so only one runtime instance can load.
 
 ## User-visible behavior
 
@@ -79,15 +76,14 @@ functional unless it satisfies every acceptance criterion below on Aurora
 - Launching a game or XEX must behave identically with Aurora A-Z installed or
   absent; a black screen, delayed handoff, or required shutdown is a release
   blocker.
+- While the row is visible, clicking L3 toggles the persistent Browse/Filter
+  mode. This is an R3+L3 chord because the row is visible only while R3 is
+  held; it must not affect normal coverflow input.
 
 ## Operating mode setting
 
-- Aurora A-Z appears under Aurora's **Settings -> Configure Modules** screen,
-  using the otherwise occupied `NETDBG` module row without adding or modifying
-  a skin resource.
-- Activating that row opens a plugin-owned, skin-independent page embedded in
-  Aurora's normal module-settings host, with exactly two choices: `Browse` and
-  `Filter`. It must not use a system message box or separate popup.
+- The supported mode control is the R3+L3 chord while the selector is visible;
+  it must not depend on Aurora's Configure Modules UI.
 - `Browse` is the default for a missing, invalid, or unsupported settings file.
 - Saving a choice persists it across Aurora restarts. A torn or invalid write
   must fail safely back to `Browse` without preventing Aurora from starting.
@@ -165,10 +161,10 @@ reaches `#` in Browse mode.
    third-party skin. The controls and filtering behavior remain identical.
 9. Compare the selected skins before and after installation and removal. No
    `.xzp` file or file under `Skins` has changed.
-10. Install the one `AuroraAZ.xex` release binary under the documented
-    `Plugins\NetDbgDll.xex` loader name, then remove it. Verify that no
-    companion files, database records, or boot-configuration edits are created
-    or required.
+10. Install `AuroraAZ.xex` under `Plugins\AuroraAZ.xex` with an empty
+    DashLaunch plugin slot, then remove that entry and the XEX. Verify that the
+    installer backed up `launch.ini`, did not replace another plugin slot, and
+    did not modify skins, database records, or `Aurora.xex`.
 11. Press A during normal coverflow use and verify Aurora receives it unchanged;
     Aurora A-Z must neither apply a letter nor consume the key.
 12. Press and release R3 without any Left/Right input. The row appears and
@@ -184,9 +180,9 @@ reaches `#` in Browse mode.
 16. Release a changed selection and verify the row vanishes immediately while
     only the selected item grows and fades away; the selected Browse/Filter
     action begins without waiting for the animation.
-17. Open Settings -> Configure Modules -> Aurora A-Z. Switch between Browse
-    and Filter, restart Aurora after each choice, and verify that the choice is
-    restored.
+17. While holding R3 to show the selector, click L3. Verify that `ALL` appears
+    in Filter mode and disappears in Browse mode; restart Aurora after each
+    choice and verify that the choice is restored.
 18. In Browse mode, select a letter and verify that the full title count is
     unchanged, the coverflow moves to the first matching title, and no
     `Sorting Game List` / `Filter Game List` cycle is logged.

@@ -39,6 +39,17 @@ slot. Reboot Aurora after it finishes. The installer expects the standard
 `Hdd1:\Aurora` location; manual installation remains available for custom
 Aurora paths.
 
+### Manual installation
+
+1. Copy `AuroraAZ.xex` to `Hdd1:\Aurora\Plugins\AuroraAZ.xex`.
+2. Back up `Hdd1:\launch.ini`.
+3. Set the first unused `plugin1` through `plugin5` line under `[Plugins]` to
+   `Hdd:\Aurora\Plugins\AuroraAZ.xex`.
+4. If an older Aurora A-Z installation occupies
+   `Hdd1:\Aurora\Plugins\NetDbgDll.xex`, remove or rename that file so the two
+   loader routes cannot run together.
+5. Reboot the console.
+
 ## Required interaction
 
 The normative controller and filtering behavior is defined in
@@ -62,17 +73,11 @@ and Filter mode. The row updates immediately (`ALL` is present only in Filter
 mode) and the choice is saved for future selections. This avoids relying on
 Aurora's fixed Configure Modules UI.
 
-Aurora A-Z supports two persistent operating modes from **Settings ->
-Configure Modules -> Aurora A-Z**. Browse and Filter are presented as native
-Aurora radio rows, matching the Profile settings style, and the saved mode is
-checked and focused whenever the page opens. The controls are embedded
-directly in Aurora's normal module-settings panel, like the built-in FTP and
-Nova pages; no system popup is used. `Browse` (the default) jumps to the first
-matching title in the current QuickView without rebuilding the list. `Filter`
-retains the existing behavior and shows only matching titles. Press A on a
-mode to save it immediately. The plugin may generate its embedded settings
-resource, icon cache, and a small mode file under `Data` at runtime; these are
-not additional installation payloads.
+`Browse` (the default) jumps to the first matching title in the current
+QuickView without rebuilding the list. `Filter` retains the existing behavior
+and shows only matching titles. The R3+L3 choice persists under Aurora's Data
+directory; the old Configure Modules page is not the supported way to switch
+modes in the DashLaunch release.
 
 The architectural constraints that follow from these requirements are recorded
 in [`ARCHITECTURE.md`](ARCHITECTURE.md). The gated engineering roadmap is in
@@ -82,13 +87,12 @@ Browse/settings ABI is in
 
 ## Current status
 
-The complete hold-R3 interaction, in-memory filtering, immediate re-arming,
-and title-launch lifecycle now pass on production hardware. The known-good
-baseline is commit `d1cfced`, GitHub Actions run `33820492994`, artifact
-SHA-256
-`409369CD513FE9BB5E475BA1261FA09FCA9E8000571563DA6149A3E686B0D94A`.
-It is installed as the single `Plugins\NetDbgDll.xex` payload and has launched
-a game successfully without the earlier black-screen or 0% gathering freeze.
+The current deployment route is DashLaunch: commit `45c4b1d`, GitHub Actions
+run `33928690065`, with `AuroraAZ.xex` SHA-256
+`FE281C349AF43BDBA9039530612A2BD5CF7C1D02722E8D0B439857E949B6B7E8`.
+It is installed at `Plugins\AuroraAZ.xex` and loaded through an empty
+DashLaunch plugin slot. The former NetDbg bootstrap is historical and must not
+remain active alongside this route.
 
 The production hardware baseline has the centered dimmed `ALL # A ... Z`
 presentation, enlarged highlight, release animation, alphabetical-only `ALL`
@@ -107,14 +111,16 @@ instead intercepts the exact Rev1655 `ContentLauncher` entry, signals its
 worker to restore all four hooks and exit, then immediately resumes Aurora's
 original launcher.
 
+### Historical NetDbg research
+
 Offline analysis resolved the static loader contract: Rev1655 constructs
 exactly seven hard-coded module wrappers and does not enumerate arbitrary
 files under `Plugins`. Its optional Network Debugger wrapper requests the
 literal `game:\Plugins\NetDbgDll.xex` path and resolves ordinals 2-5. The
-release binary remains `AuroraAZ.xex`; the candidate one-file installation
-copies those same bytes under that literal filename. It requires no
-DashLaunch slot, `launch.ini` change, skin change, or companion file, and it
-is valid only when no real `NetDbgDll.xex` is installed.
+original candidate copied the same bytes under that literal filename. That
+research established the bootstrap, but it is no longer the release
+installation path. The current release uses DashLaunch and leaves the Network
+Debugger slot unused.
 
 The first hardware loader canary was rejected safely in the isolated lab:
 
@@ -218,6 +224,6 @@ must remain transactional and reversible. Keep FTP access available during
 early hardware tests.
 
 Production updates require a verified native CI artifact, a hash check, and a
-timestamped backup of the existing `Hdd1:\Aurora\Plugins\NetDbgDll.xex` before
-the staged replacement. See `reference/NETDBG_BOOTSTRAP.md` for the loader and
-rollback contract.
+backup of `Hdd1:\launch.ini` before replacing
+`Hdd1:\Aurora\Plugins\AuroraAZ.xex`. Keep the previous XEX until the updated
+DashLaunch configuration has been reboot-tested.
