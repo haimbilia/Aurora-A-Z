@@ -483,6 +483,7 @@ static void check_resolved_site(
     const AzRev1655LoadedImage *image,
     AzRev1655HookSiteId id,
     uint32_t expected_address,
+    uint32_t expected_instruction,
     size_t expected_signature_size)
 {
     const AzRev1655HookSiteDescriptor *descriptor =
@@ -497,7 +498,7 @@ static void check_resolved_site(
         permit, descriptor, image, &resolved) ==
         AZ_REV1655_HOOK_GATE_OK);
     CHECK(resolved.target_address == expected_address);
-    CHECK(resolved.expected_instruction == 0x7D8802A6u);
+    CHECK(resolved.expected_instruction == expected_instruction);
     CHECK(resolved.complete_signature_size == expected_signature_size);
 }
 
@@ -602,15 +603,20 @@ static void test_exact_fixture(const char *path)
         permit, NULL) == 0u);
 
     check_resolved_site(permit, &image,
-        AZ_REV1655_HOOK_SITE_INPUT_WRAPPER, 0x82801D90u, 20u);
+        AZ_REV1655_HOOK_SITE_INPUT_WRAPPER, 0x82801D90u,
+        0x7D8802A6u, 20u);
     check_resolved_site(permit, &image,
-        AZ_REV1655_HOOK_SITE_RENDER_MENU, 0x82358A08u, 16u);
+        AZ_REV1655_HOOK_SITE_RENDER_MENU, 0x82358A08u,
+        0x7D8802A6u, 16u);
     check_resolved_site(permit, &image,
-        AZ_REV1655_HOOK_SITE_FONT_END, 0x8247E390u, 16u);
+        AZ_REV1655_HOOK_SITE_FONT_END, 0x8247E390u,
+        0x7D8802A6u, 16u);
     check_resolved_site(permit, &image,
-        AZ_REV1655_HOOK_SITE_CONTENT_LAUNCH, 0x82294DD0u, 16u);
+        AZ_REV1655_HOOK_SITE_CONTENT_LAUNCH, 0x82294DD0u,
+        0x7D8802A6u, 16u);
     check_resolved_site(permit, &image,
-        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS, 0x822C8CE8u, 16u);
+        AZ_REV1655_HOOK_SITE_MODULE_SETTINGS, 0x822C8CE8u,
+        0x38A00001u, 16u);
     CHECK(az_rev1655_hook_gate_site(permit,
         AZ_REV1655_HOOK_SITE_COUNT) == NULL);
 
