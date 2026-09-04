@@ -5,9 +5,9 @@ scriptDescription = "Installs or updates the Aurora A-Z coverflow selector"
 scriptIcon = "icon.png"
 scriptPermissions = { "filesystem" }
 
-local live = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex"
-local backup = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex.before-aurora-az"
-local staged = "Hdd:\\Aurora\\Plugins\\NetDbgDll.xex.auroraaz-staged"
+local live = "Hdd1:\\Aurora\\Plugins\\NetDbgDll.xex"
+local backup = "Hdd1:\\Aurora\\Plugins\\NetDbgDll.xex.before-aurora-az"
+local staged = "Hdd1:\\Aurora\\Plugins\\NetDbgDll.xex.auroraaz-staged"
 
 local function fail(message)
     Script.ShowMessageBox("Aurora A-Z", message, "OK")

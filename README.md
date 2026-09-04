@@ -25,17 +25,17 @@ embedded in the XEX; installation never copies `icon.png` to the console.
 Copy these three release files into this Aurora Script-menu folder:
 
 ```text
-Hdd:\Aurora\User\Scripts\AuroraAZInstaller\Main.lua
-Hdd:\Aurora\User\Scripts\AuroraAZInstaller\AuroraAZ.xex
-Hdd:\Aurora\User\Scripts\AuroraAZInstaller\icon.png
+Hdd1:\Aurora\User\Scripts\AuroraAZInstaller\Main.lua
+Hdd1:\Aurora\User\Scripts\AuroraAZInstaller\AuroraAZ.xex
+Hdd1:\Aurora\User\Scripts\AuroraAZInstaller\icon.png
 ```
 
 It appears as **Install Aurora A-Z** in Aurora's Script menu. The installer
 stages the payload, preserves an existing
-`Hdd:\Aurora\Plugins\NetDbgDll.xex` as
+`Hdd1:\Aurora\Plugins\NetDbgDll.xex` as
 `NetDbgDll.xex.before-aurora-az`, installs Aurora A-Z into that slot, and shows
 a completion notification. Reboot Aurora after it finishes. The installer
-expects the standard `Hdd:\Aurora` location; manual installation remains
+expects the standard `Hdd1:\Aurora` location; manual installation remains
 available for custom Aurora paths.
 
 ## Required interaction
