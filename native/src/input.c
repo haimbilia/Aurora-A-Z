@@ -144,7 +144,7 @@ void az_input_runtime_init(AzInputRuntime *runtime)
     runtime->coverflow.game_content_manager = (uintptr_t)0u;
     runtime->coverflow.successful_render_frame = 0u;
     runtime->coverflow.has_successful_render = 0u;
-    runtime->edge_behavior = AZ_EDGE_CLAMP;
+    runtime->edge_behavior = AZ_EDGE_WRAP;
     runtime->stage = AZ_INPUT_STAGE_OBSERVE_ONLY;
     runtime->consumed_controls = 0u;
 }

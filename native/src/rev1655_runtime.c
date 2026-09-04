@@ -1995,6 +1995,8 @@ static void apply_operation_mode(AzOperationMode mode)
         DbgPrint("AuroraAZ: could not persist operation mode\n");
     }
     store_u32(&g_runtime.operation_mode, (uint32_t)mode);
+    az_rev1655_input_detour_set_first_selectable_index(
+        mode == AZ_OPERATION_MODE_BROWSE ? 1u : 0u);
     store_u32(
         &g_runtime.settings_xur_cache_result,
         cache_settings_xur_for_mode(mode) != 0u ? 1u : 2u);
@@ -2955,6 +2957,9 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
         return AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED;
     }
     az_rev1655_input_detour_reset();
+    az_rev1655_input_detour_set_first_selectable_index(
+        load_u32(&g_runtime.operation_mode) ==
+                (uint32_t)AZ_OPERATION_MODE_BROWSE ? 1u : 0u);
     az_rev1655_input_detour_configure_browse_jump(
         &browse_apply_jump, NULL);
     az_rev1655_input_detour_configure_ui_tick(

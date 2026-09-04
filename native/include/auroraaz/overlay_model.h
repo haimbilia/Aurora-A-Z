@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define AZ_OVERLAY_MAX_QUADS 7u
+#define AZ_OVERLAY_MAX_QUADS 11u
 
 typedef enum AzOverlayLayer {
     AZ_OVERLAY_LAYER_DIM = 0,
@@ -45,7 +45,11 @@ void az_overlay_model_build(
     float viewport_height,
     uint8_t coverflow_visible,
     uint8_t selector_active,
+    uint8_t first_visible_index,
     uint8_t selected_index,
+    uint8_t selection_animation_active,
+    uint8_t selection_animation_from_index,
+    float selection_animation_progress,
     uint8_t exit_animation_active,
     uint8_t exit_animation_index,
     float exit_animation_progress,

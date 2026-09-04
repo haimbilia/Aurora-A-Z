@@ -52,14 +52,18 @@ functional unless it satisfies every acceptance criterion below on Aurora
 - The alphabet is hidden during normal coverflow use.
 - Holding R3 (right-stick click) while the coverflow is active darkens the
   complete viewport and displays one horizontally and vertically centered row
-  containing `ALL # A B ... Z`.
-- Selection starts at `ALL` each time R3 is pressed and held.
+  containing `ALL # A B ... Z` in Filter mode or `# A B ... Z` in Browse mode.
+- The first selector session starts at `ALL` in Filter mode and `#` in Browse
+  mode. Later sessions reopen on the last selected character.
 - D-pad Left and D-pad Right move the highlight one letter at a time.
 - Left-stick Left and left-stick Right perform the same movement as the D-pad.
+- Holding either horizontal input repeats quickly without requiring separate
+  presses.
 - While selector mode is active, those four inputs move only the letter
   highlight. They must not move or scroll the coverflow.
 - Exactly one item is visibly highlighted at a time. The selected item is
   rendered at 100% opacity and larger than the inactive row items.
+- Highlight changes ease between the former and new item instead of snapping.
 - Releasing R3 applies the highlighted initial-character filter only if at
   least one Left/Right navigation input changed the selection during that hold.
   It then hides the alphabet and returns normal coverflow control.
@@ -99,8 +103,6 @@ functional unless it satisfies every acceptance criterion below on Aurora
   chosen initial-character group. It does not rebuild or replace the list.
 - Browse mode searches only the current QuickView result, naturally preserving
   its non-alphabetical constraints.
-- `ALL` moves to the first title in the current active list. It does not change
-  the current QuickView or any filter.
 - `#`, `A` through `Z`, case handling, and empty-match classification are the
   same as Filter mode.
 - If the chosen group has no match, the current selection remains unchanged.
@@ -136,14 +138,17 @@ There are two distinct states:
    after such a change, then hides the alphabet. A tap with no navigation
    cancels. Coverflow navigation is suspended while R3 is held.
 
-Navigation clamps at `ALL` and `Z`; it does not wrap.
+Navigation wraps in both modes: Left from `ALL` reaches `Z` and Right from `Z`
+reaches `ALL` in Filter mode; Left from `#` reaches `Z` and Right from `Z`
+reaches `#` in Browse mode.
 
 ## Acceptance tests
 
 1. From the coverflow, verify that the alphabet is hidden, then press and hold
    R3. The centered row appears over a dimmed viewport with `ALL` highlighted
-   at full opacity and a larger size; no QuickView menu opens.
-2. While holding R3, press D-pad Right once. `#` is highlighted and the
+   in Filter mode or `#` in Browse mode at full opacity and a larger size; no
+   QuickView menu opens.
+2. In Filter mode while holding R3, press D-pad Right once. `#` is highlighted and the
    coverflow does not move.
 3. While holding R3, press D-pad Left once. `ALL` is highlighted and the
    coverflow does not move.
@@ -185,10 +190,13 @@ Navigation clamps at `ALL` and `Z`; it does not wrap.
 18. In Browse mode, select a letter and verify that the full title count is
     unchanged, the coverflow moves to the first matching title, and no
     `Sorting Game List` / `Filter Game List` cycle is logged.
-19. In Browse mode under XBLA QuickView, select a letter and then `ALL`.
-    Verify both jumps remain inside XBLA and do not expose non-XBLA titles.
+19. In Browse mode, verify the row contains `# A ... Z` with no `ALL`, then
+    wrap Left from `#` to `Z` and Right from `Z` to `#`.
 20. In Browse mode, choose a group with no match and verify that the current
     cover remains selected.
+21. Select a letter, release R3, then hold R3 again and verify the same letter
+    is highlighted. Hold Left or Right and verify repeat navigation advances
+    quickly with a smooth highlight transition.
 
 ## Explicitly non-compliant implementations
 

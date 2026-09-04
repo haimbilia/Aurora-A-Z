@@ -65,6 +65,7 @@ typedef struct AzInputDetourBridge {
     volatile uint32_t render_hook_verified;
     volatile uint32_t filter_consumer_verified;
     volatile uint32_t scene_allows_capture;
+    volatile uint32_t first_selectable_index;
     volatile uint32_t input_frame;
     volatile uint32_t render_write_lock;
     volatile uint32_t render_sequence;
@@ -408,6 +409,7 @@ void az_rev1655_input_detour_reset(void)
     store_u32(&g_input_bridge.render_hook_verified, 0u);
     store_u32(&g_input_bridge.filter_consumer_verified, 0u);
     store_u32(&g_input_bridge.scene_allows_capture, 0u);
+    store_u32(&g_input_bridge.first_selectable_index, 0u);
     store_u32(&g_input_bridge.input_frame, 0u);
     store_u32(&g_input_bridge.render_write_lock, 0u);
     store_u32(&g_input_bridge.render_sequence, 0u);
@@ -525,6 +527,17 @@ void az_rev1655_input_detour_set_scene_allows_capture(uint8_t allowed)
     if (shutdown_is_requested() != 0u) {
         store_u32(&g_input_bridge.scene_allows_capture, 0u);
     }
+}
+
+void az_rev1655_input_detour_set_first_selectable_index(
+    uint8_t first_selectable_index)
+{
+    if (first_selectable_index >= AZ_GLYPH_COUNT) {
+        first_selectable_index = 0u;
+    }
+    store_u32(
+        &g_input_bridge.first_selectable_index,
+        (uint32_t)first_selectable_index);
 }
 
 AzInputDetourResult az_rev1655_input_detour_request_stage(
@@ -819,10 +832,14 @@ void az_rev1655_input_detour_snapshot_selector(AzSelectorState *selector)
     selector->applied_index = (uint8_t)((packed >> 16u) & 0xFFu);
     selector->apply_serial = (uint8_t)((packed >> 24u) & 0xFFu);
     selector->selection_changed = 0u;
+    selector->first_selectable_index = (uint8_t)load_u32(
+        &g_input_bridge.first_selectable_index);
     if (requested_stage_from_lifecycle() !=
         AZ_INPUT_DETOUR_CONSUME) {
         selector->mode = AZ_MODE_COVERFLOW;
-        selector->selected_index = 0u;
+        if (selector->selected_index < selector->first_selectable_index) {
+            selector->selected_index = selector->first_selectable_index;
+        }
     }
 }
 
@@ -1013,6 +1030,10 @@ uint32_t az_rev1655_input_detour_c(
             &g_input_bridge.filter_consumer_verified) == 0u)) {
         gate.scene_allows_capture = 0u;
     }
+
+    az_selector_set_first_selectable_index(
+        &g_input_bridge.runtime.selector,
+        (uint8_t)load_u32(&g_input_bridge.first_selectable_index));
 
     decision = az_input_process(
         &g_input_bridge.runtime,

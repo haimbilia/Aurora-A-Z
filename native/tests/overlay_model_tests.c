@@ -15,13 +15,15 @@ int main(void)
     AzOverlayModel model;
 
     az_overlay_model_build(
-        1280.0f, 720.0f, 1u, 0u, 0u, 0u, 0u, 0.0f, &model);
+        1280.0f, 720.0f, 1u, 0u, 0u, 0u,
+        0u, 0u, 0.0f, 0u, 0u, 0.0f, &model);
     if (model.count != 0u) {
         return EXIT_FAILURE;
     }
 
     az_overlay_model_build(
-        1280.0f, 720.0f, 1u, 1u, 0u, 0u, 0u, 0.0f, &model);
+        1280.0f, 720.0f, 1u, 1u, 0u, 0u,
+        0u, 0u, 0.0f, 0u, 0u, 0.0f, &model);
     if (model.count != 5u ||
         model.quads[0].layer != AZ_OVERLAY_LAYER_DIM ||
         model.quads[1].layer != AZ_OVERLAY_LAYER_SHADOW ||
@@ -45,7 +47,8 @@ int main(void)
     }
 
     az_overlay_model_build(
-        1280.0f, 720.0f, 1u, 1u, 1u, 0u, 0u, 0.0f, &model);
+        1280.0f, 720.0f, 1u, 1u, 0u, 1u,
+        0u, 0u, 0.0f, 0u, 0u, 0.0f, &model);
     if (model.count != 7u ||
         model.quads[1].layer != AZ_OVERLAY_LAYER_SHADOW ||
         model.quads[2].layer != AZ_OVERLAY_LAYER_SHADOW ||
@@ -61,7 +64,8 @@ int main(void)
     }
 
     az_overlay_model_build(
-        1280.0f, 720.0f, 1u, 0u, 0u, 1u, 1u, 0.5f, &model);
+        1280.0f, 720.0f, 1u, 0u, 0u, 0u,
+        0u, 0u, 0.0f, 1u, 1u, 0.5f, &model);
     if (model.count != 3u ||
         model.quads[0].layer != AZ_OVERLAY_LAYER_DIM ||
         model.quads[1].layer != AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
@@ -72,8 +76,34 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    /* Browse mode crops ALL from the atlas and recenters # through Z. */
     az_overlay_model_build(
-        640.0f, 480.0f, 1u, 1u, 0u, 0u, 0u, 0.0f, &model);
+        1280.0f, 720.0f, 1u, 1u, 1u, 1u,
+        0u, 0u, 0.0f, 0u, 0u, 0.0f, &model);
+    if (model.count != 5u ||
+        model.quads[1].source_x < 76.0f ||
+        model.quads[2].source_x < 76.0f ||
+        !close_enough(model.quads[4].x, 175.78f)) {
+        return EXIT_FAILURE;
+    }
+
+    /* A move crossfades/scales the old and new glyphs for a smooth sweep. */
+    az_overlay_model_build(
+        1280.0f, 720.0f, 1u, 1u, 0u, 3u,
+        1u, 2u, 0.5f, 0u, 0u, 0.0f, &model);
+    if (model.count != 11u ||
+        model.quads[7].layer != AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
+        model.quads[8].layer != AZ_OVERLAY_LAYER_SELECTED ||
+        model.quads[9].layer != AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
+        model.quads[10].layer != AZ_OVERLAY_LAYER_SELECTED ||
+        !close_enough(model.quads[8].width, 27.36f) ||
+        !close_enough(model.quads[10].width, 27.36f)) {
+        return EXIT_FAILURE;
+    }
+
+    az_overlay_model_build(
+        640.0f, 480.0f, 1u, 1u, 0u, 0u,
+        0u, 0u, 0.0f, 0u, 0u, 0.0f, &model);
     if (model.count != 5u ||
         !close_enough(model.quads[2].x, 104.5f) ||
         !close_enough(model.quads[2].y, 234.0f) ||
@@ -83,14 +113,16 @@ int main(void)
     }
 
     az_overlay_model_build(
-        1280.0f, 720.0f, 0u, 1u, 0u, 0u, 0u, 0.0f, &model);
+        1280.0f, 720.0f, 0u, 1u, 0u, 0u,
+        0u, 0u, 0.0f, 0u, 0u, 0.0f, &model);
     if (model.count != 0u) {
         return EXIT_FAILURE;
     }
 
     model.count = 3u;
     az_overlay_model_build(
-        1280.0f, 720.0f, 1u, 1u, 0u, 0u, 0u, 0.0f, NULL);
+        1280.0f, 720.0f, 1u, 1u, 0u, 0u,
+        0u, 0u, 0.0f, 0u, 0u, 0.0f, NULL);
     if (model.count != 3u) {
         return EXIT_FAILURE;
     }

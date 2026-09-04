@@ -560,57 +560,39 @@ static int prepare_model(
     const float origin_y =
         (request->viewport_height -
             (AZ_LOGICAL_VIEWPORT_HEIGHT * scale)) * 0.5f;
-    size_t expected_count = 3u;
-    size_t segment_count = 0u;
     size_t index;
-
-    if (request->selector_active != 0u) {
-        const AzGlyphAtlasGlyph *glyph =
-            &g_az_glyph_atlas_glyphs[request->selected_index];
-        segment_count =
-            (glyph->source_x == 0u ||
-             (uint32_t)glyph->source_x + (uint32_t)glyph->advance ==
-                AZ_GLYPH_ATLAS_ROW_ADVANCE) ? 1u : 2u;
-        expected_count += segment_count * 2u;
-    }
 
     az_overlay_model_build(
         AZ_LOGICAL_VIEWPORT_WIDTH,
         AZ_LOGICAL_VIEWPORT_HEIGHT,
         1u,
         request->selector_active,
+        request->first_visible_index,
         request->selected_index,
+        request->selection_animation_active,
+        request->selection_animation_from_index,
+        request->selection_animation_progress,
         request->exit_animation_active,
         request->exit_animation_index,
         request->exit_animation_progress,
         model);
 
-    if (model->count != expected_count ||
+    if (model->count < 3u || model->count > AZ_OVERLAY_MAX_QUADS ||
         model->quads[0].layer != AZ_OVERLAY_LAYER_DIM ||
-        model->quads[expected_count - 2u].layer !=
+        model->quads[model->count - 2u].layer !=
             AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
-        model->quads[expected_count - 1u].layer !=
-            AZ_OVERLAY_LAYER_SELECTED ||
-        expected_count > AZ_OVERLAY_MAX_QUADS) {
+        model->quads[model->count - 1u].layer !=
+            AZ_OVERLAY_LAYER_SELECTED) {
         return 0;
     }
 
-    if (request->selector_active != 0u) {
-        for (index = 0u; index < segment_count; ++index) {
-            if (model->quads[1u + index].layer !=
-                    AZ_OVERLAY_LAYER_SHADOW ||
-                model->quads[1u + segment_count + index].layer !=
-                    AZ_OVERLAY_LAYER_ROW) {
-                return 0;
-            }
-        }
-    }
-
-    expand_selected_crop(&model->quads[expected_count - 2u]);
-    expand_selected_crop(&model->quads[expected_count - 1u]);
-
     for (index = 0u; index < model->count; ++index) {
         AzOverlayQuad *quad = &model->quads[index];
+
+        if (quad->layer == AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
+            quad->layer == AZ_OVERLAY_LAYER_SELECTED) {
+            expand_selected_crop(quad);
+        }
 
         if (quad->layer == AZ_OVERLAY_LAYER_DIM) {
             quad->x = 0.0f;
@@ -909,13 +891,26 @@ AzOverlayRendererResult az_overlay_renderer_try_draw(
     }
     if (request->proven_modal_clear != 1u ||
         request->selector_active > 1u ||
+        request->selection_animation_active > 1u ||
         request->exit_animation_active > 1u ||
+        request->first_visible_index >= AZ_GLYPH_COUNT ||
         (request->selector_active != 0u &&
             request->exit_animation_active != 0u) ||
         (request->selector_active == 1u &&
-            request->selected_index >= AZ_GLYPH_COUNT) ||
+            (request->selected_index < request->first_visible_index ||
+             request->selected_index >= AZ_GLYPH_COUNT)) ||
+        (request->selection_animation_active == 1u &&
+            (request->selector_active == 0u ||
+             request->selection_animation_from_index <
+                request->first_visible_index ||
+             request->selection_animation_from_index >= AZ_GLYPH_COUNT ||
+             request->selection_animation_from_index ==
+                request->selected_index ||
+             !(request->selection_animation_progress >= 0.0f) ||
+             !(request->selection_animation_progress < 1.0f))) ||
         (request->exit_animation_active == 1u &&
-            (request->exit_animation_index >= AZ_GLYPH_COUNT ||
+            (request->exit_animation_index < request->first_visible_index ||
+             request->exit_animation_index >= AZ_GLYPH_COUNT ||
              !(request->exit_animation_progress >= 0.0f) ||
              !(request->exit_animation_progress < 1.0f)))) {
         result = AZ_OVERLAY_RENDERER_BAD_REQUEST;

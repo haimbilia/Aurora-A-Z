@@ -5,8 +5,9 @@
 </p>
 
 Aurora A-Z is a skin-agnostic, on-coverflow alphabetical selector for the
-Aurora dashboard on Xbox 360. The target UI is a transient
-`ALL # A B ... Z` row centered over a dimmed coverflow, shown only while R3 is
+Aurora dashboard on Xbox 360. The target UI is a transient centered row over a
+dimmed coverflow—`ALL # A B ... Z` in Filter mode and `# A B ... Z` in Browse
+mode—shown only while R3 is
 held, with controller navigation
 and selection directly from the main coverflow. It works without modifying or
 replacing the selected Aurora skin.
@@ -22,13 +23,15 @@ embedded in the XEX; installation never copies `icon.png` to the console.
 
 The normative controller and filtering behavior is defined in
 [`REQUIREMENTS.md`](REQUIREMENTS.md). In short: hold R3 to reveal the
-on-coverflow selector at `ALL`; while holding it, D-pad Left/Right and left-stick
-Left/Right move the highlight; release R3 to apply the selected Browse/Filter
+on-coverflow selector; while holding it, D-pad Left/Right and left-stick
+Left/Right move the highlight with held-input repeat and end-to-end wrap;
+release R3 to apply the selected Browse/Filter
 action and hide the row. Aurora
 A-Z never consumes A, and RB retains Aurora's normal QuickView menu. A quick
 R3 press/release without moving the highlight cancels without filtering.
+The next R3 hold reopens on the last selected character.
 
-`ALL` is scoped: it removes only the alphabetical name filter and preserves
+In Filter mode, `ALL` is scoped: it removes only the alphabetical name filter and preserves
 the active QuickView and other filters. On release, the row vanishes and the
 selected item grows while fading out; this animation never delays filtering.
 

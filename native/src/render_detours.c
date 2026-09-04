@@ -12,6 +12,7 @@ typedef char AzFontEndContinuationMustMatch[
         AZ_REV1655_FONT_END_ADDRESS + sizeof(uint32_t) ? 1 : -1];
 
 #define AZ_EXIT_ANIMATION_FRAMES 18u
+#define AZ_SELECTION_ANIMATION_FRAMES 15u
 
 typedef struct AzRenderDetourBridge {
     AzRev1655RenderDetourBindings bindings;
@@ -30,6 +31,11 @@ typedef struct AzRenderDetourBridge {
     uint8_t exit_animation_active;
     uint8_t exit_animation_index;
     uint8_t exit_animation_frame;
+    uint8_t selector_was_active;
+    uint8_t last_selected_index;
+    uint8_t selection_animation_active;
+    uint8_t selection_animation_from_index;
+    uint8_t selection_animation_frame;
 } AzRenderDetourBridge;
 
 static AzRenderDetourBridge g_render_detours;
@@ -259,17 +265,51 @@ void az_rev1655_font_end_detour_c(void *font, uint32_t caller_lr)
                 g_render_detours.bindings.viewport_height;
             request.selector_active = selector.mode == AZ_MODE_SELECTING ?
                 1u : 0u;
+            request.first_visible_index =
+                selector.first_selectable_index < AZ_GLYPH_COUNT ?
+                    selector.first_selectable_index : 0u;
             request.selected_index = request.selector_active != 0u ?
-                selector.selected_index : 0u;
+                selector.selected_index : request.first_visible_index;
             if (caller_lr == AZ_REV1655_FONT_END_CALLER_LR) {
                 if (request.selector_active != 0u) {
+                    if (g_render_detours.selector_was_active != 0u &&
+                        selector.selected_index !=
+                            g_render_detours.last_selected_index &&
+                        g_render_detours.last_selected_index >=
+                            request.first_visible_index &&
+                        g_render_detours.last_selected_index <
+                            AZ_GLYPH_COUNT) {
+                        g_render_detours.selection_animation_active = 1u;
+                        g_render_detours.selection_animation_from_index =
+                            g_render_detours.last_selected_index;
+                        g_render_detours.selection_animation_frame = 0u;
+                    }
+                    g_render_detours.selector_was_active = 1u;
+                    g_render_detours.last_selected_index =
+                        selector.selected_index;
                     g_render_detours.last_apply_serial =
                         selector.apply_serial;
                     g_render_detours.exit_animation_active = 0u;
                     g_render_detours.exit_animation_frame = 0u;
+
+                    if (g_render_detours.selection_animation_active != 0u) {
+                        request.selection_animation_active = 1u;
+                        request.selection_animation_from_index =
+                            g_render_detours.selection_animation_from_index;
+                        request.selection_animation_progress =
+                            (float)g_render_detours.selection_animation_frame /
+                            (float)AZ_SELECTION_ANIMATION_FRAMES;
+                        ++g_render_detours.selection_animation_frame;
+                        if (g_render_detours.selection_animation_frame >=
+                            AZ_SELECTION_ANIMATION_FRAMES) {
+                            g_render_detours.selection_animation_active = 0u;
+                        }
+                    }
                 }
                 else if (selector.apply_serial !=
                     g_render_detours.last_apply_serial) {
+                    g_render_detours.selector_was_active = 0u;
+                    g_render_detours.selection_animation_active = 0u;
                     g_render_detours.last_apply_serial =
                         selector.apply_serial;
                     if (selector.applied_index < AZ_GLYPH_COUNT) {
@@ -278,6 +318,10 @@ void az_rev1655_font_end_detour_c(void *font, uint32_t caller_lr)
                             selector.applied_index;
                         g_render_detours.exit_animation_frame = 0u;
                     }
+                }
+                else {
+                    g_render_detours.selector_was_active = 0u;
+                    g_render_detours.selection_animation_active = 0u;
                 }
 
                 if (g_render_detours.exit_animation_active != 0u) {

@@ -144,6 +144,10 @@ void az_rev1655_input_detour_confirm_controls(uint32_t verified_controls);
 /* A modal/scene probe owns this dynamic gate. It defaults to false. */
 void az_rev1655_input_detour_set_scene_allows_capture(uint8_t allowed);
 
+/* Filter mode starts at ALL (0); browse mode starts at # (1). */
+void az_rev1655_input_detour_set_first_selectable_index(
+    uint8_t first_selectable_index);
+
 AzInputDetourResult az_rev1655_input_detour_request_stage(
     AzInputDetourStage stage);
 

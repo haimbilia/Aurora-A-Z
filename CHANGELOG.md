@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Make the selector row mode-aware: Browse shows `# A ... Z`, while Filter
+  shows `ALL # A ... Z`.
+- Preserve the last selected character between R3 holds, wrap both ends of the
+  visible row, and continue navigation on held D-pad/left-stick repeat events.
+- Ease highlight changes over roughly 250 ms by shrinking the former glyph
+  while the new glyph grows to full-opacity selection.
 - Replace the Browse/Filter buttons with Aurora-style radio rows. The saved
   mode now selects the matching embedded XUR variant, initial focus, checked
   marker, and status text whenever Configure Modules is opened.

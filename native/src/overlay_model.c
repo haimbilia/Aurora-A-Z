@@ -38,6 +38,26 @@ static uint32_t with_alpha(uint32_t color, float alpha_scale)
     return (color & 0x00FFFFFFu) | (alpha << 24u);
 }
 
+static uint32_t interpolate_color(
+    uint32_t from,
+    uint32_t to,
+    float progress)
+{
+    uint32_t result = 0u;
+    uint32_t shift;
+
+    progress = clamp_unit(progress);
+    for (shift = 0u; shift < 32u; shift += 8u) {
+        const float from_channel = (float)((from >> shift) & 0xFFu);
+        const float to_channel = (float)((to >> shift) & 0xFFu);
+        const uint32_t channel = (uint32_t)(
+            from_channel + ((to_channel - from_channel) * progress) +
+            0.5f);
+        result |= (channel & 0xFFu) << shift;
+    }
+    return result;
+}
+
 static void add_quad(
     AzOverlayModel *model,
     float x,
@@ -102,12 +122,66 @@ static void add_row_segment(
         layer);
 }
 
+static void add_highlight_glyph(
+    AzOverlayModel *model,
+    const AzGlyphAtlasGlyph *glyph,
+    float row_x,
+    float row_y,
+    float source_start,
+    float scale,
+    float row_height,
+    float highlight_scale,
+    float shadow_x,
+    float shadow_y,
+    uint32_t color,
+    uint32_t shadow_color)
+{
+    const float glyph_x = row_x +
+        (((float)glyph->source_x - source_start) * scale);
+    const float glyph_width = (float)glyph->advance * scale;
+    const float glyph_center_x = glyph_x + (glyph_width * 0.5f);
+    const float glyph_center_y = row_y + (row_height * 0.5f);
+    const float selected_width = glyph_width * highlight_scale;
+    const float selected_height = row_height * highlight_scale;
+    const float selected_x = glyph_center_x - (selected_width * 0.5f);
+    const float selected_y = glyph_center_y - (selected_height * 0.5f);
+
+    add_quad(
+        model,
+        selected_x + shadow_x,
+        selected_y + shadow_y,
+        selected_width,
+        selected_height,
+        (float)glyph->source_x,
+        (float)AZ_GLYPH_ATLAS_TEXT_TOP,
+        (float)glyph->advance,
+        (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
+        shadow_color,
+        AZ_OVERLAY_LAYER_SELECTED_SHADOW);
+    add_quad(
+        model,
+        selected_x,
+        selected_y,
+        selected_width,
+        selected_height,
+        (float)glyph->source_x,
+        (float)AZ_GLYPH_ATLAS_TEXT_TOP,
+        (float)glyph->advance,
+        (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
+        color,
+        AZ_OVERLAY_LAYER_SELECTED);
+}
+
 void az_overlay_model_build(
     float viewport_width,
     float viewport_height,
     uint8_t coverflow_visible,
     uint8_t selector_active,
+    uint8_t first_visible_index,
     uint8_t selected_index,
+    uint8_t selection_animation_active,
+    uint8_t selection_animation_from_index,
+    float selection_animation_progress,
     uint8_t exit_animation_active,
     uint8_t exit_animation_index,
     float exit_animation_progress,
@@ -115,14 +189,14 @@ void az_overlay_model_build(
 {
     const AzVisualStyle *style;
     float scale;
+    float source_start;
+    float source_end;
     float row_width;
     float row_height;
     float row_x;
     float row_y;
     float shadow_x;
     float shadow_y;
-    uint8_t display_index;
-    float selected_scale;
     float opacity;
 
     if (model == NULL) {
@@ -147,7 +221,13 @@ void az_overlay_model_build(
         return;
     }
 
-    row_width = (float)AZ_GLYPH_ATLAS_ROW_ADVANCE * scale;
+    if (first_visible_index >= AZ_GLYPH_COUNT) {
+        return;
+    }
+    source_start = (float)
+        g_az_glyph_atlas_glyphs[first_visible_index].source_x;
+    source_end = (float)AZ_GLYPH_ATLAS_ROW_ADVANCE;
+    row_width = (source_end - source_start) * scale;
     row_height =
         (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP) *
         scale;
@@ -178,85 +258,115 @@ void az_overlay_model_build(
         with_alpha(AZ_COLOR_DIM, opacity),
         AZ_OVERLAY_LAYER_DIM);
 
-    display_index = selector_active != 0u ?
-        selected_index : exit_animation_index;
-    if (display_index < AZ_GLYPH_COUNT) {
-        const AzGlyphAtlasGlyph *glyph =
-            &g_az_glyph_atlas_glyphs[display_index];
-        const float glyph_x =
-            row_x + ((float)glyph->source_x * scale);
-        const float glyph_width = (float)glyph->advance * scale;
-        const float glyph_center_x = glyph_x + (glyph_width * 0.5f);
-        const float glyph_center_y = row_y + (row_height * 0.5f);
-        float selected_width;
-        float selected_height;
-        float selected_x;
-        float selected_y;
+    if (selector_active != 0u && selected_index >= first_visible_index &&
+        selected_index < AZ_GLYPH_COUNT) {
+        const AzGlyphAtlasGlyph *selected =
+            &g_az_glyph_atlas_glyphs[selected_index];
+        const uint8_t animate =
+            selection_animation_active != 0u &&
+            selection_animation_from_index >= first_visible_index &&
+            selection_animation_from_index < AZ_GLYPH_COUNT &&
+            selection_animation_from_index != selected_index ? 1u : 0u;
+        const AzGlyphAtlasGlyph *from = animate != 0u ?
+            &g_az_glyph_atlas_glyphs[selection_animation_from_index] :
+            selected;
+        float gap_start[2];
+        float gap_end[2];
+        uint8_t gap_count = animate != 0u ? 2u : 1u;
+        uint8_t gap_index;
+        uint8_t pass;
+        float cursor;
+        float progress = clamp_unit(selection_animation_progress);
+        float eased = progress * progress * (3.0f - (2.0f * progress));
 
-        if (selector_active != 0u) {
-            const float gap_start = glyph->source_x >
-                (uint16_t)AZ_SELECTED_GAP_PADDING ?
-                (float)glyph->source_x - AZ_SELECTED_GAP_PADDING : 0.0f;
-            const float glyph_end =
-                (float)glyph->source_x + (float)glyph->advance;
-            const float gap_end = glyph_end + AZ_SELECTED_GAP_PADDING <
-                (float)AZ_GLYPH_ATLAS_ROW_ADVANCE ?
-                glyph_end + AZ_SELECTED_GAP_PADDING :
-                (float)AZ_GLYPH_ATLAS_ROW_ADVANCE;
-
-            add_row_segment(
-                model, row_x, row_y, scale,
-                0.0f, gap_start, shadow_x, shadow_y,
-                AZ_COLOR_SHADOW, AZ_OVERLAY_LAYER_SHADOW);
-            add_row_segment(
-                model, row_x, row_y, scale,
-                gap_end, (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
-                shadow_x, shadow_y,
-                AZ_COLOR_SHADOW, AZ_OVERLAY_LAYER_SHADOW);
-            add_row_segment(
-                model, row_x, row_y, scale,
-                0.0f, gap_start, 0.0f, 0.0f,
-                AZ_COLOR_INACTIVE, AZ_OVERLAY_LAYER_ROW);
-            add_row_segment(
-                model, row_x, row_y, scale,
-                gap_end, (float)AZ_GLYPH_ATLAS_ROW_ADVANCE,
-                0.0f, 0.0f,
-                AZ_COLOR_INACTIVE, AZ_OVERLAY_LAYER_ROW);
+        gap_start[0] = (float)selected->source_x - AZ_SELECTED_GAP_PADDING;
+        gap_end[0] = (float)selected->source_x +
+            (float)selected->advance + AZ_SELECTED_GAP_PADDING;
+        if (animate != 0u) {
+            gap_start[1] = (float)from->source_x - AZ_SELECTED_GAP_PADDING;
+            gap_end[1] = (float)from->source_x +
+                (float)from->advance + AZ_SELECTED_GAP_PADDING;
+            if (gap_start[1] < gap_start[0]) {
+                const float swap_start = gap_start[0];
+                const float swap_end = gap_end[0];
+                gap_start[0] = gap_start[1];
+                gap_end[0] = gap_end[1];
+                gap_start[1] = swap_start;
+                gap_end[1] = swap_end;
+            }
+            if (gap_start[1] <= gap_end[0]) {
+                if (gap_end[1] > gap_end[0]) {
+                    gap_end[0] = gap_end[1];
+                }
+                gap_count = 1u;
+            }
+        }
+        for (gap_index = 0u; gap_index < gap_count; ++gap_index) {
+            if (gap_start[gap_index] < source_start) {
+                gap_start[gap_index] = source_start;
+            }
+            if (gap_end[gap_index] > source_end) {
+                gap_end[gap_index] = source_end;
+            }
         }
 
-        selected_scale = selector_active != 0u ?
-            AZ_ACTIVE_SELECTED_SCALE :
+        for (pass = 0u; pass < 2u; ++pass) {
+            cursor = source_start;
+            for (gap_index = 0u; gap_index < gap_count; ++gap_index) {
+                add_row_segment(
+                    model, row_x - (source_start * scale), row_y, scale,
+                    cursor, gap_start[gap_index],
+                    pass == 0u ? shadow_x : 0.0f,
+                    pass == 0u ? shadow_y : 0.0f,
+                    pass == 0u ? AZ_COLOR_SHADOW : AZ_COLOR_INACTIVE,
+                    pass == 0u ? AZ_OVERLAY_LAYER_SHADOW :
+                        AZ_OVERLAY_LAYER_ROW);
+                cursor = gap_end[gap_index];
+            }
+            add_row_segment(
+                model, row_x - (source_start * scale), row_y, scale,
+                cursor, source_end,
+                pass == 0u ? shadow_x : 0.0f,
+                pass == 0u ? shadow_y : 0.0f,
+                pass == 0u ? AZ_COLOR_SHADOW : AZ_COLOR_INACTIVE,
+                pass == 0u ? AZ_OVERLAY_LAYER_SHADOW :
+                    AZ_OVERLAY_LAYER_ROW);
+        }
+
+        if (animate != 0u) {
+            add_highlight_glyph(
+                model, from, row_x, row_y, source_start, scale, row_height,
+                AZ_ACTIVE_SELECTED_SCALE +
+                    ((1.0f - AZ_ACTIVE_SELECTED_SCALE) * eased),
+                shadow_x, shadow_y,
+                interpolate_color(AZ_COLOR_SELECTED, AZ_COLOR_INACTIVE, eased),
+                AZ_COLOR_SHADOW);
+        }
+        add_highlight_glyph(
+            model, selected, row_x, row_y, source_start, scale, row_height,
+            animate != 0u ?
+                1.0f + ((AZ_ACTIVE_SELECTED_SCALE - 1.0f) * eased) :
+                AZ_ACTIVE_SELECTED_SCALE,
+            shadow_x, shadow_y,
+            animate != 0u ?
+                interpolate_color(AZ_COLOR_INACTIVE, AZ_COLOR_SELECTED, eased) :
+                AZ_COLOR_SELECTED,
+            AZ_COLOR_SHADOW);
+    }
+    else if (selector_active == 0u &&
+        exit_animation_index >= first_visible_index &&
+        exit_animation_index < AZ_GLYPH_COUNT) {
+        const AzGlyphAtlasGlyph *glyph =
+            &g_az_glyph_atlas_glyphs[exit_animation_index];
+        const float progress = clamp_unit(exit_animation_progress);
+
+        add_highlight_glyph(
+            model, glyph, row_x, row_y, source_start, scale, row_height,
             AZ_ACTIVE_SELECTED_SCALE +
                 ((AZ_EXIT_SELECTED_SCALE - AZ_ACTIVE_SELECTED_SCALE) *
-                    clamp_unit(exit_animation_progress));
-        selected_width = glyph_width * selected_scale;
-        selected_height = row_height * selected_scale;
-        selected_x = glyph_center_x - (selected_width * 0.5f);
-        selected_y = glyph_center_y - (selected_height * 0.5f);
-
-        add_quad(
-            model,
-            selected_x + shadow_x,
-            selected_y + shadow_y,
-            selected_width,
-            selected_height,
-            (float)glyph->source_x,
-            (float)AZ_GLYPH_ATLAS_TEXT_TOP,
-            (float)glyph->advance,
-            (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
-            with_alpha(AZ_COLOR_SHADOW, opacity),
-            AZ_OVERLAY_LAYER_SELECTED_SHADOW);
-        add_quad(
-            model,
-            selected_x,
-            selected_y,
-            selected_width,
-            selected_height,
-            (float)glyph->source_x,
-            (float)AZ_GLYPH_ATLAS_TEXT_TOP,
-            (float)glyph->advance,
-            (float)(AZ_GLYPH_ATLAS_TEXT_BOTTOM - AZ_GLYPH_ATLAS_TEXT_TOP),
+                    progress),
+            shadow_x, shadow_y,
             with_alpha(AZ_COLOR_SELECTED, opacity),
-            AZ_OVERLAY_LAYER_SELECTED);
+            with_alpha(AZ_COLOR_SHADOW, opacity));
     }
 }

@@ -96,7 +96,11 @@ typedef struct AzOverlayDrawRequest {
     float viewport_width;
     float viewport_height;
     uint8_t selector_active;
+    uint8_t first_visible_index;
     uint8_t selected_index;
+    uint8_t selection_animation_active;
+    uint8_t selection_animation_from_index;
+    float selection_animation_progress;
     uint8_t exit_animation_active;
     uint8_t exit_animation_index;
     float exit_animation_progress;

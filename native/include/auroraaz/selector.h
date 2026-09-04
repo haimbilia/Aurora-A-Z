@@ -32,6 +32,7 @@ typedef struct AzSelectorState {
     uint8_t applied_index;
     uint8_t selection_changed;
     uint8_t apply_serial;
+    uint8_t first_selectable_index;
 } AzSelectorState;
 
 typedef struct AzSelectorResult {
@@ -42,6 +43,9 @@ typedef struct AzSelectorResult {
 
 void az_selector_init(AzSelectorState *state);
 void az_selector_leave_coverflow(AzSelectorState *state);
+void az_selector_set_first_selectable_index(
+    AzSelectorState *state,
+    uint8_t first_selectable_index);
 
 AzSelectorResult az_selector_dispatch(
     AzSelectorState *state,

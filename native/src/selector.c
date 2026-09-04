@@ -25,6 +25,7 @@ void az_selector_init(AzSelectorState *state)
     state->applied_index = AZ_NO_GLYPH;
     state->selection_changed = 0u;
     state->apply_serial = 0u;
+    state->first_selectable_index = 0u;
 }
 
 void az_selector_leave_coverflow(AzSelectorState *state)
@@ -34,8 +35,24 @@ void az_selector_leave_coverflow(AzSelectorState *state)
     }
 
     state->mode = AZ_MODE_COVERFLOW;
-    state->selected_index = 0u;
     state->selection_changed = 0u;
+}
+
+void az_selector_set_first_selectable_index(
+    AzSelectorState *state,
+    uint8_t first_selectable_index)
+{
+    if (state == NULL) {
+        return;
+    }
+
+    state->first_selectable_index =
+        first_selectable_index < AZ_GLYPH_COUNT ?
+            first_selectable_index : 0u;
+    if (state->selected_index < state->first_selectable_index ||
+        state->selected_index >= AZ_GLYPH_COUNT) {
+        state->selected_index = state->first_selectable_index;
+    }
 }
 
 AzSelectorResult az_selector_dispatch(
@@ -66,7 +83,10 @@ AzSelectorResult az_selector_dispatch(
         }
 
         state->mode = AZ_MODE_SELECTING;
-        state->selected_index = 0u;
+        if (state->selected_index < state->first_selectable_index ||
+            state->selected_index >= AZ_GLYPH_COUNT) {
+            state->selected_index = state->first_selectable_index;
+        }
         state->selection_changed = 0u;
         return handled_result();
     }
@@ -77,7 +97,7 @@ AzSelectorResult az_selector_dispatch(
 
     switch (command) {
     case AZ_COMMAND_PREVIOUS:
-        if (state->selected_index > 0u) {
+        if (state->selected_index > state->first_selectable_index) {
             --state->selected_index;
             state->selection_changed = 1u;
         }
@@ -93,7 +113,7 @@ AzSelectorResult az_selector_dispatch(
             state->selection_changed = 1u;
         }
         else if (edge_behavior == AZ_EDGE_WRAP) {
-            state->selected_index = 0u;
+            state->selected_index = state->first_selectable_index;
             state->selection_changed = 1u;
         }
         return handled_result();

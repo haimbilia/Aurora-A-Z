@@ -96,6 +96,7 @@ static void test_selector_flow(void)
     CHECK(state.mode == AZ_MODE_COVERFLOW);
     CHECK(state.selected_index == 0u);
     CHECK(state.applied_index == AZ_NO_GLYPH);
+    CHECK(state.first_selectable_index == 0u);
 
     result = az_selector_dispatch(
         &state, AZ_COMMAND_NEXT, AZ_EDGE_CLAMP, 1u);
@@ -173,7 +174,7 @@ static void test_selector_fail_closed(void)
         &state, AZ_COMMAND_NEXT, AZ_EDGE_CLAMP, 0u);
     CHECK(result.handled == 0u);
     CHECK(state.mode == AZ_MODE_COVERFLOW);
-    CHECK(state.selected_index == 0u);
+    CHECK(state.selected_index == AZ_GLYPH_COUNT);
 }
 
 static void test_edge_behavior(void)
@@ -202,7 +203,17 @@ static void test_edge_behavior(void)
 
     az_selector_leave_coverflow(&state);
     CHECK(state.mode == AZ_MODE_COVERFLOW);
-    CHECK(state.selected_index == 0u);
+    CHECK(state.selected_index == 12u);
+
+    az_selector_set_first_selectable_index(&state, 1u);
+    state.selected_index = 1u;
+    (void)az_selector_dispatch(&state, AZ_COMMAND_ENTER, AZ_EDGE_WRAP, 1u);
+    (void)az_selector_dispatch(&state, AZ_COMMAND_PREVIOUS, AZ_EDGE_WRAP, 1u);
+    CHECK(state.selected_index == AZ_GLYPH_COUNT - 1u);
+    (void)az_selector_dispatch(&state, AZ_COMMAND_NEXT, AZ_EDGE_WRAP, 1u);
+    CHECK(state.selected_index == 1u);
+    az_selector_leave_coverflow(&state);
+    CHECK(state.selected_index == 1u);
 }
 
 static void test_filter_mapping(void)
