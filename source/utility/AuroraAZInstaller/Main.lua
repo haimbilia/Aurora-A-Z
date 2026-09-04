@@ -59,14 +59,11 @@ local function install()
         return
     end
 
-    local restart = Script.ShowMessageBox(
+    Script.ShowMessageBox(
         "Aurora A-Z installed",
-        "Installation complete. Reboot Aurora to activate the selector.",
-        "Later", "Restart Aurora"
+        "Installation complete. Restart Aurora manually to activate the selector.",
+        "OK"
     )
-    if restart.Button == 2 and type(Aurora.Restart) == "function" then
-        Aurora.Restart()
-    end
 end
 
 function main()
