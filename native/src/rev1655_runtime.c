@@ -39,6 +39,7 @@
 #define AZ_M2B_FONT_END_TARGET_ADDRESS 0x8247E390u
 #define AZ_CONTENT_LAUNCH_TARGET_ADDRESS 0x82294DD0u
 #define AZ_MODULE_SETTINGS_TARGET_ADDRESS 0x822C8B88u
+#define AZ_XUI_ELEMENT_GET_CHILD_BY_ID_ORDINAL 810u
 #define AZ_XUI_ELEMENT_GET_FIRST_CHILD_ORDINAL 811u
 #define AZ_XUI_ELEMENT_GET_NEXT_ORDINAL 816u
 #define AZ_XUI_ELEMENT_GET_PARENT_ORDINAL 817u
@@ -163,6 +164,7 @@ typedef struct AzRev1655Runtime {
     AzXuiGetChildFn xui_get_first_child;
     AzXuiGetChildFn xui_get_next;
     AzXuiGetChildFn xui_get_parent;
+    AzXuiGetDescendantFn xui_get_child_by_id;
     AzXuiGetDescendantFn xui_get_descendant;
     AzXuiGetTextFn xui_get_text;
     AzXuiSetTextFn xui_set_text;
@@ -1583,6 +1585,50 @@ static uint32_t live_module_settings_scene_handle(void)
     return scene;
 }
 
+static int32_t find_live_descendant(
+    uint32_t root,
+    const uint16_t *id,
+    uint32_t *result)
+{
+    uint32_t stack[96];
+    uint32_t stack_count = 0u;
+    uint32_t visited = 0u;
+
+    if (root == 0u || id == NULL || result == NULL) {
+        return -1;
+    }
+    *result = 0u;
+    if (g_runtime.xui_get_descendant(root, id, result) >= 0 &&
+        *result != 0u) {
+        return 0;
+    }
+
+    stack[stack_count++] = root;
+    while (stack_count != 0u && visited < 256u) {
+        uint32_t current = stack[--stack_count];
+        uint32_t child = 0u;
+
+        ++visited;
+        if (g_runtime.xui_get_child_by_id(current, id, result) >= 0 &&
+            *result != 0u) {
+            return 0;
+        }
+        if (g_runtime.xui_get_first_child(current, &child) < 0) {
+            continue;
+        }
+        while (child != 0u && stack_count < 96u) {
+            uint32_t next = 0u;
+            stack[stack_count++] = child;
+            if (g_runtime.xui_get_next(child, &next) < 0 || next == child) {
+                break;
+            }
+            child = next;
+        }
+    }
+    *result = 0u;
+    return -1;
+}
+
 static uint32_t find_module_settings_ancestor(
     uint32_t module_scene,
     const uint16_t *module_list_id,
@@ -1596,9 +1642,8 @@ static uint32_t find_module_settings_ancestor(
     }
     *module_list = 0u;
     for (depth = 0u; current != 0u && depth < 12u; ++depth) {
-        if (g_runtime.xui_get_descendant(
-                current, module_list_id, module_list) >= 0 &&
-            *module_list != 0u) {
+        if (find_live_descendant(
+                current, module_list_id, module_list) >= 0) {
             return current;
         }
         {
@@ -1620,6 +1665,7 @@ static uint8_t resolve_icon_xui(void)
     void *first = NULL;
     void *next = NULL;
     void *parent = NULL;
+    void *child_by_id = NULL;
     void *descendant = NULL;
     void *text = NULL;
     void *set_text = NULL;
@@ -1627,12 +1673,15 @@ static uint8_t resolve_icon_xui(void)
     void *has_focus = NULL;
 
     if (g_runtime.xui_get_parent != NULL &&
+        g_runtime.xui_get_child_by_id != NULL &&
         g_runtime.xui_set_text != NULL &&
         g_runtime.xui_set_image_path != NULL &&
         g_runtime.xui_has_focus != NULL) {
         return 1u;
     }
     if (FAILED(XexGetModuleHandle("xam.xex", &xam)) || xam == NULL ||
+        FAILED(XexGetProcedureAddress(
+            xam, AZ_XUI_ELEMENT_GET_CHILD_BY_ID_ORDINAL, &child_by_id)) ||
         FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_ELEMENT_GET_FIRST_CHILD_ORDINAL, &first)) ||
         FAILED(XexGetProcedureAddress(
@@ -1649,7 +1698,7 @@ static uint8_t resolve_icon_xui(void)
             xam, AZ_XUI_IMAGE_ELEMENT_SET_IMAGE_PATH_ORDINAL, &set_image)) ||
         FAILED(XexGetProcedureAddress(
             xam, AZ_XUI_ELEMENT_HAS_FOCUS_ORDINAL, &has_focus)) ||
-        first == NULL || next == NULL || parent == NULL ||
+        child_by_id == NULL || first == NULL || next == NULL || parent == NULL ||
         descendant == NULL || text == NULL || set_text == NULL ||
         set_image == NULL || has_focus == NULL) {
         return 0u;
@@ -1657,6 +1706,8 @@ static uint8_t resolve_icon_xui(void)
     g_runtime.xui_get_first_child = (AzXuiGetChildFn)(uintptr_t)first;
     g_runtime.xui_get_next = (AzXuiGetChildFn)(uintptr_t)next;
     g_runtime.xui_get_parent = (AzXuiGetChildFn)(uintptr_t)parent;
+    g_runtime.xui_get_child_by_id =
+        (AzXuiGetDescendantFn)(uintptr_t)child_by_id;
     g_runtime.xui_get_descendant =
         (AzXuiGetDescendantFn)(uintptr_t)descendant;
     g_runtime.xui_get_text = (AzXuiGetTextFn)(uintptr_t)text;
@@ -1722,16 +1773,15 @@ static void module_ui_tick(void *context)
 
         module_scene = live_module_settings_scene_handle();
         g_runtime.settings_dialog_active = module_scene != 0u &&
-            g_runtime.xui_get_descendant(
-                module_scene, browse_id, &browse) >= 0 && browse != 0u &&
-            g_runtime.xui_get_descendant(
-                module_scene, filter_id, &filter) >= 0 && filter != 0u &&
+            find_live_descendant(
+                module_scene, browse_id, &browse) >= 0 &&
+            find_live_descendant(
+                module_scene, filter_id, &filter) >= 0 &&
             g_runtime.xui_has_focus(module_scene) == 1 ? 1u : 0u;
         if (g_runtime.settings_dialog_active != 0u) {
             uint32_t status_label = 0u;
-            if (g_runtime.xui_get_descendant(
-                    module_scene, mode_status_id, &status_label) >= 0 &&
-                status_label != 0u) {
+            if (find_live_descendant(
+                    module_scene, mode_status_id, &status_label) >= 0) {
                 const uint16_t *status_text =
                     load_u32(&g_runtime.operation_mode) ==
                         (uint32_t)AZ_OPERATION_MODE_FILTER ?
@@ -1772,9 +1822,8 @@ static void module_ui_tick(void *context)
     }
     {
         uint32_t module_icon = 0u;
-        if (g_runtime.xui_get_descendant(
-                scene, module_icon_id, &module_icon) >= 0 &&
-            module_icon != 0u) {
+        if (find_live_descendant(
+                scene, module_icon_id, &module_icon) >= 0) {
             (void)g_runtime.xui_set_image_path(module_icon, icon_path);
         }
     }
@@ -1786,8 +1835,7 @@ static void module_ui_tick(void *context)
         uint32_t title = 0u;
         const uint16_t *title_text = NULL;
 
-        if (g_runtime.xui_get_descendant(
-                item, title_id, &title) >= 0 && title != 0u &&
+        if (find_live_descendant(item, title_id, &title) >= 0 &&
             g_runtime.xui_get_text(title, &title_text) >= 0 &&
             target_utf16_equals(
                 title_text,
@@ -1795,8 +1843,7 @@ static void module_ui_tick(void *context)
                 AZ_MODULE_SETTINGS_LABEL_LENGTH) != 0u) {
             uint32_t icon = 0u;
 
-            if (g_runtime.xui_get_descendant(
-                    item, icon_id, &icon) < 0 || icon == 0u) {
+            if (find_live_descendant(item, icon_id, &icon) < 0) {
                 store_u32(&g_runtime.icon_apply_result, 6u);
                 return;
             }
@@ -1857,10 +1904,8 @@ static uint8_t module_settings_ui_input(
     if (scene == 0u || g_runtime.xui_has_focus(scene) != 1) {
         return 0u;
     }
-    if (g_runtime.xui_get_descendant(scene, browse_id, &browse) < 0 ||
-        browse == 0u ||
-        g_runtime.xui_get_descendant(scene, filter_id, &filter) < 0 ||
-        filter == 0u) {
+    if (find_live_descendant(scene, browse_id, &browse) < 0 ||
+        find_live_descendant(scene, filter_id, &filter) < 0) {
         return 0u;
     }
     if (g_runtime.xui_has_focus(browse) == 1) {
@@ -3038,6 +3083,7 @@ AzRev1655RuntimeResult az_rev1655_runtime_start(
     g_runtime.xui_get_first_child = NULL;
     g_runtime.xui_get_next = NULL;
     g_runtime.xui_get_parent = NULL;
+    g_runtime.xui_get_child_by_id = NULL;
     g_runtime.xui_get_descendant = NULL;
     g_runtime.xui_get_text = NULL;
     g_runtime.xui_set_text = NULL;

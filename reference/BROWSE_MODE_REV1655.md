@@ -63,7 +63,11 @@ lookup, focus testing, and status updates use the live handle. The resource
 cache handle is only a template and must never be used for interaction. A
 bounded `XuiElementGetParent` walk from the embedded scene reaches the live
 settings container, where `ModuleIcon`, `ModuleList`, and the Aurora A-Z row's
-`IconPresenter` receive the embedded icon.
+`IconPresenter` receive the embedded icon. Rev1655's late
+`XuiElementGetDescendantById` export does not resolve the generated XUR's IDs
+on hardware, so lookup falls back to a bounded walk using the standard
+`XuiElementGetChildById`, `XuiElementGetFirstChild`, and `XuiElementGetNext`
+exports.
 
 Browse is the default. A saved choice is written as a tiny versioned file at
 `game:\Data\AuroraAZ.ini`; missing, torn, oversized, or unknown content falls
