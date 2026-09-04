@@ -40,6 +40,7 @@
 #define AZ_CONTENT_LAUNCH_TARGET_ADDRESS 0x82294DD0u
 #define AZ_MODULE_SETTINGS_TARGET_ADDRESS 0x822C8CE8u
 #define AZ_XAM_SHOW_MESSAGE_BOX_ORDINAL 0x2CAu
+#define AZ_XUSER_INDEX_ANY 0x000000FFu
 #define AZ_XUI_ELEMENT_GET_FIRST_CHILD_ORDINAL 811u
 #define AZ_XUI_ELEMENT_GET_NEXT_ORDINAL 816u
 #define AZ_XUI_TEXT_ELEMENT_GET_TEXT_ORDINAL 870u
@@ -51,8 +52,7 @@
 #define AZ_BROWSE_LIST_MANAGER_SINGLETON_ADDRESS 0x8223FF30u
 #define AZ_BROWSE_LIST_LOOKUP_ADDRESS 0x8223FFB0u
 #define AZ_BROWSE_GCM_SINGLETON_ADDRESS 0x82223060u
-#define AZ_BROWSE_MOVE_LOWER_ADDRESS 0x8234BC68u
-#define AZ_BROWSE_MOVE_HIGHER_ADDRESS 0x8234C148u
+#define AZ_BROWSE_POPULATE_ADDRESS 0x8234C698u
 #define AZ_BROWSE_ACTIVE_MAP_OFFSET 0x74u
 #define AZ_BROWSE_HELPER_OFFSET 0x550u
 #define AZ_BROWSE_CURRENT_INDEX_OFFSET 0x584u
@@ -60,9 +60,9 @@
 #define AZ_BROWSE_ENABLED_OFFSET 0x225Cu
 #define AZ_BROWSE_BLOCKED_OFFSET 0x225Eu
 #define AZ_BROWSE_READY_OFFSET 0x225Fu
-#define AZ_BROWSE_HELPER_MODEL_OFFSET 0x14u
-#define AZ_BROWSE_HELPER_SPEED_OFFSET 0x24u
-#define AZ_BROWSE_HELPER_MOVING_OFFSET 0x3Cu
+#define AZ_BROWSE_HELPER_PREVIOUS_INDEX_OFFSET 0x30u
+#define AZ_BROWSE_HELPER_CURRENT_INDEX_OFFSET 0x34u
+#define AZ_BROWSE_HELPER_OWNER_CALLBACK_OFFSET 0x10u
 #define AZ_INPUT_SIGNATURE_SIZE 20u
 #define AZ_RENDER_SIGNATURE_SIZE 16u
 #define AZ_OBSERVATION_DRAIN_BUDGET 8u
@@ -107,8 +107,14 @@ typedef struct AzSettingsOverlapped {
 } AzSettingsOverlapped;
 
 typedef struct AzSettingsMessageResult {
-    uint32_t button_pressed;
+    union {
+        uint32_t button_pressed;
+        uint16_t passcode[4];
+    } value;
 } AzSettingsMessageResult;
+
+typedef char AzSettingsMessageResultMustBe8Bytes[
+    sizeof(AzSettingsMessageResult) == 8u ? 1 : -1];
 
 typedef uint32_t (*AzShowMessageBoxFn)(
     uint32_t,
@@ -945,7 +951,8 @@ typedef int32_t (*AzFilterScheduleFn)(
     void *, const AzRev1655FilterContext38 *,
     const AzRev1655FilterWork74 *, uint32_t);
 typedef void *(*AzBrowseListLookupFn)(void *, const uint32_t *);
-typedef uint32_t (*AzBrowseMoveFn)(void *, void *, uint32_t, float);
+typedef uint32_t (*AzBrowsePopulateFn)(void *, void *, uint32_t);
+typedef void (*AzBrowseSelectionChangedFn)(void *, uint32_t, uint32_t);
 
 static uint8_t filter_address_range_is_valid(
     void *context,
@@ -1389,12 +1396,11 @@ static uint8_t browse_apply_jump(
     uint8_t *gcm;
     uint8_t *helper;
     void *layout;
-    uint32_t model;
-    uint32_t moving;
+    void *owner;
+    void *owner_vtable;
+    AzBrowseSelectionChangedFn selection_changed;
     uint32_t current_index;
-    uint32_t distance;
-    float speed;
-    AzBrowseMoveFn move;
+    AzBrowsePopulateFn populate;
 
     (void)context;
     store_u32(&g_runtime.browse_apply_target, target_index);
@@ -1429,30 +1435,18 @@ static uint8_t browse_apply_jump(
     if (layout == NULL || filter_address_range_is_valid(
             NULL,
             helper,
-            AZ_BROWSE_HELPER_MOVING_OFFSET + sizeof(uint32_t)) == 0u) {
+            AZ_BROWSE_HELPER_CURRENT_INDEX_OFFSET + sizeof(uint32_t)) == 0u) {
         store_u32(
             &g_runtime.browse_apply_reason,
             AZ_BROWSE_APPLY_BAD_LAYOUT);
         return 0u;
     }
     memcpy(
-        &model,
-        helper + AZ_BROWSE_HELPER_MODEL_OFFSET,
-        sizeof(model));
-    memcpy(
-        &moving,
-        helper + AZ_BROWSE_HELPER_MOVING_OFFSET,
-        sizeof(moving));
-    memcpy(
         &current_index,
         gcm + AZ_BROWSE_CURRENT_INDEX_OFFSET,
         sizeof(current_index));
-    memcpy(
-        &speed,
-        helper + AZ_BROWSE_HELPER_SPEED_OFFSET,
-        sizeof(speed));
     store_u32(&g_runtime.browse_apply_current, current_index);
-    if (model == 0u || moving != 0u || current_index >= item_count) {
+    if (current_index >= item_count) {
         store_u32(
             &g_runtime.browse_apply_reason,
             AZ_BROWSE_APPLY_BAD_HELPER);
@@ -1465,19 +1459,49 @@ static uint8_t browse_apply_jump(
         return 1u;
     }
 
-    if (target_index < current_index) {
-        distance = current_index - target_index;
-        move = (AzBrowseMoveFn)(uintptr_t)AZ_BROWSE_MOVE_LOWER_ADDRESS;
-    }
-    else {
-        distance = target_index - current_index;
-        move = (AzBrowseMoveFn)(uintptr_t)AZ_BROWSE_MOVE_HIGHER_ADDRESS;
-    }
-    if (move(helper, layout, distance, speed) == 0u) {
+    /* Aurora itself uses this exact sequence when it restores a selected
+     * title after rebuilding the active list: repopulate the coverflow window
+     * around the requested index, publish old/new selection indices, then
+     * notify the coverflow owner. The ordinary left/right helpers animate
+     * every intervening cover, which is not a browse-to-letter operation. */
+    populate = (AzBrowsePopulateFn)(uintptr_t)AZ_BROWSE_POPULATE_ADDRESS;
+    if (populate(helper, layout, target_index) == 0u) {
         store_u32(
             &g_runtime.browse_apply_reason,
             AZ_BROWSE_APPLY_MOVE_REJECTED);
         return 0u;
+    }
+    memcpy(
+        helper + AZ_BROWSE_HELPER_PREVIOUS_INDEX_OFFSET,
+        &current_index,
+        sizeof(current_index));
+    memcpy(
+        helper + AZ_BROWSE_HELPER_CURRENT_INDEX_OFFSET,
+        &target_index,
+        sizeof(target_index));
+
+    memcpy(&owner, helper, sizeof(owner));
+    if (owner != NULL && filter_address_range_is_valid(
+            NULL, owner, sizeof(owner_vtable)) != 0u) {
+        memcpy(&owner_vtable, owner, sizeof(owner_vtable));
+        if (owner_vtable != NULL && filter_address_range_is_valid(
+                NULL,
+                (const uint8_t *)owner_vtable +
+                    AZ_BROWSE_HELPER_OWNER_CALLBACK_OFFSET,
+                sizeof(selection_changed)) != 0u) {
+            memcpy(
+                &selection_changed,
+                (const uint8_t *)owner_vtable +
+                    AZ_BROWSE_HELPER_OWNER_CALLBACK_OFFSET,
+                sizeof(selection_changed));
+            if (selection_changed != NULL &&
+                filter_address_range_is_valid(
+                    NULL,
+                    (const void *)(uintptr_t)selection_changed,
+                    sizeof(uint32_t)) != 0u) {
+                selection_changed(owner, current_index, target_index);
+            }
+        }
     }
     store_u32(&g_runtime.browse_apply_reason, AZ_BROWSE_APPLY_MOVED);
     return 1u;
@@ -1831,10 +1855,10 @@ static uint8_t resolve_settings_message_box(void)
 
 static void finish_settings_dialog(void)
 {
-    if (g_runtime.settings_result.button_pressed == 0u) {
+    if (g_runtime.settings_result.value.button_pressed == 0u) {
         apply_operation_mode(AZ_OPERATION_MODE_BROWSE);
     }
-    else if (g_runtime.settings_result.button_pressed == 1u) {
+    else if (g_runtime.settings_result.value.button_pressed == 1u) {
         apply_operation_mode(AZ_OPERATION_MODE_FILTER);
     }
     (void)__atomic_add_fetch(
@@ -1886,7 +1910,7 @@ static void settings_worker_step(void)
     focus = load_u32(&g_runtime.operation_mode) ==
         (uint32_t)AZ_OPERATION_MODE_FILTER ? 1u : 0u;
     call_result = g_runtime.show_message_box(
-        0u,
+        AZ_XUSER_INDEX_ANY,
         title,
         message,
         3u,

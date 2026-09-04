@@ -22,7 +22,7 @@ FIELDS = (
     "icon_cache_result", "icon_apply_result",
 )
 
-MODES = {1: "filter", 2: "browse"}
+MODES = {0: "browse", 1: "filter"}
 BROWSE_RESULTS = {
     0: "jump-queued", 1: "idle", 2: "deferred", 3: "no-match",
     4: "input-busy", 5: "bad-request", 6: "bad-bindings",

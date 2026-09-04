@@ -29,15 +29,12 @@ It never calls coverflow UI code.
 
 The input detour consumes a published jump on Aurora's next main input poll,
 including a poll that reports no keystroke. It revalidates the live
-`GameContentManager` and Aurora's stock movement gates before calling:
-
-- `0x8234BC68` to move toward a lower index;
-- `0x8234C148` to move toward a higher index.
-
-Both calls use the stock coverflow helper at `GameContentManager + 0x550`, the
-stock layout pointer at `+0x21B8`, the distance from the current index at
-`+0x584`, and Aurora's existing movement speed. Pending and in-flight jumps
-participate in the title-launch shutdown drain.
+`GameContentManager` and Aurora's stock movement gates, then uses Aurora's
+own `0x8234C698` cover-window population path. It publishes the previous and
+new selection indices and invokes the same coverflow-owner selection callback
+used by Aurora's movement code. This updates the visible coverflow immediately
+instead of animating across every intervening title. Pending and in-flight
+jumps participate in the title-launch shutdown drain.
 
 ## Configure Modules integration
 
