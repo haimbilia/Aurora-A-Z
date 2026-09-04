@@ -321,6 +321,38 @@ static void test_rb_is_never_consumed(void)
     CHECK(decision.consume == 0u);
 }
 
+static void test_held_direction_keydown_repeats(void)
+{
+    AzInputRuntime runtime;
+    AzInputGate gate = valid_gate(81u);
+    AzInputKeystroke key;
+    AzInputDecision decision;
+
+    az_input_runtime_init(&runtime);
+    az_input_set_stage(&runtime, AZ_INPUT_STAGE_CONSUME_VERIFIED);
+    arm_scope(&runtime, 80u);
+
+    key = make_key(AZ_VK_PAD_RTHUMB_PRESS, AZ_KEYSTROKE_KEYDOWN);
+    (void)az_input_process(&runtime, &key, &gate);
+
+    key = make_key(AZ_VK_PAD_LTHUMB_RIGHT, AZ_KEYSTROKE_KEYDOWN);
+    decision = az_input_process(&runtime, &key, &gate);
+    CHECK(decision.translation.event == AZ_INPUT_EVENT_PRESS);
+    CHECK(runtime.selector.selected_index == 1u);
+
+    decision = az_input_process(&runtime, &key, &gate);
+    CHECK(decision.consume == 1u);
+    CHECK(decision.translation.event == AZ_INPUT_EVENT_REPEAT);
+    CHECK(runtime.selector.selected_index == 2u);
+
+    decision = az_input_process(&runtime, &key, &gate);
+    CHECK(decision.translation.event == AZ_INPUT_EVENT_REPEAT);
+    CHECK(runtime.selector.selected_index == 3u);
+
+    release_key(&runtime, AZ_VK_PAD_LTHUMB_RIGHT, &gate);
+    release_key(&runtime, AZ_VK_PAD_RTHUMB_PRESS, &gate);
+}
+
 static void test_fail_closed_and_release_drain(void)
 {
     AzInputRuntime runtime;
@@ -450,6 +482,7 @@ int main(void)
     test_coverflow_scope();
     test_observe_stage();
     test_verified_selector_flow();
+    test_held_direction_keydown_repeats();
     test_rb_is_never_consumed();
     test_fail_closed_and_release_drain();
     test_input_hook_gate();

@@ -1657,6 +1657,23 @@ static uint32_t live_module_settings_controller_member(uint32_t offset)
     return member;
 }
 
+static uint8_t module_settings_page_has_focus(uint32_t module_scene)
+{
+    uint32_t module_host;
+
+    if (g_runtime.xui_has_focus == NULL) {
+        return 0u;
+    }
+    if (module_scene != 0u &&
+        g_runtime.xui_has_focus(module_scene) == 1) {
+        return 1u;
+    }
+    module_host = live_module_settings_controller_member(
+        AZ_REV1655_MODULE_HOST_HANDLE_OFFSET);
+    return module_host != 0u &&
+        g_runtime.xui_has_focus(module_host) == 1 ? 1u : 0u;
+}
+
 static uint8_t resolve_icon_xui(void)
 {
     HMODULE xam = NULL;
@@ -1741,6 +1758,12 @@ static void module_ui_tick(void *context)
     static const uint16_t mode_status_id[] = {
         'M','o','d','e','S','t','a','t','u','s',0
     };
+    static const uint16_t browse_mark_id[] = {
+        'B','r','o','w','s','e','C','h','e','c','k','M','a','r','k',0
+    };
+    static const uint16_t filter_mark_id[] = {
+        'F','i','l','t','e','r','C','h','e','c','k','M','a','r','k',0
+    };
     static const uint16_t browse_status[] = {
         'S','a','v','e','d',' ','m','o','d','e',':',' ','B','r','o','w','s','e',0
     };
@@ -1771,7 +1794,7 @@ static void module_ui_tick(void *context)
     }
     xui_ready = resolve_icon_xui();
     if (module_scene == 0u || xui_ready == 0u ||
-        g_runtime.xui_has_focus(module_scene) != 1) {
+        module_settings_page_has_focus(module_scene) == 0u) {
         g_runtime.settings_dialog_active = 0u;
     }
     if (g_runtime.settings_dialog_active != 0u &&
@@ -1791,16 +1814,20 @@ static void module_ui_tick(void *context)
                 module_scene, mode_status_id, &status_label) >= 0) {
             (void)g_runtime.xui_set_text(status_label, status_text);
         }
+        (void)find_live_descendant(
+            module_scene, browse_mark_id, &browse_mark);
+        (void)find_live_descendant(
+            module_scene, filter_mark_id, &filter_mark);
         if (g_runtime.xui_get_first_child(module_scene, &child) >= 0) {
             for (child_index = 0u;
                  child != 0u && child_index <= 7u;
                  ++child_index) {
                 uint32_t next = 0u;
 
-                if (child_index == 2u) {
+                if (child_index == 2u && browse_mark == 0u) {
                     browse_mark = child;
                 }
-                else if (child_index == 5u) {
+                else if (child_index == 5u && filter_mark == 0u) {
                     filter_mark = child;
                 }
                 else if (child_index == 7u && status_label == 0u) {
@@ -1845,11 +1872,6 @@ static void module_ui_tick(void *context)
         store_u32(&g_runtime.icon_apply_result, 2u);
         return;
     }
-    module_scene = live_module_settings_scene_handle();
-    if (module_scene == 0u || g_runtime.settings_dialog_active == 0u) {
-        store_u32(&g_runtime.icon_apply_result, 3u);
-        return;
-    }
     list = live_module_settings_controller_member(
         AZ_REV1655_MODULE_LIST_HANDLE_OFFSET);
     if (list == 0u) {
@@ -1857,12 +1879,14 @@ static void module_ui_tick(void *context)
         return;
     }
     {
-        uint32_t module_icon = live_module_settings_controller_member(
-            AZ_REV1655_MODULE_ICON_HANDLE_OFFSET);
-        if (module_icon == 0u ||
-            g_runtime.xui_set_image_path(module_icon, icon_path) < 0) {
-            store_u32(&g_runtime.icon_apply_result, 7u);
-            return;
+        if (g_runtime.settings_dialog_active != 0u) {
+            uint32_t module_icon = live_module_settings_controller_member(
+                AZ_REV1655_MODULE_ICON_HANDLE_OFFSET);
+            if (module_icon == 0u ||
+                g_runtime.xui_set_image_path(module_icon, icon_path) < 0) {
+                store_u32(&g_runtime.icon_apply_result, 7u);
+                return;
+            }
         }
     }
     if (g_runtime.xui_get_first_child(list, &item) < 0 || item == 0u) {
@@ -1915,7 +1939,8 @@ static uint8_t module_settings_ui_input(
         return 0u;
     }
     scene = live_module_settings_scene_handle();
-    if (scene == 0u || g_runtime.settings_dialog_active == 0u) {
+    if (scene == 0u || g_runtime.settings_dialog_active == 0u ||
+        module_settings_page_has_focus(scene) == 0u) {
         return 0u;
     }
     if (keystroke->virtual_key == AZ_VK_PAD_B &&

@@ -68,9 +68,11 @@ and queues the tracked mode to the worker. The worker persists the choice,
 refreshes the cached variant, and the live page updates its checked marker and
 status. This avoids depending on generated XUR control IDs, which Aurora does
 not expose reliably through the public descendant APIs. File I/O never occurs
-on the UI thread. `XuiElementHasFocus` on the captured scene is the lifecycle
-gate: when focus returns to Aurora's module list, the page immediately stops
-owning A.
+on the UI thread. `XuiElementHasFocus` on the captured scene is checked first;
+because Aurora may host this classless resource beside the focused child, the
+verified controller's `ModuleHost` handle is the fallback lifecycle gate. When
+focus returns to Aurora's module list, neither handle owns focus and the page
+immediately stops owning A.
 
 At dispatcher entry, `r31` is Aurora's temporary loader stack frame—not a
 persistent controller. `XuiSceneCreate` writes the instantiated `HXUIOBJ` to

@@ -303,6 +303,14 @@ AzInputDecision az_input_process(
             return decision;
         }
 
+        if (decision.translation.event == AZ_INPUT_EVENT_PRESS &&
+            (decision.translation.command == AZ_COMMAND_PREVIOUS ||
+             decision.translation.command == AZ_COMMAND_NEXT)) {
+            /* Aurora reports a held analog direction as repeated KEYDOWN
+             * events, not with XINPUT_KEYSTROKE_REPEAT. Treat subsequent
+             * presses for an already-owned direction as repeats. */
+            decision.translation.event = AZ_INPUT_EVENT_REPEAT;
+        }
         if ((decision.translation.event != AZ_INPUT_EVENT_REPEAT &&
              decision.translation.event != AZ_INPUT_EVENT_RELEASE) ||
             decision.translation.command == AZ_COMMAND_NONE) {

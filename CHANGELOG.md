@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Gate the embedded settings page through Aurora's live `ModuleHost` when the
+  captured classless scene is not itself the focused ancestor. This restores
+  A-button mode saving, live radio/status updates, and module icon replacement.
+- Treat repeated KEYDOWN events for an already-owned horizontal direction as
+  held navigation. Aurora hardware emits this pattern for the left stick
+  without setting `XINPUT_KEYSTROKE_REPEAT`.
 - Make the selector row mode-aware: Browse shows `# A ... Z`, while Filter
   shows `ALL # A ... Z`.
 - Preserve the last selected character between R3 holds, wrap both ends of the
