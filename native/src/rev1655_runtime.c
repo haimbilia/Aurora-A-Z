@@ -1906,7 +1906,9 @@ static void settings_worker_step(void)
         sizeof(g_runtime.settings_overlapped));
     memset(&g_runtime.settings_result, 0,
         sizeof(g_runtime.settings_result));
-    g_runtime.settings_overlapped.result = AZ_ERROR_IO_PENDING;
+    /* XAM requires a freshly zeroed XOVERLAPPED. It owns the transition to
+     * ERROR_IO_PENDING; pre-seeding that field makes the real kernel reject
+     * the request with ERROR_INVALID_PARAMETER (87). */
     focus = load_u32(&g_runtime.operation_mode) ==
         (uint32_t)AZ_OPERATION_MODE_FILTER ? 1u : 0u;
     call_result = g_runtime.show_message_box(
