@@ -1618,34 +1618,23 @@ static int32_t find_live_descendant(
     return -1;
 }
 
-static uint32_t find_module_settings_ancestor(
-    uint32_t module_scene,
-    const uint16_t *module_list_id,
-    uint32_t *module_list)
+static uint32_t live_module_settings_controller_member(uint32_t offset)
 {
-    uint32_t current = module_scene;
-    uint32_t depth;
+    uint32_t controller = az_module_settings_live_controller();
+    uint32_t member = 0u;
 
-    if (module_list == NULL || module_list_id == NULL) {
+    if (controller == 0u || offset > UINT32_MAX - controller ||
+        filter_address_range_is_valid(
+            NULL,
+            (const void *)(uintptr_t)(controller + offset),
+            sizeof(member)) == 0u) {
         return 0u;
     }
-    *module_list = 0u;
-    for (depth = 0u; current != 0u && depth < 12u; ++depth) {
-        if (find_live_descendant(
-                current, module_list_id, module_list) >= 0) {
-            return current;
-        }
-        {
-            uint32_t parent = 0u;
-            if (g_runtime.xui_get_parent(current, &parent) < 0 ||
-                parent == 0u || parent == current) {
-                break;
-            }
-            current = parent;
-        }
-    }
-    *module_list = 0u;
-    return 0u;
+    memcpy(
+        &member,
+        (const void *)(uintptr_t)(controller + offset),
+        sizeof(member));
+    return member;
 }
 
 static uint8_t resolve_icon_xui(void)
@@ -1709,17 +1698,11 @@ static uint8_t resolve_icon_xui(void)
 
 static void module_ui_tick(void *context)
 {
-    static const uint16_t module_list_id[] = {
-        'M','o','d','u','l','e','L','i','s','t',0
-    };
     static const uint16_t title_id[] = {
         'T','i','t','l','e','P','r','e','s','e','n','t','e','r',0
     };
     static const uint16_t icon_id[] = {
         'I','c','o','n','P','r','e','s','e','n','t','e','r',0
-    };
-    static const uint16_t module_icon_id[] = {
-        'M','o','d','u','l','e','I','c','o','n',0
     };
     static const uint16_t expected_title[] = {
         'A','u','r','o','r','a',' ','A','-','Z',0
@@ -1739,12 +1722,12 @@ static void module_ui_tick(void *context)
         'C','u','r','r','e','n','t',' ','m','o','d','e',':',' ','F','i','l','t','e','r',0
     };
     uint32_t ticks;
-    uint32_t scene;
     uint32_t list = 0u;
     uint32_t item = 0u;
     uint32_t count;
     uint32_t module_scene;
     uint32_t scene_generation;
+    uint8_t xui_ready;
 
     (void)context;
     scene_generation = az_module_settings_scene_generation();
@@ -1756,11 +1739,13 @@ static void module_ui_tick(void *context)
         g_runtime.settings_dialog_active = 1u;
         g_runtime.settings_a_owned = 0u;
     }
-    if (module_scene == 0u) {
+    xui_ready = resolve_icon_xui();
+    if (module_scene == 0u || xui_ready == 0u ||
+        g_runtime.xui_has_focus(module_scene) != 1) {
         g_runtime.settings_dialog_active = 0u;
     }
     if (g_runtime.settings_dialog_active != 0u &&
-        resolve_icon_xui() != 0u) {
+        xui_ready != 0u) {
         uint32_t status_label = 0u;
         if (find_live_descendant(
                 module_scene, mode_status_id, &status_label) >= 0) {
@@ -1773,8 +1758,8 @@ static void module_ui_tick(void *context)
     }
     store_u32(
         &g_runtime.settings_resolve_result,
-        module_scene == 0u ? 3u :
-            (g_runtime.settings_dialog_active != 0u ? 1u : 5u));
+        xui_ready == 0u ? 2u : (module_scene == 0u ? 3u :
+            (g_runtime.settings_dialog_active != 0u ? 1u : 5u)));
     if (g_runtime.settings_dialog_active == 0u) {
         g_runtime.settings_a_owned = 0u;
     }
@@ -1794,17 +1779,19 @@ static void module_ui_tick(void *context)
         store_u32(&g_runtime.icon_apply_result, 3u);
         return;
     }
-    scene = find_module_settings_ancestor(
-        module_scene, module_list_id, &list);
-    if (scene == 0u || list == 0u) {
+    list = live_module_settings_controller_member(
+        AZ_REV1655_MODULE_LIST_HANDLE_OFFSET);
+    if (list == 0u) {
         store_u32(&g_runtime.icon_apply_result, 4u);
         return;
     }
     {
-        uint32_t module_icon = 0u;
-        if (find_live_descendant(
-                scene, module_icon_id, &module_icon) >= 0) {
-            (void)g_runtime.xui_set_image_path(module_icon, icon_path);
+        uint32_t module_icon = live_module_settings_controller_member(
+            AZ_REV1655_MODULE_ICON_HANDLE_OFFSET);
+        if (module_icon == 0u ||
+            g_runtime.xui_set_image_path(module_icon, icon_path) < 0) {
+            store_u32(&g_runtime.icon_apply_result, 7u);
+            return;
         }
     }
     if (g_runtime.xui_get_first_child(list, &item) < 0 || item == 0u) {

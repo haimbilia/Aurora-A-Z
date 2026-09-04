@@ -58,7 +58,10 @@ int main(void)
     CHECK(status.pending == 0u);
     CHECK(status.disabled == 0u);
     CHECK(az_module_settings_live_scene() == 0u);
+    CHECK(az_module_settings_live_controller() == 0u);
     CHECK(az_module_settings_scene_generation() == 0u);
+    az_module_settings_capture_controller(0x13572468u);
+    CHECK(az_module_settings_live_controller() == 0x13572468u);
     az_module_settings_capture_scene(0xAAAAAAAAu);
     CHECK(az_module_settings_live_scene() == 0u);
     CHECK(az_module_settings_take_mode_request(&mode) == 0u);
@@ -99,6 +102,7 @@ int main(void)
 
     az_module_settings_detour_begin_shutdown();
     CHECK(az_module_settings_live_scene() == 0u);
+    CHECK(az_module_settings_live_controller() == 0u);
     CHECK(az_module_settings_scene_generation() == 0u);
     CHECK(az_module_settings_request_mode(
         AZ_MODULE_SETTINGS_MODE_FILTER) == 0u);

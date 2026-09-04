@@ -11,6 +11,7 @@ typedef struct AzModuleSettingsBridge {
     volatile uint32_t requests_taken;
     volatile uint32_t capture_armed;
     volatile uint32_t live_scene;
+    volatile uint32_t live_controller;
     volatile uint32_t scene_generation;
 } AzModuleSettingsBridge;
 
@@ -50,6 +51,7 @@ void az_module_settings_detour_reset(void)
     __atomic_store_n(&g_settings_bridge.requests_taken, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.capture_armed, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.live_scene, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_settings_bridge.live_controller, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.scene_generation, 0u, __ATOMIC_RELEASE);
 }
 
@@ -59,6 +61,19 @@ void az_module_settings_detour_begin_shutdown(void)
     __atomic_store_n(&g_settings_bridge.pending_mode, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.capture_armed, 0u, __ATOMIC_RELEASE);
     __atomic_store_n(&g_settings_bridge.live_scene, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_settings_bridge.live_controller, 0u, __ATOMIC_RELEASE);
+}
+
+void az_module_settings_capture_controller(uint32_t controller)
+{
+    if (__atomic_load_n(
+            &g_settings_bridge.disabled, __ATOMIC_ACQUIRE) == 0u &&
+        controller != 0u) {
+        __atomic_store_n(
+            &g_settings_bridge.live_controller,
+            controller,
+            __ATOMIC_RELEASE);
+    }
 }
 
 const uint16_t *az_module_settings_scene_path(void)
@@ -114,6 +129,16 @@ uint32_t az_module_settings_live_scene(void)
     }
     return __atomic_load_n(
         &g_settings_bridge.live_scene, __ATOMIC_ACQUIRE);
+}
+
+uint32_t az_module_settings_live_controller(void)
+{
+    if (__atomic_load_n(
+            &g_settings_bridge.disabled, __ATOMIC_ACQUIRE) != 0u) {
+        return 0u;
+    }
+    return __atomic_load_n(
+        &g_settings_bridge.live_controller, __ATOMIC_ACQUIRE);
 }
 
 uint8_t az_module_settings_request_mode(uint32_t mode)

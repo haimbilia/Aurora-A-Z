@@ -15,6 +15,8 @@ extern "C" {
 #define AZ_REV1655_MODULE_SETTINGS_FIRST_INSTRUCTION 0x2F1E0001u
 #define AZ_REV1655_MODULE_SETTINGS_SCENE_FIRST_INSTRUCTION 0x807F0070u
 #define AZ_REV1655_NETDBG_MODULE_KEY 7u
+#define AZ_REV1655_MODULE_ICON_HANDLE_OFFSET 0x60u
+#define AZ_REV1655_MODULE_LIST_HANDLE_OFFSET 0x68u
 #define AZ_MODULE_SETTINGS_LABEL_LENGTH 10u
 #define AZ_MODULE_SETTINGS_MODE_BROWSE 0u
 #define AZ_MODULE_SETTINGS_MODE_FILTER 1u
@@ -29,8 +31,10 @@ typedef struct AzModuleSettingsDetourStatus {
 void az_module_settings_detour_reset(void);
 void az_module_settings_detour_begin_shutdown(void);
 const uint16_t *az_module_settings_scene_path(void);
+void az_module_settings_capture_controller(uint32_t controller);
 void az_module_settings_capture_scene(uint32_t scene);
 uint32_t az_module_settings_live_scene(void);
+uint32_t az_module_settings_live_controller(void);
 uint32_t az_module_settings_scene_generation(void);
 uint8_t az_module_settings_request_mode(uint32_t mode);
 uint8_t az_module_settings_take_mode_request(uint32_t *mode);

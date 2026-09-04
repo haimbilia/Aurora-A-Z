@@ -10,16 +10,6 @@
 <Height>570.000000</Height>
 <DefaultFocus>BrowseMode</DefaultFocus>
 </Properties>
-<XuiImage>
-<Properties>
-<Id>AuroraAZIcon</Id>
-<Width>48.000000</Width>
-<Height>48.000000</Height>
-<Position>45.000000,19.000000,0.000000</Position>
-<SizeMode>16</SizeMode>
-<ImagePath>file://game:/Data/AuroraAZ-icon.png</ImagePath>
-</Properties>
-</XuiImage>
 <XuiLabel>
 <Properties>
 <Id>ModeHeading</Id>

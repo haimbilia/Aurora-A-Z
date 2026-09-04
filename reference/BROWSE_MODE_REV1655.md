@@ -59,19 +59,22 @@ parallel with Aurora's native button navigation; A is consumed only while that
 captured page generation is active and queues the tracked mode to the worker.
 This avoids depending on generated XUR control IDs, which Aurora does not
 expose through the public descendant APIs. File I/O never occurs on the UI
-thread.
+thread. `XuiElementHasFocus` on the captured scene is the lifecycle gate: when
+focus returns to Aurora's module list, the page immediately stops owning A.
 
 At dispatcher entry, `r31` is Aurora's temporary loader stack frame—not a
 persistent controller. `XuiSceneCreate` writes the instantiated `HXUIOBJ` to
 the frame's `+0x70` output slot. A second exact-signature detour at
 `0x822C8C38` captures that handle immediately after creation and before the
 loader returns; retaining the stack address is invalid. The resource cache
-handle is only a template and must never be used for interaction. The embedded
-page draws the generated `AuroraAZ-icon.png` over the module header icon
-directly. Parent and child lookup remains a best-effort path for replacing
-Aurora's module-row and header artwork, using the standard
-`XuiElementGetParent`, `XuiElementGetChildById`,
-`XuiElementGetFirstChild`, and `XuiElementGetNext` exports.
+handle is only a template and must never be used for interaction. The entry
+detour also captures Aurora's verified module-controller pointer from `r26`.
+Rev1655's generated member bindings put `ModuleIcon` at controller `+0x60`,
+`ModuleList` at `+0x68`, and `ModuleHost` at `+0x78`; the corresponding binding
+routine is `0x822C9698`. The plugin replaces the header image through the
+direct `ModuleIcon` handle and walks the direct list handle to update Aurora
+A-Z's row presenter. Generated scene IDs remain only a best-effort path for
+status text and row descendants.
 
 Browse is the default. A saved choice is written as a tiny versioned file at
 `game:\Data\AuroraAZ.ini`; missing, torn, oversized, or unknown content falls
