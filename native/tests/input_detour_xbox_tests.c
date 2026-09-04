@@ -14,6 +14,7 @@ static uintptr_t browse_apply_gcm = (uintptr_t)0u;
 static uint32_t browse_apply_target = 0u;
 static uint32_t browse_apply_count = 0u;
 static uint8_t browse_apply_result = 1u;
+static uint32_t ui_tick_calls = 0u;
 
 static uint32_t dispatch_main(AzInputKeystroke *key);
 static void release_main(uint16_t virtual_key);
@@ -55,6 +56,12 @@ static uint8_t apply_browse_jump(
     browse_apply_target = target_index;
     browse_apply_count = item_count;
     return browse_apply_result;
+}
+
+static void ui_tick(void *context)
+{
+    CHECK(context == (void *)(uintptr_t)0x55AAu);
+    ++ui_tick_calls;
 }
 
 static AzInputKeystroke make_key(uint16_t virtual_key, uint16_t flags)
@@ -488,6 +495,21 @@ static void test_browse_jump_validation(void)
     CHECK(status.browse_jump_pending == 0u);
 }
 
+static void test_ui_tick_runs_only_on_main_poll(void)
+{
+    AzInputKeystroke key = make_key(0u, 0u);
+
+    az_rev1655_input_detour_reset();
+    ui_tick_calls = 0u;
+    az_rev1655_input_detour_configure_ui_tick(
+        &ui_tick, (void *)(uintptr_t)0x55AAu);
+    (void)dispatch_main(&key);
+    CHECK(ui_tick_calls == 1u);
+    (void)az_rev1655_input_detour_c(
+        0u, 0u, &key, AZ_REV1655_INPUT_DRAIN_RETURN_ADDRESS);
+    CHECK(ui_tick_calls == 1u);
+}
+
 int main(void)
 {
     test_stage_gates_and_observe();
@@ -499,6 +521,7 @@ int main(void)
     test_resident_return_layout_contract();
     test_browse_jump_runs_once_on_main_thread_poll();
     test_browse_jump_validation();
+    test_ui_tick_runs_only_on_main_poll();
     /* One-way shutdown must be the final test that resets global state. */
     test_shutdown_is_one_way_and_drains_owned_key();
 

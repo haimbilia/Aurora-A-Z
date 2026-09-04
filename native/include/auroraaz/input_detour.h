@@ -70,6 +70,7 @@ typedef uint8_t (*AzRev1655BrowseJumpApply)(
     uintptr_t game_content_manager,
     uint32_t target_index,
     uint32_t item_count);
+typedef void (*AzRev1655UiTick)(void *context);
 
 typedef struct AzInputDetourObservation {
     uint32_t serial;
@@ -179,6 +180,11 @@ void az_rev1655_input_detour_finish_filter_request(void);
 /* Configure before installing the input hook. Passing NULL disables jumps. */
 void az_rev1655_input_detour_configure_browse_jump(
     AzRev1655BrowseJumpApply apply,
+    void *context);
+
+/* Optional main-input-thread callback configured before hook publication. */
+void az_rev1655_input_detour_configure_ui_tick(
+    AzRev1655UiTick tick,
     void *context);
 
 /* Worker-thread producer; the callback itself runs on the next main poll. */

@@ -15,7 +15,8 @@ The production artifact and installed payload are strictly one self-contained fi
 `AuroraAZ.xex`. All runtime resources are embedded. Installation must not
 require Lua scripts, QuickViews, database records, loose assets, skin files,
 changes to `Aurora.xex`, or changes to `launch.ini`.
-The repository icon is release-page artwork only and is not copied to Aurora.
+The repository icon is the source artwork for the module identity. It is
+embedded in the XEX; installation never copies `icon.png` to the console.
 
 ## Required interaction
 

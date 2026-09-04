@@ -79,6 +79,9 @@ param(
         'AuroraAZ-M2a.bin',
         'AuroraAZ-M1.bin',
         'AuroraAZ-M1-worker.bin',
+        'AuroraAZ-M2b.bin',
+        'AuroraAZ-M3b-filter.bin',
+        'AuroraAZ-M3c-browse-settings.bin',
         'debug.log'
     ),
 

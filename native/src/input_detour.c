@@ -93,6 +93,8 @@ typedef struct AzInputDetourBridge {
     volatile uint32_t filter_queue_busy;
     AzRev1655BrowseJumpApply browse_jump_apply;
     void *browse_jump_context;
+    AzRev1655UiTick ui_tick;
+    void *ui_tick_context;
     volatile uint32_t browse_jump_pending;
     volatile uint32_t browse_jump_in_flight;
     volatile uint32_t browse_jump_gcm;
@@ -439,6 +441,8 @@ void az_rev1655_input_detour_reset(void)
     store_u32(&g_input_bridge.filter_queue_busy, 0u);
     g_input_bridge.browse_jump_apply = NULL;
     g_input_bridge.browse_jump_context = NULL;
+    g_input_bridge.ui_tick = NULL;
+    g_input_bridge.ui_tick_context = NULL;
     store_u32(&g_input_bridge.browse_jump_pending, 0u);
     store_u32(&g_input_bridge.browse_jump_in_flight, 0u);
     store_u32(&g_input_bridge.browse_jump_gcm, 0u);
@@ -732,6 +736,18 @@ void az_rev1655_input_detour_configure_browse_jump(
     g_input_bridge.browse_jump_apply = apply;
 }
 
+void az_rev1655_input_detour_configure_ui_tick(
+    AzRev1655UiTick tick,
+    void *context)
+{
+    if (shutdown_is_requested() != 0u ||
+        load_u32(&g_input_bridge.in_flight) != 0u) {
+        return;
+    }
+    g_input_bridge.ui_tick_context = context;
+    g_input_bridge.ui_tick = tick;
+}
+
 uint8_t az_rev1655_input_detour_publish_browse_jump(
     uintptr_t game_content_manager,
     uint32_t target_index,
@@ -888,6 +904,9 @@ uint32_t az_rev1655_input_detour_c(
     input_frame = increment_u32(&g_input_bridge.input_frame);
     update_coverflow_scope(input_frame);
     apply_pending_browse_jump();
+    if (shutdown_is_requested() == 0u && g_input_bridge.ui_tick != NULL) {
+        g_input_bridge.ui_tick(g_input_bridge.ui_tick_context);
+    }
 
     if (result != AZ_REV1655_INPUT_RESULT_SUCCESS) {
         (void)__atomic_sub_fetch(

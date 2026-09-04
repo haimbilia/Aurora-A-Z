@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 toolchain_root="${OPENXECHAIN_ROOT:-/opt/openxechain}"
 output_dir="${AURORAAZ_OUTPUT_DIR:-${repo_root}/build/native-xbox360}"
+embedded_icon_source="${output_dir}/auroraaz_embedded_icon.c"
 
 compiler="${toolchain_root}/bin/clang"
 packager="${toolchain_root}/bin/synthxex"
@@ -52,6 +53,8 @@ if [[ ! -x "${packager}" ]]; then
 fi
 
 mkdir -p "${output_dir}"
+python3 "${repo_root}/scripts/generate-embedded-icon.py" \
+    "${repo_root}/icon.png" "${embedded_icon_source}" --size 64
 
 export LIBRARY_PATH=""
 export C_INCLUDE_PATH=""
@@ -65,6 +68,7 @@ export CPLUS_INCLUDE_PATH=""
     -DAURORAAZ_XBOX360=1 \
     -DAURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN=1 \
     -I"${repo_root}/native/include" \
+    "${embedded_icon_source}" \
     "${m2a_sources[@]}" \
     -Wl,/dll \
     -Wl,/entry:DllMain \
