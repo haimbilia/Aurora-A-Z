@@ -11,19 +11,28 @@ typedef struct ProbeReport {
 } ProbeReport;
 static ProbeReport report = {0x415A5230u, 1u, 0u, 0xFFFFFFFFu, 0xFFFFFFFFu,
     {0u, 0u, 0u, 0u, 0u, 0u}};
-static char report_path[] = "game:\\probe-result.bin";
+static char report_path[] = "\\Device\\Harddisk0\\Partition1\\AuroraAZProbe\\probe-result.bin";
 static char probe_path[] = "game:\\AuroraAZ-boot-probe.xex";
 static char aurora_path[] = "Hdd:\\Aurora\\Aurora.xex";
 
 static int save_report(void)
 {
-    uint32_t written = 0u;
-    HANDLE file = CreateFileA(report_path, GENERIC_WRITE, FILE_SHARE_READ,
-        NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file == NULL || file == INVALID_HANDLE_VALUE) return 0;
-    (void)WriteFile(file, &report, sizeof(report), &written, NULL);
-    (void)CloseHandle(file);
-    return written == sizeof(report);
+    HANDLE file = NULL;
+    ANSI_STRING name = {(uint16_t)(sizeof(report_path) - 1u),
+        (uint16_t)sizeof(report_path), report_path};
+    OBJECT_ATTRIBUTES attributes = {0u, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK io = {0};
+    int64_t offset = 0;
+    /* Use a physical device path and synchronous kernel I/O. This does not
+     * depend on XAM's Win32 file wrappers or the current game: mount. */
+    NTSTATUS status = NtCreateFile(&file, 0x40100000u, &attributes, &io,
+        NULL, 0x80u, 3u, 5u, 0x60u);
+    if ((int32_t)status < 0 || file == NULL) return 0;
+    status = NtWriteFile(file, NULL, NULL, NULL, &io,
+        &report, (uint32_t)sizeof(report), &offset);
+    if ((int32_t)status >= 0) (void)NtFlushBuffersFile(file, &io);
+    (void)NtClose(file);
+    return (int32_t)status >= 0;
 }
 
 int main(void)

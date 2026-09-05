@@ -15,6 +15,17 @@ to `/Hdd1/Aurora/Plugins/AuroraAZ.failed-923e6ef`; installer Main.lua renamed
 to Main.disabled. All five HDD plugin slots are empty; Default still points
 to Hdd:\Aurora\Aurora.xex. User requests continued DashLaunch development.
 
+On-demand diagnostic build `f1ecd79` passed CI run `33955043811` and all
+26 host tests. Its probe and runner are staged and hash-verified in
+`/Hdd1/AuroraAZProbe/` (not a boot plugin or replacement dashboard).
+Nova POST /title/launch accepted the runner with HTTP 202 using curl multipart
+forms; PowerShell -Form was rejected with HTTP 400. Aurora was reachable again
+after ten seconds, but `probe-result.bin` was absent in both the runner folder
+and Aurora root. Do NOT count this as proof of probe DllMain execution. It is
+not yet known whether the title runner entered main, failed its first file
+write, or was rejected during launch. Logs are saved under
+`build/ci-artifacts/f1ecd79/`. No further boot plugin has been enabled.
+
 Next diagnostic is the separate `AuroraAZ-boot-probe.xex`, built by
 `scripts/build-dashlaunch-probe.sh`. It only updates a 24-byte `.azboot`
 record in DllMain. No threads, I/O, waits, Aurora calls or hooks. Packaged as
