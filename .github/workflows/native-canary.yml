@@ -236,7 +236,8 @@ jobs:
           python3 scripts/xex_exports.py validate \
             --pe "${output_dir}/AuroraAZ.dll" \
             --xex "${output_dir}/AuroraAZ.xex" \
-            --ordinals 2,3,4,5
+            --ordinals 2,3,4,5 \
+            --module-flags 0xA
 
           python3 - "${output_dir}/AuroraAZ.xex" <<'PY'
           from pathlib import Path

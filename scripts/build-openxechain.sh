@@ -110,12 +110,14 @@ python3 "${repo_root}/scripts/xex_exports.py" prepare-pe \
 python3 "${repo_root}/scripts/xex_exports.py" finalize-xex \
     --pe "${output_dir}/AuroraAZ.dll" \
     --xex "${output_dir}/AuroraAZ.xex" \
-    --ordinals 2,3,4,5
+    --ordinals 2,3,4,5 \
+    --module-flags 0xA
 
 python3 "${repo_root}/scripts/xex_exports.py" validate \
     --pe "${output_dir}/AuroraAZ.dll" \
     --xex "${output_dir}/AuroraAZ.xex" \
-    --ordinals 2,3,4,5
+    --ordinals 2,3,4,5 \
+    --module-flags 0xA
 
 (cd "${output_dir}" && sha256sum "AuroraAZ.xex" > "AuroraAZ.xex.sha256")
 
