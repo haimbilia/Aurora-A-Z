@@ -222,6 +222,19 @@ jobs:
           AURORAAZ_IMAGE_DUMP_OUTPUT_DIR: ${{ github.workspace }}/build/native-xbox360-image-dump
         run: bash scripts/build-image-dump-canary.sh
 
+      - name: Build memory-only DashLaunch startup probe
+        env:
+          OPENXECHAIN_ROOT: ${{ runner.temp }}/openxechain-prefix
+        run: bash scripts/build-dashlaunch-probe.sh
+
+      - name: Upload DashLaunch startup probe
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: AuroraAZ-boot-probe-${{ github.sha }}
+          path: build/dashlaunch-probe/*
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Validate runtime artifact
         run: |
           output_dir="${GITHUB_WORKSPACE}/build/native-xbox360"

@@ -2,6 +2,26 @@
 
 ## Current DashLaunch investigation — 2026-09-05
 
+STOP DEPLOYMENT: build `923e6ef` caused startup to hang after full reboot.
+FTP port 21 is unreachable. Recovery takes priority: bypass DashLaunch plugins
+on boot, then disable `Plugins\AuroraAZ.xex` and its plugin1 entry. The Utility
+installer also contains this failing payload and must be disabled before use.
+Host tests and CI passed but did not establish hardware boot safety.
+
+Recovery completed via USB override. HDD launch.ini was downloaded, only its
+AuroraAZ plugin1 value cleared, staged, and read back with a matching hash.
+Old configuration: `/Hdd1/launch.ini.pre-az-recovery`. Failed binary renamed
+to `/Hdd1/Aurora/Plugins/AuroraAZ.failed-923e6ef`; installer Main.lua renamed
+to Main.disabled. All five HDD plugin slots are empty; Default still points
+to Hdd:\Aurora\Aurora.xex. User requests continued DashLaunch development.
+
+Next diagnostic is the separate `AuroraAZ-boot-probe.xex`, built by
+`scripts/build-dashlaunch-probe.sh`. It only updates a 24-byte `.azboot`
+record in DllMain. No threads, I/O, waits, Aurora calls or hooks. Packaged as
+sysdll at preferred base 0x91D00000; JSON gives status RVA for a later external
+memory read (add actual module base if relocated). It is NOT the selector.
+Do not substitute the full failed runtime or re-enable its installer.
+
 User confirmed a full console reboot with system-DLL build `84cad88`; R3
 remains inactive and no fresh M2a startup marker appeared. Earlier telemetry
 was stale. Container type alone is not an established cause of this failure.

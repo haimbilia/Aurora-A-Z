@@ -111,6 +111,11 @@ if(BUILD_TESTING)
             AURORAAZ_REV1655_THREAD_TEST=1
             AURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN=1)
 
+    add_executable(auroraaz_dashlaunch_probe_tests
+        tests/dashlaunch_probe_tests.c src/dashlaunch_probe.c)
+    target_include_directories(auroraaz_dashlaunch_probe_tests PRIVATE include)
+    add_test(NAME auroraaz_dashlaunch_probe_tests COMMAND auroraaz_dashlaunch_probe_tests)
+
     add_executable(auroraaz_dashlaunch_bootstrap_tests
         tests/netdbg_bootstrap_tests.c src/netdbg_bootstrap.c src/netdbg_m2a_exports.c)
     target_include_directories(auroraaz_dashlaunch_bootstrap_tests
