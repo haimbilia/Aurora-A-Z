@@ -1,5 +1,14 @@
 # Skin-agnostic architecture decision
 
+## v1.0 status (2026-09-05)
+
+The NetDbg title-DLL loader, coverflow overlay, Browse/Filter modes and normal
+title launching have passed hardware testing. Installation is the single XEX
+at `Plugins\NetDbgDll.xex`; launch.ini is untouched. Hold R3 to select and use
+R3+L3 for saved mode switching with a five-second corner notification. Module
+settings radio UI and icon remain deferred. The earlier feasibility questions
+below are historical; see README and HANDOFF for current release instructions.
+
 ## Decision
 
 Aurora A-Z will be implemented as a runtime extension for Aurora 0.7b.2

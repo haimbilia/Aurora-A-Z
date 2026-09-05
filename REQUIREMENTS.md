@@ -164,10 +164,9 @@ reaches `#` in Browse mode.
    third-party skin. The controls and filtering behavior remain identical.
 9. Compare the selected skins before and after installation and removal. No
    `.xzp` file or file under `Skins` has changed.
-10. Install `AuroraAZ.xex` under `Plugins\AuroraAZ.xex` with an empty
-    DashLaunch plugin slot, then remove that entry and the XEX. Verify that the
-    installer backed up `launch.ini`, did not replace another plugin slot, and
-    did not modify skins, database records, or `Aurora.xex`.
+10. Install the release XEX as `Plugins\NetDbgDll.xex`, backing up an existing
+    debugger file first. Remove it and restore that backup to uninstall. Verify
+    launch.ini, skins, database records, and `Aurora.xex` remain unchanged.
 11. Press A during normal coverflow use and verify Aurora receives it unchanged;
     Aurora A-Z must neither apply a letter nor consume the key.
 12. Press and release R3 without any Left/Right input. The row appears and
