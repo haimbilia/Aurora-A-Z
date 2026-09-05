@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 LABELS = ("ALL", "#", *tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 ROW_TEXT = " ".join(LABELS)
 ATLAS_WIDTH = 1024
-ATLAS_HEIGHT = 64
+ATLAS_HEIGHT = 128
 FONT_SIZE = 39
 BASELINE = 48
 EXPECTED_FONT_SHA256 = (
@@ -74,8 +74,12 @@ extern "C" {
 #endif
 
 #define AZ_GLYPH_ATLAS_WIDTH 1024u
-#define AZ_GLYPH_ATLAS_HEIGHT 64u
-#define AZ_GLYPH_ATLAS_PIXEL_COUNT 65536u
+#define AZ_GLYPH_ATLAS_HEIGHT 128u
+#define AZ_GLYPH_ATLAS_PIXEL_COUNT 131072u
+#define AZ_MODE_NOTICE_WIDTH 192u
+#define AZ_MODE_NOTICE_HEIGHT 40u
+#define AZ_MODE_NOTICE_Y 72u
+#define AZ_MODE_NOTICE_FILTER_X 256u
 #define AZ_GLYPH_ATLAS_GLYPH_COUNT 28u
 #define AZ_GLYPH_ATLAS_ROW_ADVANCE 998u
 #define AZ_GLYPH_ATLAS_TEXT_TOP 20u
@@ -202,6 +206,9 @@ def main() -> None:
     image = Image.new("L", (ATLAS_WIDTH, ATLAS_HEIGHT), 0)
     draw = ImageDraw.Draw(image)
     draw.text((0, BASELINE), ROW_TEXT, font=font, fill=255, anchor="ls")
+    notice_font = ImageFont.truetype(str(args.font), 28)
+    draw.text((0, 104), "Browse Mode", font=notice_font, fill=255, anchor="ls")
+    draw.text((256, 104), "Filter Mode", font=notice_font, fill=255, anchor="ls")
     draw.rectangle(
         (SOLID_X, SOLID_Y, SOLID_X + SOLID_SIZE - 1, SOLID_Y + SOLID_SIZE - 1),
         fill=255,

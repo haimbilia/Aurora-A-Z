@@ -40,17 +40,18 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    for (index = 0u; index < AZ_GLYPH_ATLAS_PIXEL_COUNT; ++index) {
+    /* The original alphabet pixels must remain byte-for-byte unchanged. */
+    for (index = 0u; index < 65536u; ++index) {
         if (pixels[index] != 0u) {
             ++nonzero;
         }
         sum += (uint32_t)pixels[index];
     }
 
-    if (az_glyph_atlas_rle_size() != 13438u ||
+    if (az_glyph_atlas_rle_size() != 19008u ||
         nonzero != 6478u ||
         sum != 1144023u ||
-        fnv1a(pixels, AZ_GLYPH_ATLAS_PIXEL_COUNT) != 0xF067A02Eu ||
+        fnv1a(pixels, 65536u) != 0xF067A02Eu ||
         g_az_glyph_atlas_glyphs[0].source_x != 0u ||
         g_az_glyph_atlas_glyphs[0].advance != 66u ||
         g_az_glyph_atlas_glyphs[1].source_x != 76u ||

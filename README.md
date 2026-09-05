@@ -1,5 +1,12 @@
 # Aurora A-Z
 
+> Deployment update — 2026-09-05: production is returning to the NetDbg
+> loader using build `266e680`, copied as `Aurora\Plugins\NetDbgDll.xex`.
+> No launch.ini entry is needed. DashLaunch development and its installer
+> are suspended; do not follow the historical DashLaunch instructions below
+> or install the current CI DashLaunch payload. Reboot testing of the restored
+> NetDbg build is pending. See HANDOFF.md for the verified artifact hash.
+
 <p align="center">
   <img src="icon.png" alt="Aurora A-Z icon" width="180">
 </p>

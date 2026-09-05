@@ -8,14 +8,15 @@
 extern "C" {
 #endif
 
-#define AZ_OVERLAY_MAX_QUADS 11u
+#define AZ_OVERLAY_MAX_QUADS 13u
 
 typedef enum AzOverlayLayer {
     AZ_OVERLAY_LAYER_DIM = 0,
     AZ_OVERLAY_LAYER_SHADOW,
     AZ_OVERLAY_LAYER_ROW,
     AZ_OVERLAY_LAYER_SELECTED_SHADOW,
-    AZ_OVERLAY_LAYER_SELECTED
+    AZ_OVERLAY_LAYER_SELECTED,
+    AZ_OVERLAY_LAYER_NOTICE
 } AzOverlayLayer;
 
 typedef struct AzOverlayQuad {

@@ -106,6 +106,8 @@ typedef struct AzOverlayDrawRequest {
     float exit_animation_progress;
     /* Must come from a proven Aurora scene/modal predicate. */
     uint8_t proven_modal_clear;
+    /* 0: hidden, 1: Browse Mode, 2: Filter Mode. */
+    uint8_t mode_notice;
 } AzOverlayDrawRequest;
 
 typedef struct AzOverlayFontVertex {

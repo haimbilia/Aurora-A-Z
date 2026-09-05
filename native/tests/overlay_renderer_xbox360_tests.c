@@ -329,6 +329,25 @@ int main(void)
 
     request.viewport_width = 1280.0f;
     request.viewport_height = 720.0f;
+    /* Notice must render alone after R3 release, without a dimming quad. */
+    for (request.mode_notice = 1u; request.mode_notice <= 2u;
+         ++request.mode_notice) {
+        reset_draw_capture();
+        if (az_overlay_renderer_note_render_menu(&renderer, g_manager, 0) !=
+                AZ_OVERLAY_RENDERER_OK ||
+            az_overlay_renderer_try_draw(&renderer, &request) !=
+                AZ_OVERLAY_RENDERER_OK || g_draw_count != 2u) {
+            return EXIT_FAILURE;
+        }
+    }
+    request.mode_notice = 0u;
+    reset_draw_capture();
+    if (az_overlay_renderer_note_render_menu(&renderer, g_manager, 0) !=
+            AZ_OVERLAY_RENDERER_OK ||
+        az_overlay_renderer_try_draw(&renderer, &request) !=
+            AZ_OVERLAY_RENDERER_OK || g_draw_count != 0u) {
+        return EXIT_FAILURE;
+    }
     request.selector_active = 1u;
 
     for (row = 0u; row < AZ_GLYPH_ATLAS_HEIGHT; ++row) {

@@ -77,7 +77,6 @@ export CPLUS_INCLUDE_PATH=""
     -fno-zero-initialized-in-bss \
     -Wall -Wextra -Werror \
     -DAURORAAZ_XBOX360=1 \
-    -DAURORAAZ_DASHLAUNCH_PLUGIN=1 \
     -DAURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN=1 \
     -I"${repo_root}/native/include" \
     "${embedded_icon_source}" \
@@ -99,10 +98,9 @@ python3 "${repo_root}/scripts/xex_exports.py" prepare-pe \
     --pe "${output_dir}/AuroraAZ.dll" \
     --ordinals 2,3,4,5
 
-# DashLaunch candidate uses a system DLL. Container validation alone does
-# not establish that the console entered DllMain or initialized the runtime.
+# Aurora loads the plugin through its NetDbg title-DLL slot.
 "${packager}" \
-    -t sysdll \
+    -t titledll \
     -i "${output_dir}/AuroraAZ.dll" \
     -o "${output_dir}/AuroraAZ.xex"
 
@@ -110,13 +108,13 @@ python3 "${repo_root}/scripts/xex_exports.py" finalize-xex \
     --pe "${output_dir}/AuroraAZ.dll" \
     --xex "${output_dir}/AuroraAZ.xex" \
     --ordinals 2,3,4,5 \
-    --module-flags 0xA
+    --module-flags 0x9
 
 python3 "${repo_root}/scripts/xex_exports.py" validate \
     --pe "${output_dir}/AuroraAZ.dll" \
     --xex "${output_dir}/AuroraAZ.xex" \
     --ordinals 2,3,4,5 \
-    --module-flags 0xA
+    --module-flags 0x9
 
 (cd "${output_dir}" && sha256sum "AuroraAZ.xex" > "AuroraAZ.xex.sha256")
 

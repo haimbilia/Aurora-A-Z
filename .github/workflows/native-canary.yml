@@ -250,7 +250,7 @@ jobs:
             --pe "${output_dir}/AuroraAZ.dll" \
             --xex "${output_dir}/AuroraAZ.xex" \
             --ordinals 2,3,4,5 \
-            --module-flags 0xA
+            --module-flags 0x9
 
           python3 - "${output_dir}/AuroraAZ.xex" <<'PY'
           from pathlib import Path

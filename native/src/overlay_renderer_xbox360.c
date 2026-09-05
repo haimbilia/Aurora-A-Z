@@ -577,13 +577,39 @@ static int prepare_model(
         request->exit_animation_progress,
         model);
 
-    if (model->count < 3u || model->count > AZ_OVERLAY_MAX_QUADS ||
+    if (model->count != 0u && (model->count < 3u || model->count > AZ_OVERLAY_MAX_QUADS ||
         model->quads[0].layer != AZ_OVERLAY_LAYER_DIM ||
         model->quads[model->count - 2u].layer !=
             AZ_OVERLAY_LAYER_SELECTED_SHADOW ||
         model->quads[model->count - 1u].layer !=
-            AZ_OVERLAY_LAYER_SELECTED) {
+            AZ_OVERLAY_LAYER_SELECTED)) {
         return 0;
+    }
+
+    if (request->mode_notice != 0u) {
+        AzOverlayQuad notice;
+        /* Bottom-right safe area, independent of the alphabet row. */
+        if (model->count > AZ_OVERLAY_MAX_QUADS - 2u) {
+            return 0;
+        }
+        notice.x = 1232.0f - (request->mode_notice == 2u ? 137.0f : 168.0f);
+        notice.y = 640.0f;
+        notice.width = request->mode_notice == 2u ? 137.0f : 168.0f;
+        notice.height = (float)AZ_MODE_NOTICE_HEIGHT;
+        notice.source_x = request->mode_notice == 2u ?
+            (float)AZ_MODE_NOTICE_FILTER_X : 0.0f;
+        notice.source_y = (float)AZ_MODE_NOTICE_Y;
+        notice.source_width = notice.width;
+        notice.source_height = notice.height;
+        notice.layer = AZ_OVERLAY_LAYER_NOTICE;
+        notice.color = 0xD0000000u;
+        notice.x += 2.0f;
+        notice.y += 2.0f;
+        model->quads[model->count++] = notice;
+        notice.x -= 2.0f;
+        notice.y -= 2.0f;
+        notice.color = 0xFFFFFFFFu;
+        model->quads[model->count++] = notice;
     }
 
     for (index = 0u; index < model->count; ++index) {
@@ -890,6 +916,7 @@ AzOverlayRendererResult az_overlay_renderer_try_draw(
         goto draw_done;
     }
     if (request->proven_modal_clear != 1u ||
+        request->mode_notice > 2u ||
         request->selector_active > 1u ||
         request->selection_animation_active > 1u ||
         request->exit_animation_active > 1u ||
@@ -917,7 +944,8 @@ AzOverlayRendererResult az_overlay_renderer_try_draw(
         goto draw_done;
     }
     if (request->selector_active == 0u &&
-        request->exit_animation_active == 0u) {
+        request->exit_animation_active == 0u &&
+        request->mode_notice == 0u) {
         result = AZ_OVERLAY_RENDERER_OK;
         goto draw_done;
     }

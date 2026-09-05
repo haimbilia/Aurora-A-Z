@@ -180,6 +180,7 @@ typedef struct AzRev1655Runtime {
     uint8_t settings_dialog_active;
     uint8_t settings_a_owned;
     uint8_t mode_toggle_l3_owned;
+    volatile uint32_t mode_notice_stamp;
     uint8_t settings_preview_active;
     uint8_t settings_preview_mode;
     uint32_t settings_scene_generation_seen;
@@ -2307,6 +2308,14 @@ static void apply_operation_mode(AzOperationMode mode)
         DbgPrint("AuroraAZ: could not persist operation mode\n");
     }
     store_u32(&g_runtime.operation_mode, (uint32_t)mode);
+    {
+        int64_t now;
+        KeQuerySystemTime(&now);
+        /* Timestamp and label published together; zero means no notice. */
+        store_u32(&g_runtime.mode_notice_stamp,
+            (((uint32_t)(now / 10000) & ~3u) |
+             (mode == AZ_OPERATION_MODE_FILTER ? 2u : 1u)));
+    }
     az_rev1655_input_detour_set_first_selectable_index(
         mode == AZ_OPERATION_MODE_BROWSE ? 1u : 0u);
     store_u32(
@@ -3222,6 +3231,20 @@ static void retain_published_hooks_fail_closed(uint8_t render_verified)
         (uint32_t)AZ_REV1655_RUNTIME_RUNNING);
 }
 
+static AzOverlayRendererResult draw_overlay_with_mode_notice(
+    AzOverlayRenderer *renderer, const AzOverlayDrawRequest *request)
+{
+    AzOverlayDrawRequest decorated = *request;
+    const uint32_t stamp = load_u32(&g_runtime.mode_notice_stamp);
+    int64_t now;
+    KeQuerySystemTime(&now);
+    if (stamp != 0u &&
+        (uint32_t)((uint32_t)(now / 10000) - (stamp & ~3u)) < 5000u) {
+        decorated.mode_notice = (uint8_t)(stamp & 3u);
+    }
+    return az_overlay_renderer_try_draw(renderer, &decorated);
+}
+
 static AzRev1655RuntimeResult start_overlay_canary(void)
 {
     AzRev1655LoadedImage image;
@@ -3311,7 +3334,7 @@ static AzRev1655RuntimeResult start_overlay_canary(void)
     bindings.renderer = &g_runtime.renderer;
     bindings.note_overlay = &az_overlay_renderer_note_render_menu;
     bindings.note_input = &az_rev1655_input_detour_note_render;
-    bindings.try_draw = &az_overlay_renderer_try_draw;
+    bindings.try_draw = &draw_overlay_with_mode_notice;
     bindings.release_texture = &az_overlay_renderer_release_texture;
     bindings.snapshot_selector =
         &az_rev1655_input_detour_snapshot_selector;

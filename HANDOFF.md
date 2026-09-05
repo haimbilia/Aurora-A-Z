@@ -1,6 +1,23 @@
 # Aurora A-Z — Handoff
 
-## Current DashLaunch investigation — 2026-09-05
+## Return to NetDbg — 2026-09-05 (supersedes deployment notes below)
+
+User requested abandoning DashLaunch for now and returning to NetDbg.
+Restore artifact: `build/ci-artifacts/266e680/runtime/AuroraAZ.xex`, the
+last pre-DashLaunch build with R3+L3 mode switching. SHA-256:
+`44D481FBDA11FACCF880B33D8CF2ED0A2330CDDE38894B9DCF29C2B1B418D6E9`.
+Deployed: `/Hdd1/Aurora/Plugins/NetDbgDll.xex`. Both staged and active FTP
+roundtrip hashes matched. Fresh reboot and hardware acceptance are still required.
+All five HDD launch.ini plugin slots were checked empty; no edit needed.
+Keep the failed DashLaunch payload and installer disabled. Current source/CI
+still builds DashLaunch experiments: do not deploy those as NetDbg artifacts.
+User confirmed the restored build works. Module radio UI and icon bugs remain
+deferred. New polishing change: bottom-right Browse Mode / Filter Mode notice,
+five seconds from mode change, independent of R3 release. Build script now
+uses the NetDbg title-DLL path again. Do not use the historical DashLaunch
+installer; this update is a direct plugin replacement only.
+
+## Historical DashLaunch investigation — 2026-09-05
 
 STOP DEPLOYMENT: build `923e6ef` caused startup to hang after full reboot.
 FTP port 21 is unreachable. Recovery takes priority: bypass DashLaunch plugins
