@@ -39,6 +39,10 @@ functional unless it satisfies every acceptance criterion below on Aurora
   or other Aurora A-Z-owned records in the user's database.
 - v1.0 uses the Network Debugger slot. Never enable the experimental DashLaunch
   route alongside it. DashLaunch installers are not part of v1.0.
+- The Aurora Script-menu installer is the primary installation method. Its
+  package includes Main.lua, the single XEX payload and icon.png. It stages the
+  payload before renaming an existing plugin to an unused backup filename,
+  attempts rollback if activation fails, and asks for a manual console reboot.
 
 ## Mode notification
 

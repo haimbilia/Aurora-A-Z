@@ -4,10 +4,18 @@ Skin-independent alphabetical browsing and filtering for Aurora 0.7b.2 Rev1655.
 
 ## Install
 
-Download `AuroraAZ.xex`, rename it to `NetDbgDll.xex`, and copy it to your
-Aurora `Plugins` folder. Back up any existing file first, then reboot.
-No launch.ini edits. The Network Debugger and Aurora A-Z cannot share this slot.
-Experimental DashLaunch installers are not included or supported in v1.0.
+Download `AuroraAZ-v1.0-Installer.zip`. Extract and copy `AuroraAZInstaller` to
+`Hdd1:\Aurora\User\Scripts\Utility\`, keeping Main.lua, AuroraAZ.xex and icon.png
+together. Open Aurora's Scripts menu, press X to refresh, launch **Install
+Aurora A-Z** under Utility and choose **Install**. Reboot the console manually.
+
+The script stages the plugin, renames an existing NetDbgDll.xex to an unused
+backup name, and installs the payload into Aurora's Plugins folder. No launch.ini
+or skin changes, no automatic restart. The Network Debugger and Aurora A-Z cannot
+share this slot. This package replaces the experimental DashLaunch installer.
+
+Manual alternative: back up the existing plugin, copy the standalone
+`AuroraAZ.xex` as `Aurora\Plugins\NetDbgDll.xex`, then reboot.
 
 ## Use
 

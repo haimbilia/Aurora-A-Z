@@ -7,7 +7,9 @@
 - Hold R3 to select; held navigation, wrapping and last-letter memory.
 - Saved Browse/Filter modes switched with R3+L3, with a five-second mode notice.
 - Filter-only ALL preserves the current QuickView.
-- Module radio UI and icon remain deferred. Experimental installers are excluded.
+- Aurora Script-menu installer with icon, staging, unique backups and rollback
+  on activation failure. Manual reboot avoids the script restart black-screen issue.
+- Module radio UI and icon remain deferred. DashLaunch installers are excluded.
 - Binary from `f0ff432`, CI `33956736531`; 26 host tests passed and the user
   confirmed this build on production hardware.
 

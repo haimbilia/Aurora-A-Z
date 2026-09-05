@@ -7,14 +7,20 @@ Jump through large game libraries or filter by letter—without changing skins.
 
 ## Install
 
-1. Download `AuroraAZ.xex` from the release.
-2. Rename it to `NetDbgDll.xex` and copy it into your Aurora `Plugins` folder:
-   `Hdd1:\Aurora\Plugins\NetDbgDll.xex`.
-3. Reboot the console.
+1. Download and extract `AuroraAZ-v1.0-Installer.zip`.
+2. Copy the `AuroraAZInstaller` folder to
+   `Hdd1:\Aurora\User\Scripts\Utility\` (keep all three files together).
+3. Open Aurora's **Scripts** menu, refresh with **X**, and launch
+   **Install Aurora A-Z** under Utility. Choose **Install**.
+4. Reboot the console manually when installation finishes.
 
-Back up any existing `NetDbgDll.xex` first. Aurora A-Z uses the Network Debugger
-slot, so the two cannot run together. **No launch.ini edits or DashLaunch plugin
-entry are needed.** Do not use the experimental DashLaunch installers with v1.0.
+The script installs the plugin as `Aurora\Plugins\NetDbgDll.xex`, renaming any
+existing file to a backup (with a numbered suffix if needed). Its menu icon is
+included. **No launch.ini edits or skin changes.** The Network Debugger and
+Aurora A-Z cannot run together. Older DashLaunch installers are unsupported.
+
+Manual alternative: rename the standalone `AuroraAZ.xex` to `NetDbgDll.xex`,
+back up any existing file, copy it into Aurora's `Plugins` folder, and reboot.
 
 ## Controls
 

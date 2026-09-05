@@ -6,8 +6,11 @@ User confirmed `f0ff432` works, including the five-second mode notification.
 v1.0 ships that exact hardware-tested binary, SHA-256
 `FD928EBB0490966BB232C1E199D650D31B8483B11A7C8EE8C827E1ED1A26F1D7`.
 Installation and supported controls are in the concise README. NetDbg is the
-current loader, not DashLaunch. No installer is shipped in v1.0; older installer
-sources/artifacts are experimental and must not be used for this release.
+current loader, not DashLaunch. v1.0 includes AuroraAZ-v1.0-Installer.zip: copy
+AuroraAZInstaller to User/Scripts/Utility, launch it in Aurora's Scripts menu,
+then reboot manually. Main.lua scriptVersion 3 restores the NetDbg installer,
+uses unused backup names (no old backup deletion), and rolls back failed activation.
+The plugin bytes are unchanged. Older DashLaunch installers remain unsupported.
 Module radio UI and icon remain deferred. Historical notes below are evidence,
 not current user instructions. The uncommitted SynthXEX title-TLS experiment
 was not used to build the released binary and remains outside the release.
