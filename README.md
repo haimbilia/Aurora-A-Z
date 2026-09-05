@@ -15,8 +15,8 @@ Jump through large game libraries or filter by letter—without changing skins.
 4. Reboot the console manually when installation finishes.
 
 The script installs the plugin as `Aurora\Plugins\NetDbgDll.xex`, renaming any
-existing file to a backup (with a numbered suffix if needed). Its menu icon is
-included. **No launch.ini edits or skin changes.** The Network Debugger and
+existing file to a backup (with a numbered suffix if needed).
+**No launch.ini edits or skin changes.** The Network Debugger and
 Aurora A-Z cannot run together. Older DashLaunch installers are unsupported.
 
 Manual alternative: rename the standalone `AuroraAZ.xex` to `NetDbgDll.xex`,
