@@ -22,3 +22,24 @@ __pycache__/
 
 # VS Code workspace state
 .vscode/*.log
+
+# Local engineering history and console investigation tools (not distribution)
+/.vscode/
+/ARCHITECTURE.md
+/CHANGELOG.md
+/HANDOFF.md
+/IMPLEMENTATION_PLAN.md
+/RELEASE_NOTES_*.md
+/REQUIREMENTS.md
+/native/README.md
+/reference/
+/research/
+/source/utility/AuroraAZApiDump/
+/scripts/capture-nova.ps1
+/scripts/invoke-auroraaz-lab.ps1
+/scripts/verify-nova-canary.ps1
+/scripts/verify-scene-gate-rev1655.py
+/scripts/xzp.ps1
+/scripts/decode-m3c.py
+/*.bmp
+/*.jpg

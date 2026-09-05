@@ -43,4 +43,10 @@ Module settings radio UI and the module icon remain unfinished; use R3+L3.
 To uninstall, remove this plugin's `NetDbgDll.xex`, restore any original debugger
 file you backed up, and reboot. Skins and `Aurora.xex` are untouched.
 
-[Changelog](CHANGELOG.md) · [Technical docs](HANDOFF.md)
+## Build
+
+Host tests: `cmake -S native -B build/host`, then `cmake --build build/host`
+and `ctest --test-dir build/host`. Xbox builds use the **Native runtime** GitHub
+workflow or `scripts/build-openxechain.sh` with OpenXeChain installed.
+
+Release notes and downloads are on [GitHub Releases](https://github.com/haimbilia/Aurora-A-Z/releases).
