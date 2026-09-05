@@ -87,7 +87,44 @@ static uint32_t observed_ordinal4_export;
 static TestWorker pending_worker;
 static void *pending_worker_context;
 static AzRev1655RuntimeStage observed_stage;
-static TestM2aMarker observed_markers[2];
+static TestM2aMarker observed_markers[8];
+#if defined(AURORAAZ_DASHLAUNCH_PLUGIN)
+static uint32_t kernel_create_calls, resume_calls, delay_calls, admission_calls;
+static TestWorker kernel_worker;
+static void (*kernel_startup)(TestWorker, void *);
+NTSTATUS ExCreateThread(HANDLE *handle, uint32_t stack, uint32_t *id,
+    void *startup, void *entry, void *context, uint32_t flags)
+{
+    CHECK(stack == 0x10000u && id == NULL && context == NULL && flags == 2u);
+    CHECK(wrapper_calls == 0u && admission_calls == 0u);
+    ++kernel_create_calls;
+    kernel_worker = (TestWorker)(uintptr_t)entry;
+    kernel_startup = (void (*)(TestWorker, void *))(uintptr_t)startup;
+    *handle = (HANDLE)(uintptr_t)0x1234u;
+    return 0;
+}
+NTSTATUS NtResumeThread(HANDLE handle, uint32_t *count)
+{
+    CHECK(handle == (HANDLE)(uintptr_t)0x1234u && count == NULL);
+    ++resume_calls;
+    return 0;
+}
+NTSTATUS ExTerminateThread(uint32_t result) { CHECK(result == 0u); return 0; }
+NTSTATUS KeDelayExecutionThread(uint32_t mode, uint32_t alert, int64_t *interval)
+{
+    CHECK(mode == 0u && alert == 0u && *interval == -5000000LL);
+    ++delay_calls;
+    return 0;
+}
+AzRev1655RuntimeResult az_rev1655_runtime_pin_dashlaunch_module(uint32_t address)
+{
+    CHECK(address != 0u);
+    ++admission_calls;
+    if (admission_calls < 4u) return AZ_REV1655_RUNTIME_LIFETIME_REJECTED;
+    runtime_pin_calls = 1u;
+    return AZ_REV1655_RUNTIME_OK;
+}
+#endif
 
 AzHookArenaDiagnostics az_hook_arena_diagnostics(void)
 {
@@ -145,7 +182,11 @@ HANDLE CreateFileA(
     uint32_t flags_and_attributes,
     HANDLE template_file)
 {
+#if defined(AURORAAZ_DASHLAUNCH_PLUGIN)
+    CHECK(strcmp(path, "Hdd:\\Aurora\\Data\\Logs\\AuroraAZ-M2a.bin") == 0);
+#else
     CHECK(strcmp(path, "game:\\Data\\Logs\\AuroraAZ-M2a.bin") == 0);
+#endif
     CHECK(desired_access == GENERIC_WRITE);
     CHECK(share_mode == FILE_SHARE_READ);
     CHECK(security_attributes == NULL);
@@ -168,8 +209,8 @@ int WriteFile(
     CHECK(bytes_to_write == (uint32_t)sizeof(TestM2aMarker));
     CHECK(bytes_written != NULL);
     CHECK(overlapped == NULL);
-    CHECK(marker_write_calls < 2u);
-    if (marker_write_calls < 2u) {
+    CHECK(marker_write_calls < 8u);
+    if (marker_write_calls < 8u) {
         memcpy(
             &observed_markers[marker_write_calls],
             buffer,
@@ -209,6 +250,21 @@ void az_rev1655_runtime_request_shutdown(void)
 
 int main(void)
 {
+#if defined(AURORAAZ_DASHLAUNCH_PLUGIN)
+    CHECK(DllMain(NULL, 1u, NULL) == 1);
+    CHECK(DllMain(NULL, 1u, NULL) == 1);
+    CHECK(kernel_create_calls == 1u && resume_calls == 1u);
+    CHECK(wrapper_calls == 0u && runtime_start_calls == 0u);
+    CHECK(kernel_startup != NULL && kernel_worker != NULL);
+    kernel_startup(kernel_worker, NULL);
+    CHECK(delay_calls == 3u && admission_calls == 4u);
+    CHECK(wrapper_calls == 1u && runtime_start_calls == 0u);
+    CHECK(pending_worker != NULL);
+    CHECK(pending_worker(NULL) == AZ_REV1655_RUNTIME_OK);
+    CHECK(runtime_start_calls == 1u);
+    puts("DashLaunch boot-before-Aurora handoff passed");
+    return 0;
+#else
     CHECK(AuroraAZNetDbgConfigure(730u, 731u, 1u) == 0u);
     CHECK(AuroraAZNetDbgShutdown() == 0u);
     CHECK(runtime_shutdown_request_calls == 1u);
@@ -263,4 +319,5 @@ int main(void)
 
     puts("AuroraAZ NetDbg M2a bootstrap host tests passed");
     return 0;
+#endif
 }

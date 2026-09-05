@@ -13,5 +13,9 @@ typedef int32_t NTSTATUS;
 bool MmIsAddressValid(void *address);
 
 NTSTATUS NtClose(HANDLE handle);
+NTSTATUS ExCreateThread(HANDLE *, uint32_t, uint32_t *, void *, void *, void *, uint32_t);
+NTSTATUS NtResumeThread(HANDLE, uint32_t *);
+NTSTATUS ExTerminateThread(uint32_t);
+NTSTATUS KeDelayExecutionThread(uint32_t, uint32_t, int64_t *);
 
 #endif

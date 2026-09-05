@@ -41,7 +41,11 @@ static uint32_t g_bootstrap_claimed = 0u;
 static uint32_t g_dashlaunch_bootstrap_claimed = 0u;
 #endif
 static char g_m2a_marker_path[] =
+#if defined(AURORAAZ_DASHLAUNCH_PLUGIN)
+    "Hdd:\\Aurora\\Data\\Logs\\AuroraAZ-M2a.bin";
+#else
     "game:\\Data\\Logs\\AuroraAZ-M2a.bin";
+#endif
 
 static void write_m2a_marker(uint32_t phase, uint32_t runtime_result)
 {
@@ -161,25 +165,44 @@ static uint32_t dashlaunch_bootstrap_worker(void *context)
     write_m2a_marker(AZ_M2A_MARKER_WORKER_ENTERED,
         AZ_M2A_RESULT_NOT_ATTEMPTED);
 
-    /* DashLaunch can load its plugin before Aurora's image and private thread
-     * wrapper are completely mapped. Retry the exact read-only admission gate
-     * for ten seconds rather than mutating anything early. */
-    for (attempt = 0u; attempt < 20u; ++attempt) {
+    /* This worker uses only kernel imports until Aurora's admission gate
+     * passes. Allow two minutes for boot; do not depend on the game: mount. */
+    for (attempt = 0u; attempt < 240u; ++attempt) {
         int64_t interval;
 
         result = az_rev1655_runtime_pin_dashlaunch_module(
             (uint32_t)(uintptr_t)&AuroraAZNetDbgWrite);
         if (result == AZ_REV1655_RUNTIME_OK) {
-            result = az_rev1655_runtime_start(
-                AZ_REV1655_RUNTIME_STAGE_OVERLAY_CANARY);
+            HANDLE thread = NULL;
+            /* Runtime initialization needs Aurora's title-thread startup.
+             * Only call that wrapper after its code has been validated. */
+            if (az_rev1655_thread_create(
+                    (void *)(uintptr_t)&bootstrap_rev1655_runtime,
+                    NULL, &thread) == AZ_REV1655_THREAD_CREATE_OK) {
+                (void)NtClose(thread);
+                return 0u;
+            }
+            result = AZ_REV1655_RUNTIME_THREAD_STARTUP_REJECTED;
             break;
         }
         interval = -5000000LL;
         (void)KeDelayExecutionThread(0u, 0u, &interval);
+        if ((attempt % 10u) == 0u) {
+            write_m2a_marker(AZ_M2A_MARKER_WORKER_ENTERED, (uint32_t)result);
+        }
     }
 
     write_m2a_marker(AZ_M2A_MARKER_RUNTIME_RETURNED, (uint32_t)result);
     return (uint32_t)result;
+}
+
+/* Independent of Aurora's CRT/XapiThreadStartup. The kernel invokes this
+ * startup routine with the requested entry and context. Explicit termination
+ * avoids returning through a title CRT that has not been loaded yet. */
+static void dashlaunch_thread_startup(
+    uint32_t (*entry)(void *), void *context)
+{
+    (void)ExTerminateThread(entry(context));
 }
 #endif
 
@@ -200,10 +223,12 @@ int DllMain(void *module, uint32_t reason, void *reserved)
                 0,
                 __ATOMIC_ACQ_REL,
                 __ATOMIC_ACQUIRE) &&
-            az_rev1655_thread_create(
+            !FAILED(ExCreateThread(
+                &thread, 0x10000u, NULL,
+                (void *)(uintptr_t)&dashlaunch_thread_startup,
                 (void *)(uintptr_t)&dashlaunch_bootstrap_worker,
-                NULL,
-                &thread) == AZ_REV1655_THREAD_CREATE_OK) {
+                NULL, 2u))) {
+            (void)NtResumeThread(thread, NULL);
             (void)NtClose(thread);
         }
     }

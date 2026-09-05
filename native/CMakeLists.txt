@@ -111,6 +111,15 @@ if(BUILD_TESTING)
             AURORAAZ_REV1655_THREAD_TEST=1
             AURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN=1)
 
+    add_executable(auroraaz_dashlaunch_bootstrap_tests
+        tests/netdbg_bootstrap_tests.c src/netdbg_bootstrap.c src/netdbg_m2a_exports.c)
+    target_include_directories(auroraaz_dashlaunch_bootstrap_tests
+        PRIVATE tests/netdbg_bootstrap_include include)
+    target_compile_definitions(auroraaz_dashlaunch_bootstrap_tests PRIVATE
+        AURORAAZ_XBOX360=1 AURORAAZ_REV1655_THREAD_TEST=1
+        AURORAAZ_NETDBG_TITLE_EXIT_SHUTDOWN=1 AURORAAZ_DASHLAUNCH_PLUGIN=1)
+    add_test(NAME auroraaz_dashlaunch_bootstrap_tests COMMAND auroraaz_dashlaunch_bootstrap_tests)
+
     add_executable(auroraaz_netdbg_lifetime_rev1655_tests
         tests/netdbg_lifetime_rev1655_tests.c
         src/netdbg_lifetime_rev1655.c)

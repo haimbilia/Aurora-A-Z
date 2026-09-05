@@ -99,9 +99,8 @@ python3 "${repo_root}/scripts/xex_exports.py" prepare-pe \
     --pe "${output_dir}/AuroraAZ.dll" \
     --ordinals 2,3,4,5
 
-# DashLaunch loads entries from launch.ini as system DLLs.  A title DLL is
-# accepted by Aurora's internal NetDbg wrapper, but DashLaunch never invokes
-# its entry point at boot.
+# DashLaunch candidate uses a system DLL. Container validation alone does
+# not establish that the console entered DllMain or initialized the runtime.
 "${packager}" \
     -t sysdll \
     -i "${output_dir}/AuroraAZ.dll" \

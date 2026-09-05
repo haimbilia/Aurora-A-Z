@@ -1,5 +1,21 @@
 # Aurora A-Z — Handoff
 
+## Current DashLaunch investigation — 2026-09-05
+
+User confirmed a full console reboot with system-DLL build `84cad88`; R3
+remains inactive and no fresh M2a startup marker appeared. Earlier telemetry
+was stale. Container type alone is not an established cause of this failure.
+The current fix removes DllMain's dependency on Aurora's private thread wrapper:
+ExCreateThread starts a plugin-owned startup routine, waits up to two minutes
+for exact Aurora admission, then uses the validated title wrapper for runtime
+initialization. Bootstrap markers use `Hdd:\Aurora\Data\Logs` so they do not
+depend on the boot-time `game:` mount. The new DashLaunch host test covers
+startup before admission, repeated attach, delayed admission and handoff.
+Hardware acceptance and system-module behavior across title relaunch remain
+unproven. Do not call this release hardware-verified until fresh logs and R3
+behavior confirm it. Production uses `Plugins\AuroraAZ.xex` via launch.ini;
+the historical NetDbg deployment descriptions below are superseded.
+
 Written 2026-09-02. Target: Aurora 0.7b.2 Rev1655 on Xbox 360, library of 2241 titles.
 
 Read this before touching anything. Most of it was expensive to learn; the
