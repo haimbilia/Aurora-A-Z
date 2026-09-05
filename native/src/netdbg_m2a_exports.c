@@ -62,5 +62,10 @@ uint32_t AuroraAZNetDbgWrite(const char *message)
 
 uint32_t AuroraAZNetDbgReserved(void)
 {
+#if defined(AURORAAZ_BOOT_PROBE)
+    extern uint32_t AuroraAZProbeStatusAddress(void);
+    return AuroraAZProbeStatusAddress();
+#else
     return 0u;
+#endif
 }

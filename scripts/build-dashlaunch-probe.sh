@@ -6,7 +6,7 @@ output_dir="${repo_root}/build/dashlaunch-probe"
 mkdir -p "${output_dir}"
 export LIBRARY_PATH="" C_INCLUDE_PATH="" CPLUS_INCLUDE_PATH=""
 "${toolchain_root}/bin/clang" -std=c99 -Oz -Wall -Wextra -Werror \
-    -fno-zero-initialized-in-bss -DAURORAAZ_XBOX360=1 \
+    -fno-zero-initialized-in-bss -DAURORAAZ_XBOX360=1 -DAURORAAZ_BOOT_PROBE=1 \
     -I"${repo_root}/native/include" \
     "${repo_root}/native/src/dashlaunch_probe.c" \
     "${repo_root}/native/src/netdbg_m2a_exports.c" \
@@ -28,3 +28,12 @@ python3 "${repo_root}/scripts/xex_exports.py" finalize-xex \
 python3 "${repo_root}/scripts/describe-dashlaunch-probe.py" \
     "${output_dir}/AuroraAZ-boot-probe.dll" \
     "${output_dir}/AuroraAZ-boot-probe.json"
+
+"${toolchain_root}/bin/clang" -std=c99 -Oz -Wall -Wextra -Werror \
+    -fno-zero-initialized-in-bss -I"${repo_root}/native/include" \
+    "${repo_root}/native/src/dashlaunch_probe_runner.c" \
+    -Wl,/entry:main -Wl,/base:0x82000000 -Wl,/filealign:128 -Wl,/align:4096 \
+    -o "${output_dir}/Run-Boot-Probe.dll"
+"${toolchain_root}/bin/synthxex" -t title \
+    -i "${output_dir}/Run-Boot-Probe.dll" -o "${output_dir}/Run-Boot-Probe.xex"
+(cd "${output_dir}" && sha256sum Run-Boot-Probe.xex > Run-Boot-Probe.xex.sha256)

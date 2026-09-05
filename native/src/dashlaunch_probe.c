@@ -12,6 +12,10 @@ volatile AzDashlaunchProbe g_az_dashlaunch_probe = {
 /* The common export table is present only to reuse the validated packager.
  * None of its exports activate any runtime code. */
 uint32_t AuroraAZNetDbgBootstrapStart(void) { return 0u; }
+uint32_t AuroraAZProbeStatusAddress(void)
+{
+    return (uint32_t)(uintptr_t)&g_az_dashlaunch_probe;
+}
 
 int DllMain(void *module, uint32_t reason, void *reserved)
 {
