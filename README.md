@@ -15,7 +15,7 @@ Jump through large game libraries or filter by letter—without changing skins.
 
 1. Download and extract `AuroraAZ-v1.0-Installer.zip`.
 2. Copy the `AuroraAZInstaller` folder to
-   `Hdd1:\Aurora\User\Scripts\Utility\` (keep all three files together).
+   `Aurora\User\Scripts\Utility\` (keep all three files together).
 3. Open Aurora's **Scripts** menu, refresh with **X**, and launch
    **Install Aurora A-Z** under Utility. Choose **Install**.
 4. Reboot the console manually when installation finishes.
