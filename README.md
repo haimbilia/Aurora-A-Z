@@ -7,21 +7,23 @@
 A skin-independent alphabet selector for **Aurora 0.7b.2 Rev1655** on Xbox 360.
 Jump through large game libraries or filter by letter—without changing skins.
 
-[Download v1.0](https://github.com/haimbilia/Aurora-A-Z/releases/tag/v1.0)
+[Download v1.1](https://github.com/haimbilia/Aurora-A-Z/releases/tag/v1.1)
 
 ![Aurora A-Z alphabet selector over the dimmed coverflow](a0ecb3fb-230f-418b-b5cc-ecd4338a9c28.jpg)
 
 ## Install
 
-1. Download and extract `AuroraAZ-v1.0-Installer.zip`.
+1. Download and extract `AuroraAZ-v1.1-Installer.zip`.
 2. Copy the `AuroraAZInstaller` folder to
-   `Hdd1:\Aurora\User\Scripts\Utility\` (keep all three files together).
+   `Aurora\User\Scripts\Utility\` (keep all three files together).
 3. Open Aurora's **Scripts** menu, refresh with **X**, and launch
    **Install Aurora A-Z** under Utility. Choose **Install**.
-4. Reboot the console manually when installation finishes.
+4. Reboot the console when installation finishes.
 
 The script installs the plugin as `Aurora\Plugins\NetDbgDll.xex`, renaming any
 existing file to a backup (with a numbered suffix if needed).
+v1.1 detects Aurora's location from the installer folder, including alternate HDD
+folders and USB installations; the plugin binary is unchanged from v1.0.
 **No launch.ini edits or skin changes.** The Network Debugger and
 Aurora A-Z cannot run together. Older DashLaunch installers are unsupported.
 
