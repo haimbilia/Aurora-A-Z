@@ -22,27 +22,30 @@ functional unless it satisfies every acceptance criterion below on Aurora
 ## Single-file distribution
 
 - The production executable payload consists of exactly one file,
-  `AuroraAZ.xex`, installed as `Plugins\AuroraAZ.xex`.
+  `AuroraAZ.xex`, installed as `Plugins\NetDbgDll.xex`.
 - Executable code, compatibility signatures, default settings, shaders, and
   every font or glyph resource used by the selector must be embedded in that
   file.
-- Installation must add `Hdd:\Aurora\Plugins\AuroraAZ.xex` to one empty
-  DashLaunch `plugin1` through `plugin5` entry in `Hdd:\launch.ini`, then
-  reboot the console. The on-console installer must back up `launch.ini` before
-  changing it and must never replace an occupied slot.
-- Disabling or uninstalling must remove that DashLaunch entry and then remove
-  or rename `Plugins\AuroraAZ.xex` before rebooting.
+- Installation copies the plugin to Aurora's Network Debugger slot, backing up
+  any existing file first. It requires no launch.ini changes.
+- Uninstalling removes this plugin's `Plugins\NetDbgDll.xex`, restores any
+  backed-up debugger file, then reboots the console.
 - The production plugin must not require a companion script, preinstalled
   configuration file, asset directory, database row, QuickView, patched skin,
-  or patched `Aurora.xex`. The executable payload remains one XEX; DashLaunch
-  configuration is the sole installation metadata. After first use, the plugin
+  or patched `Aurora.xex`. The executable payload remains one XEX. After first use, the plugin
   may generate one small settings file
   under Aurora's `Data` directory to persist the selected operating mode.
 - Runtime filtering must remain in memory. It must not persist A-Z QuickViews
   or other Aurora A-Z-owned records in the user's database.
-- Aurora A-Z must not load through Aurora's Network Debugger slot. A previous
-  `Plugins\NetDbgDll.xex` Aurora A-Z installation must be disabled before the
-  DashLaunch plugin is enabled, so only one runtime instance can load.
+- v1.0 uses the Network Debugger slot. Never enable the experimental DashLaunch
+  route alongside it. DashLaunch installers are not part of v1.0.
+
+## Mode notification
+
+- R3+L3 switches and persists Browse/Filter mode.
+- Display "Browse Mode" or "Filter Mode" at the bottom right for five seconds
+  after switching. The notice survives R3 release; a new switch restarts the timer.
+- Hide it over modal/system UI and during title handoff with the other overlays.
 
 ## User-visible behavior
 

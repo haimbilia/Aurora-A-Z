@@ -1,5 +1,17 @@
 # Aurora A-Z — Handoff
 
+## v1.0 release — 2026-09-05
+
+User confirmed `f0ff432` works, including the five-second mode notification.
+v1.0 ships that exact hardware-tested binary, SHA-256
+`FD928EBB0490966BB232C1E199D650D31B8483B11A7C8EE8C827E1ED1A26F1D7`.
+Installation and supported controls are in the concise README. NetDbg is the
+current loader, not DashLaunch. No installer is shipped in v1.0; older installer
+sources/artifacts are experimental and must not be used for this release.
+Module radio UI and icon remain deferred. Historical notes below are evidence,
+not current user instructions. The uncommitted SynthXEX title-TLS experiment
+was not used to build the released binary and remains outside the release.
+
 ## Return to NetDbg — 2026-09-05 (supersedes deployment notes below)
 
 User requested abandoning DashLaunch for now and returning to NetDbg.
@@ -16,6 +28,13 @@ deferred. New polishing change: bottom-right Browse Mode / Filter Mode notice,
 five seconds from mode change, independent of R3 release. Build script now
 uses the NetDbg title-DLL path again. Do not use the historical DashLaunch
 installer; this update is a direct plugin replacement only.
+
+Notice candidate `f0ff432`: CI `33956736531` passed; 26 local host tests
+passed, including notice-only rendering and no rendering when dismissed.
+Artifact SHA-256:
+`FD928EBB0490966BB232C1E199D650D31B8483B11A7C8EE8C827E1ED1A26F1D7`.
+Staged FTP roundtrip verified. Previous active plugin backed up to
+`Plugins/NetDbgDll.xex.before-mode-notice`. User reboot/visual acceptance pending.
 
 ## Historical DashLaunch investigation — 2026-09-05
 

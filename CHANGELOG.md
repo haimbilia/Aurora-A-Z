@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## v1.0 — 2026-09-05
+
+- Hardware-confirmed NetDbg loader: one file, no launch.ini changes.
+- Centered alphabet, dimmed background, enlarged highlight and release animation.
+- Hold R3 to select; held navigation, wrapping and last-letter memory.
+- Saved Browse/Filter modes switched with R3+L3, with a five-second mode notice.
+- Filter-only ALL preserves the current QuickView.
+- Module radio UI and icon remain deferred. Experimental installers are excluded.
+- Binary from `f0ff432`, CI `33956736531`; 26 host tests passed and the user
+  confirmed this build on production hardware.
+
+## Historical development notes (not release guarantees)
 
 - Gate the embedded settings page through Aurora's live `ModuleHost` when the
   captured classless scene is not itself the focused ancestor. This restores
