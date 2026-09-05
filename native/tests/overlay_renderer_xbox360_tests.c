@@ -336,7 +336,7 @@ int main(void)
         if (az_overlay_renderer_note_render_menu(&renderer, g_manager, 0) !=
                 AZ_OVERLAY_RENDERER_OK ||
             az_overlay_renderer_try_draw(&renderer, &request) !=
-                AZ_OVERLAY_RENDERER_OK || g_draw_count != 2u) {
+                AZ_OVERLAY_RENDERER_DRAWN || g_draw_count != 2u) {
             return EXIT_FAILURE;
         }
     }
