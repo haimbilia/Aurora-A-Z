@@ -1,9 +1,15 @@
 # Aurora A-Z
 
+<p align="center">
+  <img src="icon.png" alt="Aurora A-Z icon" width="128">
+</p>
+
 A skin-independent alphabet selector for **Aurora 0.7b.2 Rev1655** on Xbox 360.
 Jump through large game libraries or filter by letter—without changing skins.
 
 [Download v1.0](https://github.com/haimbilia/Aurora-A-Z/releases/tag/v1.0)
+
+![Aurora A-Z alphabet selector over the dimmed coverflow](a0ecb3fb-230f-418b-b5cc-ecd4338a9c28.jpg)
 
 ## Install
 
